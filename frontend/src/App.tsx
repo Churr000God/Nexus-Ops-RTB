@@ -1,11 +1,21 @@
+import { useEffect } from "react"
+import { BrowserRouter } from "react-router-dom"
+import { Toaster } from "sonner"
+
+import { useAuth } from "@/hooks/useAuth"
+import { AppRoutes } from "@/routes"
+
 export default function App() {
+  const { bootstrap } = useAuth()
+
+  useEffect(() => {
+    void bootstrap()
+  }, [bootstrap])
+
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: 24 }}>
-      <h1 style={{ margin: 0 }}>Nexus Ops RTB</h1>
-      <p style={{ marginTop: 12 }}>
-        Frontend inicial listo. API base: {import.meta.env.VITE_API_URL}
-      </p>
-    </main>
+    <BrowserRouter>
+      <AppRoutes />
+      <Toaster richColors closeButton />
+    </BrowserRouter>
   )
 }
-
