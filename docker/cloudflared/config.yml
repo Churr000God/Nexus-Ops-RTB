@@ -1,0 +1,8 @@
+tunnel: ${CLOUDFLARE_TUNNEL_NAME}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: ${CLOUDFLARE_HOSTNAME}
+    service: http://proxy:80
+  - service: http_status:404
+

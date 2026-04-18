@@ -14,6 +14,17 @@ Repositorio de documentación para el proyecto **Nexus Ops RTB**: contexto de ne
 - `diseno_paginas/`: especificación de UI/UX y trazabilidad de métricas (dónde/cómo se muestra).
 - `estructura_proyecto/`: guía técnica (arquitectura, backend, frontend, BD, n8n, Docker, seguridad).
 
+## Entorno (Docker)
+
+1. Copiar variables:
+   - `cp .env.example .env`
+2. Inicializar y levantar el stack:
+   - `./scripts/init-project.sh`
+3. Accesos:
+   - Proxy: http://localhost
+   - API: http://localhost/api/health
+   - n8n: http://localhost/n8n/
+
 ## Convenciones de contribución (recomendado)
 
 - Ramas: `docs/tema`, `feature/tema`, `bugfix/tema`
