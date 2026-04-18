@@ -1,10 +1,14 @@
+# === Variables de entorno ===
 .env
 .env.*
 !.env.example
 
+# === Frontend ===
 node_modules/
 dist/
+*.tsbuildinfo
 
+# === Python ===
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -12,8 +16,26 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+*.egg-info/
 
+# === Datos (montados como volumenes) ===
 data/
 automations/n8n_data/
+
+# === Secretos ===
 docker/cloudflared/credentials.json
+docker/nginx/certs/
+
+# === Logs ===
+*.log
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
 
