@@ -21,6 +21,7 @@ export async function requestJson<T>(
     body?: JsonValue
     token?: string | null
     headers?: Record<string, string>
+    signal?: AbortSignal
   }
 ): Promise<T> {
   const url = `${env.apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`
@@ -38,6 +39,7 @@ export async function requestJson<T>(
     headers,
     credentials: "include",
     body: opts?.body ? JSON.stringify(opts.body) : undefined,
+    signal: opts?.signal,
   })
 
   const contentType = res.headers.get("content-type") ?? ""

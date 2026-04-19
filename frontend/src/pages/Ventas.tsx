@@ -1,8 +1,8 @@
-import { DashboardGeneral } from "@/components/dashboards/DashboardGeneral"
+import { VentasDashboard } from "@/components/dashboards/VentasDashboard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/hooks/useAuth"
 
-export function HomePage() {
+export function VentasPage() {
   const { user } = useAuth()
 
   if (!user) {
@@ -12,11 +12,11 @@ export function HomePage() {
           <CardTitle>Sin sesión</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Inicia sesión para ver el dashboard general.
+          Inicia sesión para ver el dashboard de Ventas.
         </CardContent>
       </Card>
     )
   }
 
-  return <DashboardGeneral />
+  return <VentasDashboard />
 }

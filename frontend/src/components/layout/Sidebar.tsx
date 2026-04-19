@@ -9,7 +9,7 @@ type SidebarProps = {
 
 const items = [
   { to: "/", label: "Inicio", icon: Home },
-  { to: "/ventas", label: "Ventas", icon: BarChart3, disabled: true },
+  { to: "/ventas", label: "Ventas", icon: BarChart3 },
   { to: "/inventarios", label: "Inventarios", icon: Package, disabled: true },
   { to: "/proveedores", label: "Proveedores", icon: Truck, disabled: true },
   { to: "/gastos", label: "Gastos", icon: Receipt, disabled: true },

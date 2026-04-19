@@ -60,6 +60,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-18 | Sprint 1 frontend: cimientos UI + routing + auth | frontend | 1 | [2026-04-18_sprint-1-frontend-cimientos.md](sessions/2026-04-18_sprint-1-frontend-cimientos.md) |
 | 2026-04-18 | Troubleshooting auth + PostgreSQL (Docker, pgAdmin, env) | backend | 1 | [2026-04-18_troubleshooting-auth-postgres.md](sessions/2026-04-18_troubleshooting-auth-postgres.md) |
 | 2026-04-19 | Sprint 2 backend: Ventas (endpoints + service + tests) | backend | 2 | [2026-04-19_sprint-2-backend-ventas.md](sessions/2026-04-19_sprint-2-backend-ventas.md) |
+| 2026-04-19 | Sprint 2 frontend: Dashboard General + Ventas | frontend | 2 | [2026-04-19_sprint-2-frontend-dashboard-ventas.md](sessions/2026-04-19_sprint-2-frontend-dashboard-ventas.md) |
 
 ---
 
@@ -67,6 +68,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 5 |
+| Total sesiones | 6 |
 | Errores registrados | 3 |
-| Lecciones documentadas | 5 |
+| Lecciones documentadas | 6 |
