@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { HomePage } from "@/pages/Home"
 import { LoginPage } from "@/pages/Login"
 import { NotFoundPage } from "@/pages/NotFound"
+import { VentasPage } from "@/pages/Ventas"
 
 function RequireAuth() {
   const location = useLocation()
@@ -51,6 +52,7 @@ export function AppRoutes() {
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />
+          <Route path="ventas" element={<VentasPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

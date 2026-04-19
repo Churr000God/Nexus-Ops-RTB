@@ -143,11 +143,11 @@ Sprint 8  ░░░░░░░░░░  Pulido, testing, deploy final
 | Crear types para ventas | `types/ventas.ts` | Alta |
 
 ### Criterios de Aceptacion
-- [ ] Dashboard general muestra KPIs y graficas con datos reales
-- [ ] Pagina de ventas muestra todas las graficas definidas en el diseno
-- [ ] Filtros de fecha funcionan y actualizan las graficas
-- [ ] Los datos se cargan desde CSV o BD correctamente
-- [ ] Las graficas son interactivas (hover, click para detalle)
+- [x] Dashboard general muestra KPIs y graficas con datos reales
+- [x] Pagina de ventas muestra todas las graficas definidas en el diseno
+- [x] Filtros de fecha funcionan y actualizan las graficas
+- [x] Los datos se cargan desde CSV o BD correctamente
+- [x] Las graficas son interactivas (hover, click para detalle)
 
 ---
 
