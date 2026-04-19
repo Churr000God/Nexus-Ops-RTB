@@ -59,6 +59,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-18 | Sprint 1 backend: Alembic + auth JWT + refresh opaco | backend | 1 | [2026-04-18_sprint-1-backend-auth.md](sessions/2026-04-18_sprint-1-backend-auth.md) |
 | 2026-04-18 | Sprint 1 frontend: cimientos UI + routing + auth | frontend | 1 | [2026-04-18_sprint-1-frontend-cimientos.md](sessions/2026-04-18_sprint-1-frontend-cimientos.md) |
 | 2026-04-18 | Troubleshooting auth + PostgreSQL (Docker, pgAdmin, env) | backend | 1 | [2026-04-18_troubleshooting-auth-postgres.md](sessions/2026-04-18_troubleshooting-auth-postgres.md) |
+| 2026-04-19 | Sprint 2 backend: Ventas (endpoints + service + tests) | backend | 2 | [2026-04-19_sprint-2-backend-ventas.md](sessions/2026-04-19_sprint-2-backend-ventas.md) |
 
 ---
 
@@ -66,6 +67,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 4 |
+| Total sesiones | 5 |
 | Errores registrados | 3 |
-| Lecciones documentadas | 4 |
+| Lecciones documentadas | 5 |
