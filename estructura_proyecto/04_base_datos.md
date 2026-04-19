@@ -148,6 +148,55 @@ Si en algún servicio es preferible SQL crudo para rendimiento (ej. agregaciones
 
 ---
 
+## 9.1 Estado actual (implementado)
+
+Se implementó un esquema inicial pensado para que los CSV se carguen manualmente e incrementalmente sin bloquear la evolución futura del modelo.
+
+### Tablas operativas (public)
+
+- Ventas y clientes
+  - `clientes` (catálogo de clientes con `external_id` opcional)
+  - `cotizaciones`, `cotizacion_items`, `cotizaciones_canceladas`
+  - `ventas`
+  - `pedidos_clientes`, `pedidos_incompletos`, `verificador_fechas_pedidos`
+- Inventarios
+  - `productos`
+  - `inventario`, `movimientos_inventario`, `crecimiento_inventario`, `no_conformes`
+  - `solicitudes_material`, `entradas_mercancia`
+- Proveedores y finanzas
+  - `proveedores`, `pedidos_proveedor`, `facturas_compras`, `gastos_operativos`
+- Auditoría mínima de carga
+  - `csv_import_runs` (metadatos por corrida de importación)
+
+### Staging (schema `staging`)
+
+- `staging.csv_files` — metadatos por archivo cargado (dataset, nombre, hash, header, row_count).
+- `staging.csv_rows` — filas crudas como JSON (row_number + payload).
+- `staging.csv_row_errors` — errores de parseo/validación por fila.
+
+### Mapeo inicial CSV → tablas
+
+- `Catalogo_de_Productos.csv` → `productos`
+- `Reporte_de_Ventas.csv` → `ventas`
+- `Cotizaciones_a_Clientes.csv` → `cotizaciones`
+- `Detalle_de_Cotizaciones.csv` → `cotizacion_items`
+- `Cotizaciones_Canceladas.csv` → `cotizaciones_canceladas`
+- `Pedidos_de_Clientes.csv` → `pedidos_clientes`
+- `Verificador_de_Fechas_Pedidos.csv` → `verificador_fechas_pedidos`
+- `Gestion_de_Inventario.csv` → `inventario` (campos calculados + `raw_payload`)
+- `Crecimiento_de_Inventario.csv` → `crecimiento_inventario`
+- `No_Conformes.csv` → `no_conformes`
+- `Solicitudes_de_Material.csv` → `solicitudes_material`
+- `Entradas_de_Mercancia.csv` → `entradas_mercancia`
+- `Solicitudes_A_Proveedores.csv` → `pedidos_proveedor`
+- `Facturas_Compras.csv` → `facturas_compras`
+- `Gastos_Operativos_RTB.csv` → `gastos_operativos`
+- `Directorio_Clientes_Proveedores.csv` → `clientes` y `proveedores` (según tipo)
+- `Bitacora_de_Movimientos.csv` → `movimientos_inventario`
+- `Pedidos_Incompletos.csv` → `pedidos_incompletos`
+
+---
+
 ## 10. Diagramas de Relación (abreviado)
 
 ```
