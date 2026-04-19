@@ -7,6 +7,7 @@ Repositorio de documentación para el proyecto **Nexus Ops RTB**: contexto de ne
 - Contexto (métricas, alcance y bases de datos): [contexto/00_INDICE.md](contexto/00_INDICE.md)
 - Diseño de páginas (especificación funcional por pantalla): [diseno_paginas/00_INDICE_PAGINAS.md](diseno_paginas/00_INDICE_PAGINAS.md)
 - Estructura del proyecto (arquitectura, stack, despliegue y seguridad): [estructura_proyecto/00_INDICE.md](estructura_proyecto/00_INDICE.md)
+- Guía operativa de PostgreSQL (pgAdmin + terminal + troubleshooting): [GUIA_BD_POSTGRES.md](GUIA_BD_POSTGRES.md)
 
 ## Estructura del repositorio
 
