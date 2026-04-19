@@ -31,14 +31,21 @@ mkdir -p "$BACKUP_DIR"
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
   err "Contenedor $CONTAINER no encontrado. Asegúrate de que el stack esté corriendo."
+  exit 1
 fi
 
 # --- Backup ---
 log "Creando backup: $BACKUP_FILE"
 
 # Leer credenciales del .env
-DB_NAME=$(grep -E '^POSTGRES_DB=' .env | cut -d'=' -f2 || echo "nexus_ops")
-DB_USER=$(grep -E '^POSTGRES_USER=' .env | cut -d'=' -f2 || echo "nexus")
+DB_NAME="$(grep -E '^POSTGRES_DB=' .env | cut -d'=' -f2- || true)"
+DB_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d'=' -f2- || true)"
+if [[ -z "$DB_NAME" ]]; then
+  DB_NAME="nexus_ops"
+fi
+if [[ -z "$DB_USER" ]]; then
+  DB_USER="nexus"
+fi
 
 docker exec "$CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"
 
