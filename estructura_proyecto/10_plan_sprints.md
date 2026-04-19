@@ -11,7 +11,7 @@
 
 ```
 Sprint 0  ██████████  Planificacion y estructura         ✅ COMPLETADO
-Sprint 1  ░░░░░░░░░░  Cimientos: entorno, BD, auth
+Sprint 1  ██████████  Cimientos: entorno, BD, auth       ✅ COMPLETADO
 Sprint 2  ░░░░░░░░░░  Dashboard general + ventas
 Sprint 3  ░░░░░░░░░░  Inventarios + proveedores
 Sprint 4  ░░░░░░░░░░  Gastos + administracion
@@ -43,7 +43,7 @@ Sprint 8  ░░░░░░░░░░  Pulido, testing, deploy final
 
 ---
 
-## Sprint 1 — Cimientos: Entorno, Base de Datos y Auth
+## Sprint 1 — Cimientos: Entorno, Base de Datos y Auth (COMPLETADO)
 
 **Objetivo:** Tener un entorno de desarrollo funcional con base de datos, migraciones y autenticacion basica.
 
@@ -91,12 +91,12 @@ Sprint 8  ░░░░░░░░░░  Pulido, testing, deploy final
 | CI basico con GitHub Actions | `.github/workflows/ci.yml` | Baja |
 
 ### Criterios de Aceptacion
-- [ ] `docker compose up` levanta todo sin errores
-- [ ] POST `/api/auth/login` devuelve JWT
-- [ ] POST `/api/auth/register` crea usuario
-- [ ] Frontend muestra pagina de login funcional
-- [ ] Alembic puede crear y revertir migraciones
-- [ ] TailwindCSS funciona en el frontend
+- [x] `docker compose up` levanta todo sin errores
+- [x] POST `/api/auth/login` devuelve JWT
+- [x] POST `/api/auth/register` crea usuario
+- [x] Frontend muestra pagina de login funcional
+- [x] Alembic puede crear y revertir migraciones
+- [x] TailwindCSS funciona en el frontend
 
 ---
 
