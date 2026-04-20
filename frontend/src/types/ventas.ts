@@ -121,3 +121,19 @@ export type SalesForecastByProduct = {
   category: string | null
   predicted_units: number
 }
+
+export type AtRiskCustomer = {
+  customer_id: string | null
+  customer_name: string
+  compras_ult_90: number
+  compras_90_previos: number
+  ultima_compra: string | null
+  riesgo_abandono: string
+}
+
+export type PaymentTrend = {
+  customer_name: string
+  promedio_dias_pago: number
+  ultimo_pago: string | null
+  riesgo_pago: "Bajo" | "Medio" | "Alto"
+}

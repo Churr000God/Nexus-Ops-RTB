@@ -9,6 +9,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
+    AtRiskCustomerResponse,
     GrossMarginByProductResponse,
     MissingDemandResponse,
     QuoteStatusByMonthResponse,
@@ -210,3 +211,15 @@ async def product_forecast(
         limit=limit,
         months_window=months_window,
     )
+
+
+@router.get("/at-risk-customers", response_model=list[AtRiskCustomerResponse])
+async def at_risk_customers(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[AtRiskCustomerResponse]:
+    """Clientes en riesgo de abandono comparando compras de los ultimos 90 dias
+    contra los 90 dias previos.
+    """
+    service = VentasService(db)
+    return await service.at_risk_customers()

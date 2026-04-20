@@ -132,3 +132,12 @@ class SalesForecastByProductResponse(BaseModel):
     sku: str | None = None
     category: str | None = None
     predicted_units: float
+
+
+class AtRiskCustomerResponse(BaseModel):
+    customer_id: UUID | None = None
+    customer_name: str
+    compras_ult_90: float
+    compras_90_previos: float
+    ultima_compra: date | None = None
+    riesgo_abandono: str

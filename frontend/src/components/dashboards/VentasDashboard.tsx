@@ -26,7 +26,7 @@ import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
-import type { MissingDemandByProduct, RecentQuote } from "@/types/ventas"
+import type { AtRiskCustomer, MissingDemandByProduct, PaymentTrend, RecentQuote } from "@/types/ventas"
 
 export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
@@ -143,11 +143,34 @@ export function VentasDashboard() {
 
   const fetchMissingDemand = useCallback(
     (signal: AbortSignal) =>
-      ventasService.missingDemand(token ?? "", { startDate, endDate, limit: 20 }, signal),
+      ventasService.missingDemand(token ?? "", { startDate, endDate, limit: 95 }, signal),
     [token, startDate, endDate]
   )
   const missingDemand = useApi(
     fetchMissingDemand,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
+  const fetchAtRiskCustomers = useCallback(
+    (signal: AbortSignal) => ventasService.atRiskCustomers(token ?? "", signal),
+    [token]
+  )
+  const atRiskCustomers = useApi(
+    fetchAtRiskCustomers,
+    { enabled: Boolean(token) },
+    token
+  )
+
+  const fetchPaymentTrend = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.paymentTrend(token ?? "", { startDate, endDate, limit: 20 }, signal),
+    [token, startDate, endDate]
+  )
+  const paymentTrend = useApi(
+    fetchPaymentTrend,
     { enabled: Boolean(token) },
     token,
     startDate,
@@ -255,6 +278,14 @@ export function VentasDashboard() {
     }))
   }, [missingDemand.data])
 
+  const atRiskChart = useMemo(() => {
+    return (atRiskCustomers.data ?? []).slice(0, 15).map((row: AtRiskCustomer) => ({
+      customer: row.customer_name,
+      ultimos_90: row.compras_ult_90,
+      previos_90: row.compras_90_previos,
+    }))
+  }, [atRiskCustomers.data])
+
   const missingDemandParetoRows = useMemo(() => {
     const rows = missingDemand.data ?? []
     const totalDemand = rows.reduce((acc, r) => acc + r.demanda_faltante, 0)
@@ -288,6 +319,15 @@ export function VentasDashboard() {
     if (restValue > 0) base.push({ name: "Otros", value: restValue })
     return base
   }, [productDistribution.data])
+
+  const paymentTrendChart = useMemo(() => {
+    return (paymentTrend.data ?? []).map((row: PaymentTrend) => ({
+      customer: row.customer_name,
+      dias: row.promedio_dias_pago,
+      riesgo: row.riesgo_pago,
+      ultimo_pago: row.ultimo_pago,
+    }))
+  }, [paymentTrend.data])
 
   const filteredQuotes = useMemo(() => {
     const rows = recentQuotes.data ?? []
@@ -382,7 +422,9 @@ export function VentasDashboard() {
     quoteStatusByMonth.status === "error" ||
     grossMarginByProduct.status === "error" ||
     recentQuotes.status === "error" ||
-    missingDemand.status === "error"
+    missingDemand.status === "error" ||
+    atRiskCustomers.status === "error" ||
+    paymentTrend.status === "error"
 
   const firstError =
     summary.error ??
@@ -392,7 +434,9 @@ export function VentasDashboard() {
     quoteStatusByMonth.error ??
     grossMarginByProduct.error ??
     recentQuotes.error ??
-    missingDemand.error
+    missingDemand.error ??
+    atRiskCustomers.error ??
+    paymentTrend.error
 
   const isLoading =
     summary.status === "loading" ||
@@ -402,7 +446,9 @@ export function VentasDashboard() {
     quoteStatusByMonth.status === "loading" ||
     grossMarginByProduct.status === "loading" ||
     recentQuotes.status === "loading" ||
-    missingDemand.status === "loading"
+    missingDemand.status === "loading" ||
+    atRiskCustomers.status === "loading" ||
+    paymentTrend.status === "loading"
 
   const showPendingToast = (feature: string) => {
     toast.info(`${feature} queda listo para enlazar cuando definamos el flujo de datos.`)
@@ -703,7 +749,7 @@ export function VentasDashboard() {
             data={missingDemandChart}
             xKey="product"
             bars={[{ dataKey: "demanda_faltante", name: "Demanda faltante (u)" }]}
-            height={Math.max(320, missingDemandChart.length * 36)}
+            height={Math.max(320, missingDemandChart.length * 24)}
             valueFormatter={(v) => `${formatNumber(v)} u`}
             horizontal
             colorScale={[
@@ -829,6 +875,96 @@ export function VentasDashboard() {
         </div>
       </ChartPanel>
 
+      <ChartPanel
+        title="Clientes en Riesgo de Abandono"
+        subtitle="Comparación de compras: últimos 90 días vs 90 días previos"
+        infoLabel="Retención de clientes"
+      >
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+          <BarChart
+            data={atRiskChart}
+            xKey="customer"
+            bars={[
+              { dataKey: "ultimos_90", name: "Últimos 90 días", color: "#0051FF" },
+              { dataKey: "previos_90", name: "90 días previos", color: "#8E8E93" },
+            ]}
+            height={Math.max(280, atRiskChart.length * 28)}
+            valueFormatter={formatCurrencyMXN}
+            horizontal
+          />
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Semáforo de riesgo
+            </div>
+            <div className="overflow-hidden rounded-[var(--radius-md)] border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Cliente
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Últ. 90d
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Prev. 90d
+                    </th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Riesgo
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(atRiskCustomers.data ?? []).map((row) => {
+                    const riskColor =
+                      row.riesgo_abandono === "Crítico"
+                        ? "bg-red-100 text-red-700"
+                        : row.riesgo_abandono === "Alto"
+                          ? "bg-orange-100 text-orange-700"
+                          : row.riesgo_abandono === "Medio"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-green-100 text-green-700"
+                    return (
+                      <tr key={row.customer_id ?? row.customer_name} className="border-t">
+                        <td className="px-3 py-2 text-[13px] text-foreground">
+                          <div className="truncate max-w-[140px]" title={row.customer_name}>
+                            {row.customer_name}
+                          </div>
+                          {row.ultima_compra ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {formatIsoDate(row.ultima_compra)}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">
+                          {formatCurrencyMXN(row.compras_ult_90)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                          {formatCurrencyMXN(row.compras_90_previos)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${riskColor}`}
+                          >
+                            {row.riesgo_abandono}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {(atRiskCustomers.data ?? []).length === 0 &&
+            atRiskCustomers.status !== "loading" ? (
+              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                Sin datos de clientes para evaluar riesgo
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </ChartPanel>
+
       <DataTable
         columns={tableColumns}
         rows={filteredQuotes}
@@ -869,6 +1005,86 @@ export function VentasDashboard() {
             : "Sin cotizaciones recientes"
         }
       />
+
+      <ChartPanel
+        title="Tendencia de Pagos por Cliente"
+        subtitle="Promedio de días de pago histórico — Bajo ≤15 d, Medio ≤30 d, Alto >30 d"
+        infoLabel="2.3.1 Comportamiento de pago"
+      >
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+          <BarChart
+            data={paymentTrendChart}
+            xKey="customer"
+            bars={[{ dataKey: "dias", name: "Días promedio de pago" }]}
+            height={Math.max(380, paymentTrendChart.length * 95)}
+            valueFormatter={(v) => `${formatNumber(v)} días`}
+            horizontal
+            colorScale={paymentTrendChart.map((row) =>
+              row.riesgo === "Bajo" ? "#1AAD58" : row.riesgo === "Medio" ? "#FFB020" : "#FF453A"
+            )}
+          />
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Semáforo de riesgo
+            </div>
+            <div className="overflow-hidden rounded-[var(--radius-md)] border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Cliente
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Días prom.
+                    </th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Riesgo
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Último pago
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentTrendChart.map((row) => (
+                    <tr key={row.customer} className="border-t">
+                      <td className="px-3 py-2 text-[13px] text-foreground">
+                        <div className="truncate max-w-[140px]" title={row.customer}>
+                          {row.customer}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                        {formatNumber(row.dias)} d
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <StatusBadge
+                          variant={
+                            row.riesgo === "Bajo"
+                              ? "success"
+                              : row.riesgo === "Medio"
+                                ? "warning"
+                                : "error"
+                          }
+                        >
+                          {row.riesgo}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                        {row.ultimo_pago ? formatIsoDate(row.ultimo_pago) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {paymentTrendChart.length === 0 && paymentTrend.status !== "loading" ? (
+              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                Sin datos de tiempos de pago en el periodo
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </ChartPanel>
 
       <section className="grid gap-4 xl:grid-cols-3">
         <div className="surface-card border-white/70 bg-white p-5 md:p-6">

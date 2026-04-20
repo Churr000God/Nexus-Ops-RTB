@@ -1,9 +1,11 @@
 import { requestJson } from "@/lib/http"
 import type {
   ApprovedVsCancelledByMonth,
+  AtRiskCustomer,
   DashboardOverview,
   GrossMarginByProduct,
   MissingDemandByProduct,
+  PaymentTrend,
   QuoteStatusByMonth,
   RecentQuote,
   Sale,
@@ -248,6 +250,32 @@ export const ventasService = {
         end_date: params?.endDate,
         limit: params?.limit,
         months_window: params?.monthsWindow,
+      }),
+      { token, signal }
+    )
+  },
+
+  atRiskCustomers(token: string, signal?: AbortSignal) {
+    return requestJson<AtRiskCustomer[]>(
+      withQuery("/api/ventas/at-risk-customers", {}),
+      { token, signal }
+    )
+  },
+
+  paymentTrend(
+    token: string,
+    params?: {
+      startDate?: string | null
+      endDate?: string | null
+      limit?: number
+    },
+    signal?: AbortSignal
+  ) {
+    return requestJson<PaymentTrend[]>(
+      withQuery("/api/ventas/payment-trend", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        limit: params?.limit,
       }),
       { token, signal }
     )

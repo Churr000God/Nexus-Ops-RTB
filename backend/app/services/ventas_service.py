@@ -16,6 +16,7 @@ from app.models.ops_models import (
 )
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
+    AtRiskCustomerResponse,
     DashboardOverviewResponse,
     GrossMarginByProductResponse,
     MissingDemandResponse,
@@ -929,6 +930,75 @@ class VentasService:
                 sku=row.sku,
                 category=row.category,
                 predicted_units=float(row.predicted_units),
+            )
+            for row in rows
+        ]
+
+    async def at_risk_customers(self) -> list[AtRiskCustomerResponse]:
+        """Detecta clientes cuya compra ha bajado respecto a periodos anteriores.
+
+        Compara compras de los ultimos 90 dias contra los 90 dias previos.
+        """
+        sql = text(
+            """
+            WITH compras_cliente AS (
+                SELECT
+                    v.customer_id,
+                    c.name AS customer_name,
+                    SUM(CASE
+                        WHEN v.sold_on >= CURRENT_DATE - INTERVAL '90 days'
+                        THEN COALESCE(v.total, 0)
+                        ELSE 0
+                    END) AS compras_ult_90,
+                    SUM(CASE
+                        WHEN v.sold_on >= CURRENT_DATE - INTERVAL '180 days'
+                         AND v.sold_on < CURRENT_DATE - INTERVAL '90 days'
+                        THEN COALESCE(v.total, 0)
+                        ELSE 0
+                    END) AS compras_90_previos,
+                    MAX(v.sold_on) AS ultima_compra
+                FROM ventas v
+                LEFT JOIN clientes c
+                    ON v.customer_id = c.id
+                WHERE v.status NOT IN ('cancelada', 'cancelado')
+                GROUP BY
+                    v.customer_id,
+                    c.name
+            )
+            SELECT
+                customer_id,
+                customer_name,
+                compras_ult_90,
+                compras_90_previos,
+                ultima_compra,
+                CASE
+                    WHEN compras_90_previos > 0 AND compras_ult_90 = 0 THEN 'Crítico'
+                    WHEN compras_ult_90 < compras_90_previos * 0.5 THEN 'Alto'
+                    WHEN compras_ult_90 < compras_90_previos * 0.8 THEN 'Medio'
+                    ELSE 'Bajo'
+                END AS riesgo_abandono
+            FROM compras_cliente
+            ORDER BY
+                CASE
+                    WHEN compras_90_previos > 0 AND compras_ult_90 = 0 THEN 1
+                    WHEN compras_ult_90 < compras_90_previos * 0.5 THEN 2
+                    WHEN compras_ult_90 < compras_90_previos * 0.8 THEN 3
+                    ELSE 4
+                END,
+                ultima_compra ASC
+            """
+        )
+
+        rows = (await self.db.execute(sql)).all()
+
+        return [
+            AtRiskCustomerResponse(
+                customer_id=row.customer_id,
+                customer_name=row.customer_name,
+                compras_ult_90=float(row.compras_ult_90),
+                compras_90_previos=float(row.compras_90_previos),
+                ultima_compra=row.ultima_compra,
+                riesgo_abandono=row.riesgo_abandono,
             )
             for row in rows
         ]
