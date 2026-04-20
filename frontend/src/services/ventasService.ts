@@ -3,9 +3,15 @@ import type {
   ApprovedVsCancelledByMonth,
   DashboardOverview,
   GrossMarginByProduct,
+  QuoteStatusByMonth,
+  RecentQuote,
   Sale,
+  SalesByProductDistribution,
   SalesByCustomer,
   SalesByMonth,
+  SalesForecastByProduct,
+  SalesProjectionByMonth,
+  SalesSummary,
 } from "@/types/ventas"
 
 function withQuery(path: string, params?: Record<string, string | number | null | undefined>) {
@@ -55,6 +61,20 @@ export const ventasService = {
     )
   },
 
+  salesSummary(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesSummary>(
+      withQuery("/api/ventas/summary", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
   salesByMonth(
     token: string,
     params?: { startDate?: string | null; endDate?: string | null },
@@ -69,6 +89,20 @@ export const ventasService = {
     )
   },
 
+  salesVsProjection(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesProjectionByMonth[]>(
+      withQuery("/api/ventas/sales-vs-projection", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
   salesByCustomer(
     token: string,
     params?: { startDate?: string | null; endDate?: string | null; limit?: number },
@@ -76,6 +110,21 @@ export const ventasService = {
   ) {
     return requestJson<SalesByCustomer[]>(
       withQuery("/api/ventas/by-customer", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        limit: params?.limit,
+      }),
+      { token, signal }
+    )
+  },
+
+  topCustomers(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null; limit?: number },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesByCustomer[]>(
+      withQuery("/api/ventas/top-customers", {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
@@ -99,6 +148,21 @@ export const ventasService = {
     )
   },
 
+  productDistribution(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null; limit?: number },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesByProductDistribution[]>(
+      withQuery("/api/ventas/product-distribution", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        limit: params?.limit,
+      }),
+      { token, signal }
+    )
+  },
+
   approvedVsCancelled(
     token: string,
     params?: { startDate?: string | null; endDate?: string | null },
@@ -108,6 +172,62 @@ export const ventasService = {
       withQuery("/api/ventas/approved-vs-cancelled", {
         start_date: params?.startDate,
         end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
+  quoteStatusByMonth(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<QuoteStatusByMonth[]>(
+      withQuery("/api/ventas/quote-status-by-month", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
+  recentQuotes(
+    token: string,
+    params?: {
+      startDate?: string | null
+      endDate?: string | null
+      status?: string | null
+      limit?: number
+    },
+    signal?: AbortSignal
+  ) {
+    return requestJson<RecentQuote[]>(
+      withQuery("/api/ventas/recent-quotes", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        status: params?.status,
+        limit: params?.limit,
+      }),
+      { token, signal }
+    )
+  },
+
+  productForecast(
+    token: string,
+    params?: {
+      startDate?: string | null
+      endDate?: string | null
+      limit?: number
+      monthsWindow?: number
+    },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesForecastByProduct[]>(
+      withQuery("/api/ventas/product-forecast", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+        limit: params?.limit,
+        months_window: params?.monthsWindow,
       }),
       { token, signal }
     )

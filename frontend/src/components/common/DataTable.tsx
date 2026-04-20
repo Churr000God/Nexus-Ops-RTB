@@ -16,6 +16,8 @@ type DataTableProps<T> = {
   emptyLabel?: string
   onRowClick?: (row: T) => void
   className?: string
+  toolbar?: ReactNode
+  maxHeight?: string
 }
 
 export function DataTable<T>({
@@ -25,19 +27,27 @@ export function DataTable<T>({
   emptyLabel = "Sin resultados",
   onRowClick,
   className,
+  toolbar,
+  maxHeight,
 }: DataTableProps<T>) {
   return (
-    <div className={cn("overflow-hidden rounded-lg border", className)}>
+    <div className={cn("surface-card overflow-hidden border-white/70", className)}>
+      {toolbar ? (
+        <div className="flex flex-col gap-3 border-b bg-background/80 px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+          {toolbar}
+        </div>
+      ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-muted/40">
+        <div style={maxHeight ? { maxHeight } : undefined} className={cn(maxHeight ? "overflow-y-auto" : "")}>
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10 bg-[hsl(var(--background))]/95 backdrop-blur">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
                   scope="col"
                   className={cn(
-                    "whitespace-nowrap px-4 py-3 text-left text-xs font-medium text-muted-foreground",
+                    "whitespace-nowrap border-b px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground md:px-6",
                     col.className
                   )}
                 >
@@ -45,43 +55,44 @@ export function DataTable<T>({
                 </th>
               ))}
             </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-10 text-center text-muted-foreground"
-                >
-                  {emptyLabel}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => {
-                const key = rowKey(row)
-                return (
-                  <tr
-                    key={key}
-                    className={cn(
-                      "border-t transition-colors",
-                      onRowClick ? "cursor-pointer hover:bg-accent/40" : "hover:bg-accent/20"
-                    )}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={columns.length}
+                    className="px-5 py-12 text-center text-sm text-muted-foreground md:px-6"
                   >
-                    {columns.map((col) => (
-                      <td
-                        key={col.key}
-                        className={cn("whitespace-nowrap px-4 py-3", col.className)}
-                      >
-                        {col.cell(row)}
-                      </td>
-                    ))}
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+                    {emptyLabel}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => {
+                  const key = rowKey(row)
+                  return (
+                    <tr
+                      key={key}
+                      className={cn(
+                        "border-t border-border/80 transition-colors",
+                        onRowClick ? "cursor-pointer hover:bg-accent/55" : "hover:bg-accent/35"
+                      )}
+                      onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    >
+                      {columns.map((col) => (
+                        <td
+                          key={col.key}
+                          className={cn("whitespace-nowrap px-5 py-4 text-[13px] md:px-6", col.className)}
+                        >
+                          {col.cell(row)}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

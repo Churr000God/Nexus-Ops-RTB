@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,14 +12,23 @@ from typing import Any, Callable
 import sqlalchemy as sa
 from sqlalchemy import text
 
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from app.models.ops_models import IncompleteOrder, InventoryMovement
 
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
 IMPORTER_PATH = (
-    ROOT_DIR / "backend" / "alembic" / "versions" / "20260419_0002_import_csv_data.py"
+    BACKEND_DIR / "alembic" / "versions" / "20260419_0002_import_csv_data.py"
 )
-DEFAULT_CSV_DIR = ROOT_DIR / "data" / "csv"
+
+DEFAULT_CSV_DIR = (
+    Path(os.environ["CSV_DIR"])
+    if os.environ.get("CSV_DIR")
+    else Path("/data/csv")
+    if Path("/data/csv").exists()
+    else (BACKEND_DIR.parent / "data" / "csv")
+)
 
 
 @dataclass(frozen=True)

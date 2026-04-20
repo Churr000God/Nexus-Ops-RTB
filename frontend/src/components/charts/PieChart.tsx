@@ -16,6 +16,9 @@ type PieChartProps<T extends Record<string, unknown>> = {
   height?: number
   valueFormatter?: (value: number) => string
   className?: string
+  colors?: string[]
+  innerRadius?: number
+  outerRadius?: number
 }
 
 const palette = [
@@ -35,6 +38,9 @@ export function PieChart<T extends Record<string, unknown>>({
   height = 320,
   valueFormatter,
   className,
+  colors = palette,
+  innerRadius = 60,
+  outerRadius = 110,
 }: PieChartProps<T>) {
   if (data.length === 0) {
     return (
@@ -69,14 +75,14 @@ export function PieChart<T extends Record<string, unknown>>({
             data={data}
             nameKey={nameKey}
             dataKey={valueKey}
-            innerRadius={60}
-            outerRadius={110}
+            innerRadius={innerRadius}
+            outerRadius={outerRadius}
             paddingAngle={2}
             stroke="hsl(var(--card))"
             strokeWidth={2}
           >
             {data.map((_, index) => (
-              <Cell key={index} fill={palette[index % palette.length]} />
+              <Cell key={index} fill={colors[index % colors.length]} />
             ))}
           </Pie>
         </RechartsPieChart>

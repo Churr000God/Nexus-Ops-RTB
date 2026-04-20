@@ -23,11 +23,23 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [
+        configured = [
             origin.strip()
             for origin in self.ALLOWED_ORIGINS.split(",")
             if origin.strip()
         ]
+        if configured:
+            return configured
+        if self.ENV.lower() == "development":
+            return [
+                "http://localhost:5173",
+                "http://127.0.0.1:5173",
+                "http://localhost:80",
+                "http://127.0.0.1:80",
+                "http://localhost",
+                "http://127.0.0.1",
+            ]
+        return []
 
     @property
     def cookie_secure(self) -> bool:

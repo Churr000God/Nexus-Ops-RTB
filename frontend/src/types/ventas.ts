@@ -26,6 +26,32 @@ export type SalesByCustomer = {
   average_ticket: number
 }
 
+export type SalesSummary = {
+  start_date: string | null
+  end_date: string | null
+  total_sales: number
+  pending_quotes: number
+  average_margin_percent: number
+  conversion_rate: number
+  total_quotes: number
+  approved_quotes: number
+  cancelled_quotes: number
+  expired_quotes: number
+  review_quotes: number
+}
+
+export type SalesProjectionByMonth = {
+  year_month: string
+  actual_sales: number
+  projected_sales: number
+}
+
+export type SalesByProductDistribution = {
+  product: string
+  revenue: number
+  percentage: number
+}
+
 export type GrossMarginByProduct = {
   product: string
   sku: string | null
@@ -42,6 +68,22 @@ export type ApprovedVsCancelledByMonth = {
   cancelled_count: number
 }
 
+export type QuoteStatusByMonth = {
+  year_month: string
+  approved_count: number
+  cancelled_count: number
+  expired_count: number
+  review_count: number
+  quoting_count: number
+  rejected_count: number
+  approved_amount: number
+  cancelled_amount: number
+  expired_amount: number
+  review_amount: number
+  quoting_amount: number
+  rejected_amount: number
+}
+
 export type DashboardOverview = {
   start_date: string | null
   end_date: string | null
@@ -50,4 +92,22 @@ export type DashboardOverview = {
   total_gross_margin: number
   approved_quotes: number
   cancelled_quotes: number
+}
+
+export type RecentQuote = {
+  id: string
+  name: string
+  created_on: string | null
+  customer_name: string | null
+  status: string | null
+  total: number | null
+  subtotal: number | null
+  can_convert: boolean
+}
+
+export type SalesForecastByProduct = {
+  product: string
+  sku: string | null
+  category: string | null
+  predicted_units: number
 }

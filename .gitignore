@@ -39,3 +39,7 @@ Thumbs.db
 *.swp
 *.swo
 
+# === Referencias locales (no productivo) ===
+referecia_ui/
+*Name clash*
+

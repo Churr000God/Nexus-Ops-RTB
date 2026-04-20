@@ -356,10 +356,12 @@ def _import_directory(
         row = _normalize_row(raw)
         row_type = row.get("tipo")
         external_id = row.get("id_siglas") or row.get("id_sigla") or row.get("id")
+        entity_id = _parse_uuid(row.get("id_clientes_proveedores"))
         name = row.get("nombre")
-        if not external_id or not name:
+        if entity_id is None or not external_id or not name:
             continue
         base_payload = {
+            "id": entity_id,
             "external_id": external_id,
             "name": name,
             "category": row.get("categoria"),
@@ -455,13 +457,15 @@ def _import_quotes(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, int,
         name = row.get("nombre_de_cotizacion")
         if quote_id is None or not name:
             continue
+        customer_id = _fk_or_none(conn, "clientes", _parse_uuid(row.get("cliente")))
         payloads.append(
             {
                 "id": quote_id,
                 "name": name,
                 "status": row.get("estado"),
                 "order_status": row.get("estado_del_pedido"),
-                "external_customer_id": row.get("cliente") or None,
+                "customer_id": customer_id,
+                "external_customer_id": row.get("id_de_cliente") or None,
                 "created_on": _parse_datetime(row.get("fecha_de_creacion")),
                 "approved_on": _parse_datetime(row.get("fecha_de_aprobacion")),
                 "followed_up_on": _parse_datetime(row.get("fecha_de_seguimiento")),
@@ -605,12 +609,13 @@ def _import_sales(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, int, 
         name = row.get("nombre_de_venta")
         if sale_id is None or not name:
             continue
+        customer_id = _fk_or_none(conn, "clientes", _parse_uuid(row.get("cliente")))
         payloads.append(
             {
                 "id": sale_id,
                 "name": name,
                 "sold_on": _parse_datetime(row.get("fecha")),
-                "customer_id": None,
+                "customer_id": customer_id,
                 "external_customer_id": row.get("cliente") or None,
                 "status": row.get("estado"),
                 "subtotal": _parse_decimal(row.get("subtotal")),
@@ -1075,11 +1080,12 @@ def _import_customer_orders(
         name = row.get("nombre_del_pedido")
         if order_id is None or not name:
             continue
+        customer_id = _fk_or_none(conn, "clientes", _parse_uuid(row.get("cliente")))
         payloads.append(
             {
                 "id": order_id,
                 "name": name,
-                "customer_id": None,
+                "customer_id": customer_id,
                 "external_customer_id": row.get("cliente"),
                 "customer_code": row.get("id_cliente"),
                 "payment_type": row.get("tipo_de_pago"),

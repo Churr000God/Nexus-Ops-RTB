@@ -10,9 +10,15 @@ from app.models.user_model import User
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
     GrossMarginByProductResponse,
+    QuoteStatusByMonthResponse,
+    RecentQuoteResponse,
     SaleResponse,
+    SalesByProductDistributionResponse,
     SalesByCustomerResponse,
     SalesByMonthResponse,
+    SalesForecastByProductResponse,
+    SalesProjectionByMonthResponse,
+    SalesSummaryResponse,
 )
 from app.services.ventas_service import VentasService
 
@@ -34,6 +40,17 @@ async def list_sales(
     )
 
 
+@router.get("/summary", response_model=SalesSummaryResponse)
+async def sales_summary(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> SalesSummaryResponse:
+    service = VentasService(db)
+    return await service.sales_summary(start_date=start_date, end_date=end_date)
+
+
 @router.get("/by-month", response_model=list[SalesByMonthResponse])
 async def sales_by_month(
     start_date: date | None = Query(default=None),
@@ -43,6 +60,19 @@ async def sales_by_month(
 ) -> list[SalesByMonthResponse]:
     service = VentasService(db)
     return await service.sales_by_month(start_date=start_date, end_date=end_date)
+
+
+@router.get("/sales-vs-projection", response_model=list[SalesProjectionByMonthResponse])
+async def sales_vs_projection(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SalesProjectionByMonthResponse]:
+    service = VentasService(db)
+    return await service.sales_vs_projection_by_month(
+        start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/by-customer", response_model=list[SalesByCustomerResponse])
@@ -55,6 +85,20 @@ async def sales_by_customer(
 ) -> list[SalesByCustomerResponse]:
     service = VentasService(db)
     return await service.sales_by_customer(
+        start_date=start_date, end_date=end_date, limit=limit
+    )
+
+
+@router.get("/top-customers", response_model=list[SalesByCustomerResponse])
+async def top_customers(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SalesByCustomerResponse]:
+    service = VentasService(db)
+    return await service.top_customers_by_sales(
         start_date=start_date, end_date=end_date, limit=limit
     )
 
@@ -76,6 +120,23 @@ async def gross_margin_by_product(
 
 
 @router.get(
+    "/product-distribution",
+    response_model=list[SalesByProductDistributionResponse],
+)
+async def product_distribution(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SalesByProductDistributionResponse]:
+    service = VentasService(db)
+    return await service.sales_distribution_by_product(
+        start_date=start_date, end_date=end_date, limit=limit
+    )
+
+
+@router.get(
     "/approved-vs-cancelled", response_model=list[ApprovedVsCancelledByMonthResponse]
 )
 async def approved_vs_cancelled(
@@ -87,4 +148,50 @@ async def approved_vs_cancelled(
     service = VentasService(db)
     return await service.approved_vs_cancelled_by_month(
         start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/quote-status-by-month", response_model=list[QuoteStatusByMonthResponse])
+async def quote_status_by_month(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[QuoteStatusByMonthResponse]:
+    service = VentasService(db)
+    return await service.quote_status_by_month(
+        start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/recent-quotes", response_model=list[RecentQuoteResponse])
+async def recent_quotes(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[RecentQuoteResponse]:
+    service = VentasService(db)
+    return await service.recent_quotes(
+        start_date=start_date, end_date=end_date, status=status, limit=limit
+    )
+
+
+@router.get("/product-forecast", response_model=list[SalesForecastByProductResponse])
+async def product_forecast(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    limit: int = Query(default=15, ge=1, le=50),
+    months_window: int = Query(default=3, ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SalesForecastByProductResponse]:
+    service = VentasService(db)
+    return await service.sales_forecast_by_product(
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        months_window=months_window,
     )

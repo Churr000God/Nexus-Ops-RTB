@@ -36,11 +36,21 @@ export function DateRangePicker({
 }: DateRangePickerProps) {
   return (
     <div
-      className={cn("flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-soft-sm", className)}
+      className={cn(
+        "surface-card flex flex-col gap-4 border-white/70 bg-white p-5 md:p-6",
+        className
+      )}
     >
       <div className="flex items-center gap-2">
-        <CalendarRange className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <div className="text-sm font-medium">Filtros</div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-[hsl(var(--primary)_/_0.10)] text-[hsl(var(--primary))]">
+          <CalendarRange className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-foreground">Filtros de fecha</div>
+          <div className="text-xs text-muted-foreground">
+            Ajusta el periodo para recalcular KPIs, gráficas y tabla.
+          </div>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           {onReset ? (
             <Button type="button" variant="ghost" size="sm" onClick={onReset}>
@@ -52,7 +62,10 @@ export function DateRangePicker({
 
       <div className="grid gap-3 md:grid-cols-[220px_1fr_1fr]">
         <div className="space-y-1">
-          <label htmlFor="datePreset" className="text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="datePreset"
+            className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+          >
             Preset
           </label>
           <select
@@ -60,7 +73,7 @@ export function DateRangePicker({
             value={preset}
             onChange={(e) => onPresetChange(e.target.value as DatePreset)}
             className={cn(
-              "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-soft-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              "flex h-11 w-full rounded-[var(--radius-md)] border border-input bg-background px-3 text-sm shadow-soft-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             )}
             aria-label="Preset de fechas"
           >
@@ -73,7 +86,10 @@ export function DateRangePicker({
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="startDate" className="text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="startDate"
+            className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+          >
             Desde
           </label>
           <Input
@@ -91,7 +107,10 @@ export function DateRangePicker({
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="endDate" className="text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="endDate"
+            className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+          >
             Hasta
           </label>
           <Input

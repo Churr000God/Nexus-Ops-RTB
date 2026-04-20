@@ -3,35 +3,43 @@
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 220 18% 97%;
+  --foreground: 240 7% 7%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: 240 7% 7%;
 
-  --primary: 220 90% 56%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 221 100% 50%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 220 17% 95%;
+  --secondary-foreground: 240 7% 12%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 220 17% 95%;
+  --muted-foreground: 240 4% 57%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 220 17% 95%;
+  --accent-foreground: 240 7% 12%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 4 90% 58%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 220 90% 56%;
+  --border: 220 15% 90%;
+  --input: 220 15% 90%;
+  --ring: 221 100% 50%;
 
-  --radius-lg: 12px;
+  --success: 142 72% 39%;
+  --warning: 37 100% 56%;
+  --info: 221 100% 50%;
+  --neutral: 240 4% 57%;
 
-  --shadow-soft-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
-  --shadow-soft-md: 0 8px 24px rgba(16, 24, 40, 0.08);
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 10px;
+
+  --shadow-soft-sm: 0 2px 10px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-soft-md: 0 14px 32px rgba(15, 23, 42, 0.08);
+  --shadow-soft-lg: 0 24px 48px rgba(15, 23, 42, 0.12);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -42,35 +50,6 @@
   --space-8: 32px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --primary: 220 90% 60%;
-    --primary-foreground: 222.2 84% 4.9%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 220 90% 60%;
-  }
-}
-
 html,
 body,
 #root {
@@ -78,12 +57,28 @@ body,
 }
 
 body {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
   border-color: hsl(var(--border));
+}
+
+.surface-card {
+  @apply rounded-[var(--radius-lg)] border bg-card shadow-soft-sm;
+}
+
+.surface-card-hover {
+  @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft-md;
+}
+
+.panel-header {
+  @apply flex items-start justify-between gap-3;
 }
 
 .focus-ring {

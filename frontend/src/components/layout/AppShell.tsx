@@ -27,7 +27,7 @@ export function AppShell({ userEmail, onLogout }: AppShellProps) {
   }, [location.pathname])
 
   return (
-    <div className="h-full">
+    <div className="min-h-full bg-background">
       <Header
         onOpenSidebar={() => setMobileOpen(true)}
         title={header.title}
@@ -35,16 +35,14 @@ export function AppShell({ userEmail, onLogout }: AppShellProps) {
         userLabel={userEmail ?? undefined}
         onLogout={onLogout}
       />
-      <div className="mx-auto grid h-[calc(100%-56px)] max-w-screen-2xl grid-cols-1 md:grid-cols-[260px_1fr]">
-        <aside className="hidden border-r md:block">
-          <Sidebar />
-        </aside>
-        <main className="min-w-0 overflow-y-auto">
-          <div className="p-4 md:p-6">
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] bg-[#1a1d21] md:block">
+        <Sidebar />
+      </aside>
+      <main className="min-h-screen pt-16 md:pl-[220px]">
+        <div className="min-h-[calc(100vh-64px)] px-4 py-5 md:px-6 md:py-6">
+          <Outlet />
+        </div>
+      </main>
 
       <div
         className={cn(
@@ -56,7 +54,7 @@ export function AppShell({ userEmail, onLogout }: AppShellProps) {
       />
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-[280px] border-r bg-background shadow-soft-md transition-transform md:hidden",
+          "fixed inset-y-0 left-0 z-40 w-[220px] bg-[#1a1d21] shadow-soft-lg transition-transform md:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
         aria-label="Navegación"
