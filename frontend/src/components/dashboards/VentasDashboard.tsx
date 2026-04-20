@@ -26,7 +26,7 @@ import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
-import type { RecentQuote } from "@/types/ventas"
+import type { MissingDemandByProduct, RecentQuote } from "@/types/ventas"
 
 export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
@@ -141,6 +141,19 @@ export function VentasDashboard() {
     endDate
   )
 
+  const fetchMissingDemand = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.missingDemand(token ?? "", { startDate, endDate, limit: 20 }, signal),
+    [token, startDate, endDate]
+  )
+  const missingDemand = useApi(
+    fetchMissingDemand,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
   const kpis = useMemo(() => {
     const data = summary.data
     if (!data) {
@@ -233,6 +246,27 @@ export function VentasDashboard() {
       category: row.category ?? "",
     }))
   }, [productForecast.data])
+
+  const missingDemandChart = useMemo(() => {
+    return (missingDemand.data ?? []).map((row) => ({
+      product: row.product,
+      demanda_faltante: row.demanda_faltante,
+      sku: row.sku ?? "",
+    }))
+  }, [missingDemand.data])
+
+  const missingDemandParetoRows = useMemo(() => {
+    const rows = missingDemand.data ?? []
+    const totalDemand = rows.reduce((acc, r) => acc + r.demanda_faltante, 0)
+    const totalValue = rows.reduce((acc, r) => acc + r.valor_venta_pendiente, 0)
+    return rows.map((row) => ({
+      ...row,
+      share_percent:
+        totalDemand > 0 ? (row.demanda_faltante / totalDemand) * 100 : 0,
+      value_share_percent:
+        totalValue > 0 ? (row.valor_venta_pendiente / totalValue) * 100 : 0,
+    }))
+  }, [missingDemand.data])
 
   const productDistributionRows = useMemo(() => {
     return (productDistribution.data ?? []).map((row) => ({
@@ -347,7 +381,8 @@ export function VentasDashboard() {
     productDistribution.status === "error" ||
     quoteStatusByMonth.status === "error" ||
     grossMarginByProduct.status === "error" ||
-    recentQuotes.status === "error"
+    recentQuotes.status === "error" ||
+    missingDemand.status === "error"
 
   const firstError =
     summary.error ??
@@ -356,7 +391,8 @@ export function VentasDashboard() {
     productDistribution.error ??
     quoteStatusByMonth.error ??
     grossMarginByProduct.error ??
-    recentQuotes.error
+    recentQuotes.error ??
+    missingDemand.error
 
   const isLoading =
     summary.status === "loading" ||
@@ -365,7 +401,8 @@ export function VentasDashboard() {
     productDistribution.status === "loading" ||
     quoteStatusByMonth.status === "loading" ||
     grossMarginByProduct.status === "loading" ||
-    recentQuotes.status === "loading"
+    recentQuotes.status === "loading" ||
+    missingDemand.status === "loading"
 
   const showPendingToast = (feature: string) => {
     toast.info(`${feature} queda listo para enlazar cuando definamos el flujo de datos.`)
@@ -654,6 +691,82 @@ export function VentasDashboard() {
           valueFormatter={(v) => formatNumber(v)}
           height={320}
         />
+      </ChartPanel>
+
+      <ChartPanel
+        title="Demanda de Productos Faltantes"
+        subtitle="Cantidad pendiente por surtir/empacar desde cotizaciones aprobadas, pendientes o en seguimiento"
+        infoLabel="Presión operativa"
+      >
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+          <BarChart
+            data={missingDemandChart}
+            xKey="product"
+            bars={[{ dataKey: "demanda_faltante", name: "Demanda faltante (u)" }]}
+            height={Math.max(320, missingDemandChart.length * 36)}
+            valueFormatter={(v) => `${formatNumber(v)} u`}
+            horizontal
+            colorScale={[
+              "#FF453A", "#FF6B6B", "#FF9F0A", "#FFB020",
+              "#FFD60A", "#1AAD58", "#30D158", "#34C759",
+              "#00C2FF", "#0A84FF", "#0051FF", "#AF52DE",
+              "#BF5AF2", "#E040FB", "#FF6E40",
+            ]}
+          />
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Análisis Pareto
+            </div>
+            <div className="overflow-hidden rounded-[var(--radius-md)] border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Producto
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Faltante
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      % Acum
+                    </th>
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Venta pend.
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missingDemandParetoRows.map((row) => (
+                    <tr key={row.product + (row.sku ?? "")} className="border-t">
+                      <td className="px-3 py-2 text-[13px] text-foreground">
+                        <div className="truncate max-w-[140px]" title={row.product}>
+                          {row.product}
+                        </div>
+                        {row.sku ? (
+                          <div className="text-[11px] text-muted-foreground">SKU {row.sku}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                        {formatNumber(row.demanda_faltante)} u
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                        {formatNumber(row.pareto_percent ?? 0)}%
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                        {formatCurrencyMXN(row.valor_venta_pendiente)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {missingDemandParetoRows.length === 0 && missingDemand.status !== "loading" ? (
+              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                Sin productos faltantes en el periodo
+              </div>
+            ) : null}
+          </div>
+        </div>
       </ChartPanel>
 
       <ChartPanel

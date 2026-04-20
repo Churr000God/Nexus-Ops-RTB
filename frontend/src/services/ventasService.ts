@@ -3,6 +3,7 @@ import type {
   ApprovedVsCancelledByMonth,
   DashboardOverview,
   GrossMarginByProduct,
+  MissingDemandByProduct,
   QuoteStatusByMonth,
   RecentQuote,
   Sale,
@@ -206,6 +207,25 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         status: params?.status,
+        limit: params?.limit,
+      }),
+      { token, signal }
+    )
+  },
+
+  missingDemand(
+    token: string,
+    params?: {
+      startDate?: string | null
+      endDate?: string | null
+      limit?: number
+    },
+    signal?: AbortSignal
+  ) {
+    return requestJson<MissingDemandByProduct[]>(
+      withQuery("/api/ventas/missing-demand", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
         limit: params?.limit,
       }),
       { token, signal }

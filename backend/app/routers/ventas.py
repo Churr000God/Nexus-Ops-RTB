@@ -10,6 +10,7 @@ from app.models.user_model import User
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
     GrossMarginByProductResponse,
+    MissingDemandResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
@@ -176,6 +177,20 @@ async def recent_quotes(
     service = VentasService(db)
     return await service.recent_quotes(
         start_date=start_date, end_date=end_date, status=status, limit=limit
+    )
+
+
+@router.get("/missing-demand", response_model=list[MissingDemandResponse])
+async def missing_demand(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[MissingDemandResponse]:
+    service = VentasService(db)
+    return await service.missing_demand_by_product(
+        start_date=start_date, end_date=end_date, limit=limit
     )
 
 

@@ -117,6 +117,16 @@ class RecentQuoteResponse(BaseModel):
     can_convert: bool = False
 
 
+class MissingDemandResponse(BaseModel):
+    product: str
+    sku: str | None = None
+    category: str | None = None
+    demanda_faltante: float
+    valor_venta_pendiente: float
+    costo_compra_estimado: float
+    pareto_percent: float | None = None
+
+
 class SalesForecastByProductResponse(BaseModel):
     product: str
     sku: str | None = None

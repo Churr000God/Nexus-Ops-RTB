@@ -105,6 +105,16 @@ export type RecentQuote = {
   can_convert: boolean
 }
 
+export type MissingDemandByProduct = {
+  product: string
+  sku: string | null
+  category: string | null
+  demanda_faltante: number
+  valor_venta_pendiente: number
+  costo_compra_estimado: number
+  pareto_percent: number | null
+}
+
 export type SalesForecastByProduct = {
   product: string
   sku: string | null

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import Select, String, and_, case, cast, func, literal, or_, select, text
+from sqlalchemy import Date, Integer, Select, String, and_, bindparam, case, cast, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ops_models import (
@@ -18,6 +18,7 @@ from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
     DashboardOverviewResponse,
     GrossMarginByProductResponse,
+    MissingDemandResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
@@ -723,6 +724,70 @@ class VentasService:
             for row in rows
         ]
 
+    async def missing_demand_by_product(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+        limit: int,
+    ) -> list[MissingDemandResponse]:
+        status_text = func.lower(func.coalesce(Quote.status, literal("")))
+        active_condition = or_(
+            status_text.like("%aprob%"),
+            status_text.like("%pend%"),
+            status_text.like("%seguim%"),
+        )
+        product_key = func.coalesce(
+            Product.name, QuoteItem.sku, literal("Sin producto")
+        )
+        stmt = (
+            select(
+                product_key.label("product"),
+                QuoteItem.sku.label("sku"),
+                QuoteItem.category.label("category"),
+                func.coalesce(func.sum(QuoteItem.qty_missing), 0).label(
+                    "demanda_faltante"
+                ),
+                func.coalesce(func.sum(QuoteItem.subtotal), 0).label(
+                    "valor_venta_pendiente"
+                ),
+                func.coalesce(func.sum(QuoteItem.purchase_subtotal), 0).label(
+                    "costo_compra_estimado"
+                ),
+            )
+            .select_from(QuoteItem)
+            .join(Quote, Quote.id == QuoteItem.quote_id)
+            .outerjoin(Product, Product.id == QuoteItem.product_id)
+            .where(active_condition)
+            .where(QuoteItem.qty_missing > 0)
+            .group_by(product_key, QuoteItem.sku, QuoteItem.category)
+            .order_by(
+                func.coalesce(func.sum(QuoteItem.qty_missing), 0).desc()
+            )
+            .limit(limit)
+        )
+        rows = (await self.db.execute(stmt)).all()
+        total_demand = sum(_to_float(row.demanda_faltante) for row in rows)
+        cumulative = 0.0
+        results: list[MissingDemandResponse] = []
+        for row in rows:
+            demand = _to_float(row.demanda_faltante)
+            cumulative += demand
+            pareto = (
+                (cumulative / total_demand * 100.0) if total_demand > 0 else 0.0
+            )
+            results.append(
+                MissingDemandResponse(
+                    product=row.product,
+                    sku=row.sku,
+                    category=row.category,
+                    demanda_faltante=demand,
+                    valor_venta_pendiente=_to_float(row.valor_venta_pendiente),
+                    costo_compra_estimado=_to_float(row.costo_compra_estimado),
+                    pareto_percent=round(pareto, 2),
+                )
+            )
+        return results
+
     async def dashboard_overview(
         self,
         start_date: date | None,
@@ -784,8 +849,11 @@ class VentasService:
                 LEFT JOIN ventas v ON v.quote_id = q.id
                 LEFT JOIN productos p ON cl.product_id = p.id
                 WHERE
-                    LOWER(COALESCE(v.status, q.status, ''))
-                        NOT SIMILAR TO '%cancelad%|%cancelled%|%rechazad%'
+                    (
+                        v.id IS NOT NULL
+                        OR q.approved_on IS NOT NULL
+                        OR LOWER(COALESCE(v.status, q.status, '')) LIKE '%aprob%'
+                    )
                     AND COALESCE(v.sold_on, q.approved_on, q.created_on) IS NOT NULL
                     AND (
                         :start_date IS NULL
@@ -836,14 +904,19 @@ class VentasService:
             ORDER BY predicted_units DESC
             LIMIT :limit
             """
+        ).bindparams(
+            bindparam("start_date", type_=Date()),
+            bindparam("end_date", type_=Date()),
+            bindparam("months_window", type_=Integer()),
+            bindparam("limit", type_=Integer()),
         )
 
         rows = (
             await self.db.execute(
                 sql,
                 {
-                    "start_date": str(start_date) if start_date else None,
-                    "end_date": str(end_date) if end_date else None,
+                    "start_date": start_date,
+                    "end_date": end_date,
                     "months_window": months_window,
                     "limit": limit,
                 },
