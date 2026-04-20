@@ -15,9 +15,12 @@ cd "$ROOT"
 source ./scripts/lib/common.sh
 
 require docker
+require_env_file
 
 BACKUP_FILE="${1:-}"
-CONTAINER="nexus-ops-rtb-postgres-1"
+MODE="${2:-dev}"
+AUTO_CONFIRM="${AUTO_CONFIRM:-false}"
+SERVICE="$(postgres_service_name)"
 
 if [[ -z "$BACKUP_FILE" ]]; then
   log "Backups disponibles:"
@@ -30,20 +33,24 @@ if [[ ! -f "$BACKUP_FILE" ]]; then
   err "Archivo no encontrado: $BACKUP_FILE"
 fi
 
-DB_NAME=$(grep -E '^POSTGRES_DB=' .env | cut -d'=' -f2 || echo "nexus_ops")
-DB_USER=$(grep -E '^POSTGRES_USER=' .env | cut -d'=' -f2 || echo "nexus")
+DB_NAME="$(env_get POSTGRES_DB nexus_ops)"
+DB_USER="$(env_get POSTGRES_USER nexus)"
 
 warn "Esto reemplazará TODOS los datos de la base de datos '$DB_NAME'."
-read -p "Continuar? (y/N): " CONFIRM
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-  log "Restauración cancelada."
-  exit 0
+if [[ "$AUTO_CONFIRM" != "true" ]]; then
+  read -r -p "Continuar? (y/N): " CONFIRM
+  if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+    log "Restauración cancelada."
+    exit 0
+  fi
+else
+  warn "AUTO_CONFIRM=true detectado. Continuando sin prompt."
 fi
 
 log "Creando backup de seguridad antes de restaurar..."
-bash ./scripts/backup-db.sh "pre_restore_$(date -u +%Y%m%d_%H%M%S)"
+bash ./scripts/backup-db.sh "pre_restore_$(date -u +%Y%m%d_%H%M%S)" "$MODE"
 
 log "Restaurando desde: $BACKUP_FILE"
-gunzip -c "$BACKUP_FILE" | docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" --single-transaction
+gunzip -c "$BACKUP_FILE" | compose_cmd "$MODE" exec -T "$SERVICE" psql -U "$DB_USER" -d "$DB_NAME" --single-transaction
 
 ok "Base de datos restaurada exitosamente."

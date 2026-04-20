@@ -11,6 +11,12 @@ cd "$ROOT"
 source ./scripts/lib/common.sh
 require docker
 
-docker compose down
-ok "Stack detenido."
+MODE="${1:-dev}"
+case "$MODE" in
+  dev|prod|production) ;;
+  *) err "Modo inválido: $MODE. Usa: dev|prod" ;;
+esac
+
+compose_cmd "$MODE" down
+ok "Stack $MODE detenido (volúmenes preservados)."
 

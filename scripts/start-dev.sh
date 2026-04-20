@@ -10,7 +10,9 @@ cd "$ROOT"
 
 source ./scripts/lib/common.sh
 require docker
+require_env_file
 
-docker compose up -d --build
-ok "Stack levantado. Proxy: http://localhost"
+compose_cmd dev up -d --build
+wait_for_postgres dev 90
+ok "Stack DEV levantado. Proxy: http://localhost"
 

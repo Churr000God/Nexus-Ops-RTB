@@ -15,8 +15,14 @@ cd "$ROOT"
 
 source ./scripts/lib/common.sh
 
+require docker
+require curl
+
 FAILURES=0
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+MODE="${1:-dev}"
+
+mkdir -p data/logs
 
 check_service() {
   local name="$1"
@@ -35,10 +41,19 @@ check_service() {
 
 check_container() {
   local name="$1"
-  local container="$2"
+  local service="$2"
 
-  STATE=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "not_found")
-  HEALTH=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$container" 2>/dev/null || echo "unknown")
+  local state_line
+  state_line="$(compose_cmd "$MODE" ps --format json "$service" 2>/dev/null || true)"
+  if [[ -z "$state_line" ]]; then
+    warn "$name — servicio no encontrado: $service"
+    FAILURES=$((FAILURES + 1))
+    return
+  fi
+
+  STATE="$(echo "$state_line" | grep -o '"State":"[^"]*"' | cut -d'"' -f4 || true)"
+  HEALTH="$(echo "$state_line" | grep -o '"Health":"[^"]*"' | cut -d'"' -f4 || true)"
+  [[ -n "$HEALTH" ]] || HEALTH="no-healthcheck"
 
   if [[ "$STATE" == "running" ]]; then
     if [[ "$HEALTH" == "healthy" || "$HEALTH" == "no-healthcheck" ]]; then
@@ -58,19 +73,22 @@ echo ""
 
 # --- Contenedores Docker ---
 log "Verificando contenedores..."
-check_container "PostgreSQL" "nexus-ops-rtb-postgres-1"
-check_container "Redis"      "nexus-ops-rtb-redis-1"
-check_container "Backend"    "nexus-ops-rtb-backend-1"
-check_container "Frontend"   "nexus-ops-rtb-frontend-1"
-check_container "n8n"        "nexus-ops-rtb-n8n-1"
-check_container "Proxy"      "nexus-ops-rtb-proxy-1"
+check_container "PostgreSQL" "postgres"
+check_container "Redis" "redis"
+check_container "Backend" "backend"
+check_container "Frontend" "frontend"
+check_container "n8n" "n8n"
+check_container "Proxy" "proxy"
+if [[ "$MODE" == "prod" || "$MODE" == "production" ]]; then
+  check_container "Cloudflared" "cloudflared"
+fi
 echo ""
 
 # --- Endpoints HTTP ---
 log "Verificando endpoints..."
-check_service "API Health"   "http://localhost:8000/health"
-check_service "Proxy"        "http://localhost"
-check_service "n8n"          "http://localhost:5678" "200"
+check_service "API Health" "http://localhost:8000/health"
+check_service "Proxy" "http://localhost"
+check_service "n8n" "http://localhost:5678" "200"
 echo ""
 
 # --- Resumen ---

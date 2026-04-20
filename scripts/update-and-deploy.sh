@@ -4,7 +4,7 @@
 # Uso:
 #   ./scripts/update-and-deploy.sh              # Dev
 #   ./scripts/update-and-deploy.sh prod         # Producción
-#   ./scripts/update-and-deploy.sh prod --force # Prod + rebuild sin cache
+#   ./scripts/update-and-deploy.sh prod --rebuild --force
 # =============================================================================
 set -euo pipefail
 
@@ -19,18 +19,32 @@ source ./scripts/lib/common.sh
 
 require docker
 require git
+require_env_file
 
 MODE="${1:-dev}"
-FORCE="${2:-}"
+shift || true
+DEPLOY_FLAGS=()
 BRANCH="${UPDATE_BRANCH:-main}"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force|--rebuild|--recreate)
+      DEPLOY_FLAGS+=("$1")
+      ;;
+    *)
+      err "Flag no reconocido: $1"
+      ;;
+  esac
+  shift
+done
 
 log "=== Update & Deploy Pipeline — $TIMESTAMP ==="
 echo ""
 
 # --- Paso 1: Backup de seguridad ---
 log "Paso 1/5: Creando backup de base de datos..."
-if bash ./scripts/backup-db.sh 2>/dev/null; then
+if bash ./scripts/backup-db.sh "pre_update_${TIMESTAMP//[:T-]/_}" "$MODE" 2>/dev/null; then
   ok "Backup creado."
 else
   warn "No se pudo crear backup (puede que no haya BD activa). Continuando..."
@@ -69,22 +83,23 @@ echo ""
 # --- Paso 3: Instalar dependencias si cambiaron ---
 log "Paso 3/5: Verificando cambios en dependencias..."
 DEPS_CHANGED="false"
-if git diff HEAD~1 --name-only 2>/dev/null | grep -qE "(requirements\.txt|package\.json|package-lock\.json)"; then
+if git diff HEAD~1 --name-only 2>/dev/null | grep -qE "(requirements\.txt|package\.json|package-lock\.json|Dockerfile)"; then
   DEPS_CHANGED="true"
   log "Se detectaron cambios en dependencias. Se hará rebuild completo."
-  FORCE="--force"
+  DEPLOY_FLAGS+=("--rebuild")
 fi
 echo ""
 
 # --- Paso 4: Deploy ---
 log "Paso 4/5: Ejecutando deploy..."
-bash ./scripts/deploy.sh "$MODE" "$FORCE"
+# shellcheck disable=SC2068
+bash ./scripts/deploy.sh "$MODE" ${DEPLOY_FLAGS[@]}
 echo ""
 
 # --- Paso 5: Health check ---
 log "Paso 5/5: Verificación de salud post-deploy..."
 sleep 5
-if bash ./scripts/health-check.sh; then
+if bash ./scripts/health-check.sh "$MODE"; then
   ok "=== Update & Deploy completado exitosamente ==="
 else
   warn "=== Deploy completado pero algunos servicios tienen problemas ==="

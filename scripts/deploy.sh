@@ -2,9 +2,11 @@
 # =============================================================================
 # deploy.sh — Despliegue automático del stack Nexus Ops RTB
 # Uso:
-#   ./scripts/deploy.sh              # Deploy en modo desarrollo
-#   ./scripts/deploy.sh prod         # Deploy en modo producción
-#   ./scripts/deploy.sh prod --force # Forzar rebuild sin cache
+#   ./scripts/deploy.sh                        # Deploy en modo desarrollo
+#   ./scripts/deploy.sh prod                   # Deploy en modo producción
+#   ./scripts/deploy.sh prod --rebuild         # Rebuild de imágenes
+#   ./scripts/deploy.sh prod --rebuild --force # Rebuild sin cache
+#   ./scripts/deploy.sh dev --recreate         # Re-crear contenedores
 # =============================================================================
 set -euo pipefail
 
@@ -18,37 +20,62 @@ cd "$ROOT"
 source ./scripts/lib/common.sh
 
 require docker
+require_env_file
 
 # --- Argumentos ---
 MODE="${1:-dev}"
-FORCE="${2:-}"
+shift || true
+FORCE="false"
+REBUILD="false"
+RECREATE="false"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# --- Validaciones ---
-if [[ ! -f .env ]]; then
-  err "No existe .env. Ejecuta: cp .env.example .env y configura los valores."
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force) FORCE="true" ;;
+    --rebuild) REBUILD="true" ;;
+    --recreate) RECREATE="true" ;;
+    *) err "Flag no reconocido: $1" ;;
+  esac
+  shift
+done
 
 # --- Crear directorios necesarios ---
 mkdir -p data/csv data/reports data/logs data/backups \
          automations/n8n_data automations/n8n_flows \
          docker/nginx/certs
 
-# --- Funciones ---
-deploy_dev() {
-  log "Desplegando en modo DESARROLLO..."
-
-  if [[ "$FORCE" == "--force" ]]; then
-    log "Rebuild forzado (sin cache)..."
-    docker compose build --no-cache
-  else
-    docker compose build
+build_images_if_needed() {
+  if [[ "$REBUILD" != "true" ]]; then
+    return
   fi
 
-  docker compose up -d
+  if [[ "$FORCE" == "true" ]]; then
+    log "Rebuild forzado (sin cache)..."
+    compose_cmd "$MODE" build --no-cache
+  else
+    log "Rebuild de imágenes..."
+    compose_cmd "$MODE" build
+  fi
+}
+
+up_stack() {
+  local up_args=(-d --remove-orphans)
+  if [[ "$RECREATE" == "true" ]]; then
+    up_args+=(--force-recreate)
+  fi
+
+  # shellcheck disable=SC2068
+  compose_cmd "$MODE" up ${up_args[@]}
+}
+
+deploy_dev() {
+  log "Desplegando en modo DESARROLLO..."
+  build_images_if_needed
+  up_stack
   log "Esperando que los servicios estén saludables..."
-  sleep 5
-  bash ./scripts/health-check.sh || warn "Algunos servicios no responden aún."
+  wait_for_postgres dev 90
+  bash ./scripts/health-check.sh dev || warn "Algunos servicios no responden aún."
   ok "Deploy DEV completado — $TIMESTAMP"
   ok "Proxy: http://localhost"
   ok "API:   http://localhost/api/health"
@@ -64,25 +91,12 @@ deploy_prod() {
     warn "El túnel Cloudflare no funcionará sin este archivo."
   fi
 
-  if [[ "$FORCE" == "--force" ]]; then
-    log "Rebuild forzado (sin cache)..."
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache
-  else
-    docker compose -f docker-compose.yml -f docker-compose.prod.yml build
-  fi
-
-  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+  build_images_if_needed
+  up_stack
   log "Esperando que los servicios estén saludables..."
-  sleep 8
-  bash ./scripts/health-check.sh || warn "Algunos servicios no responden aún."
+  wait_for_postgres prod 120
+  bash ./scripts/health-check.sh prod || warn "Algunos servicios no responden aún."
   ok "Deploy PROD completado — $TIMESTAMP"
-}
-
-rollback() {
-  warn "Iniciando rollback..."
-  docker compose down
-  git checkout HEAD~1 -- docker-compose.yml docker-compose.prod.yml backend/ frontend/
-  deploy_"$MODE"
 }
 
 # --- Ejecución ---
@@ -91,13 +105,11 @@ case "$MODE" in
     deploy_dev
     ;;
   prod|production)
+    MODE="prod"
     deploy_prod
     ;;
-  rollback)
-    rollback
-    ;;
   *)
-    err "Modo no reconocido: $MODE. Usa: dev, prod, rollback"
+    err "Modo no reconocido: $MODE. Usa: dev, prod"
     ;;
 esac
 

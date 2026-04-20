@@ -17,37 +17,35 @@ cd "$ROOT"
 source ./scripts/lib/common.sh
 
 require docker
+require_env_file
 
 # --- Configuración ---
 BACKUP_DIR="data/backups"
 TIMESTAMP="$(date -u +%Y%m%d_%H%M%S)"
 BACKUP_NAME="${1:-nexus_ops_backup_$TIMESTAMP}"
 BACKUP_FILE="$BACKUP_DIR/${BACKUP_NAME}.sql.gz"
-CONTAINER="nexus-ops-rtb-postgres-1"
 MAX_BACKUPS="${MAX_BACKUPS:-10}"
+MODE="${2:-dev}"
+SERVICE="$(postgres_service_name)"
 
 # --- Verificaciones ---
 mkdir -p "$BACKUP_DIR"
 
-if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  err "Contenedor $CONTAINER no encontrado. Asegúrate de que el stack esté corriendo."
+if ! compose_cmd "$MODE" ps "$SERVICE" >/dev/null 2>&1; then
+  err "Servicio $SERVICE no disponible en modo $MODE."
+fi
+if ! compose_cmd "$MODE" ps "$SERVICE" | grep -q "Up"; then
+  err "Servicio $SERVICE no está corriendo en modo $MODE."
   exit 1
 fi
 
 # --- Backup ---
 log "Creando backup: $BACKUP_FILE"
 
-# Leer credenciales del .env
-DB_NAME="$(grep -E '^POSTGRES_DB=' .env | cut -d'=' -f2- || true)"
-DB_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d'=' -f2- || true)"
-if [[ -z "$DB_NAME" ]]; then
-  DB_NAME="nexus_ops"
-fi
-if [[ -z "$DB_USER" ]]; then
-  DB_USER="nexus"
-fi
+DB_NAME="$(env_get POSTGRES_DB nexus_ops)"
+DB_USER="$(env_get POSTGRES_USER nexus)"
 
-docker exec "$CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"
+compose_cmd "$MODE" exec -T "$SERVICE" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"
 
 SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 ok "Backup creado: $BACKUP_FILE ($SIZE)"
