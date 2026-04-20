@@ -16,7 +16,7 @@ from app.models import staging_models  # noqa: F401
 config = context.config
 
 if settings.DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -63,5 +63,9 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     import asyncio
+    import sys
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     asyncio.run(run_migrations_online())

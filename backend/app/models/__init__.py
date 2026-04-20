@@ -1,6 +1,8 @@
 from app.models.base import Base
 from app.models.ops_models import (  # noqa: F401
+    Brand,
     CancelledQuote,
+    Category,
     CsvImportRun,
     Customer,
     CustomerOrder,
@@ -20,13 +22,16 @@ from app.models.ops_models import (  # noqa: F401
     Sale,
     Supplier,
     SupplierOrder,
+    SupplierProduct,
 )
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
 from app.models.user_model import RefreshToken, User
 
 __all__ = [
     "Base",
+    "Brand",
     "CancelledQuote",
+    "Category",
     "CsvFile",
     "CsvImportRun",
     "CsvRow",
@@ -50,5 +55,6 @@ __all__ = [
     "Sale",
     "Supplier",
     "SupplierOrder",
+    "SupplierProduct",
     "User",
 ]

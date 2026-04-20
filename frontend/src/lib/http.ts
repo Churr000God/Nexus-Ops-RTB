@@ -47,7 +47,7 @@ export async function requestJson<T>(
 
   if (!res.ok) {
     const details = isJson ? await safeJson(res) : await safeText(res)
-    const message = typeof details === "string" ? details : "Error de API"
+    const message = extractApiErrorMessage(details)
     throw new ApiError(message, res.status, details)
   }
 
@@ -77,4 +77,32 @@ async function safeText(res: Response): Promise<string> {
   } catch {
     return ""
   }
+}
+
+function extractApiErrorMessage(details: unknown): string {
+  if (typeof details === "string") {
+    return details
+  }
+
+  if (details && typeof details === "object") {
+    const maybeDetail = (details as { detail?: unknown }).detail
+
+    if (typeof maybeDetail === "string") {
+      return maybeDetail
+    }
+
+    if (Array.isArray(maybeDetail) && maybeDetail.length > 0) {
+      const first = maybeDetail[0] as { msg?: unknown }
+      if (typeof first?.msg === "string") {
+        return first.msg
+      }
+    }
+
+    const maybeMessage = (details as { message?: unknown }).message
+    if (typeof maybeMessage === "string") {
+      return maybeMessage
+    }
+  }
+
+  return "Error de API"
 }

@@ -4,10 +4,15 @@ import asyncio
 import os
 import sys
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def _ensure_test_env() -> None:
@@ -29,6 +34,9 @@ async def _db_schema() -> AsyncIterator[None]:
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS staging"))
         await conn.run_sync(Base.metadata.create_all)
+        sql_path = PROJECT_ROOT.parent / "scripts" / "bootstrap_triggers.sql"
+        if sql_path.exists():
+            await conn.exec_driver_sql(sql_path.read_text(encoding="utf-8"))
     yield None
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -43,8 +51,15 @@ async def db_session(_db_schema: None) -> AsyncIterator[AsyncSession]:
             text(
                 "TRUNCATE TABLE "
                 "refresh_tokens, users, "
+                "categorias, marcas, "
+                "clientes, proveedores, "
+                "productos, proveedor_productos, "
                 "cotizacion_items, cotizaciones, cotizaciones_canceladas, "
-                "ventas, clientes, productos "
+                "ventas, "
+                "inventario, movimientos_inventario, no_conformes, "
+                "solicitudes_material, entradas_mercancia, facturas_compras, "
+                "pedidos_clientes, pedidos_incompletos, verificador_fechas_pedidos, "
+                "crecimiento_inventario, pedidos_proveedor, gastos_operativos "
                 "RESTART IDENTITY CASCADE"
             )
         )

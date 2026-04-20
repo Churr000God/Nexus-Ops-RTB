@@ -29,17 +29,15 @@ async def test_sales_by_month(
         name="Sale Apr",
         sold_on=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
         customer_id=customer.id,
-        total=1000,
-        gross_margin=200,
-        year_month="2026-04",
+        subtotal=1000,
+        purchase_cost=800,
     )
     sale_may = Sale(
         name="Sale May",
         sold_on=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc),
         customer_id=customer.id,
-        total=500,
-        gross_margin=50,
-        year_month="2026-05",
+        subtotal=500,
+        purchase_cost=450,
     )
     db_session.add_all([sale_apr, sale_may])
     await db_session.commit()
@@ -51,7 +49,7 @@ async def test_sales_by_month(
     assert {row["year_month"] for row in data} == {"2026-04", "2026-05"}
     apr = next(row for row in data if row["year_month"] == "2026-04")
     assert apr["sale_count"] == 1
-    assert apr["total_revenue"] == 1000.0
+    assert apr["total_revenue"] == 1160.0
     assert apr["total_gross_margin"] == 200.0
 
 
@@ -70,22 +68,19 @@ async def test_sales_by_customer(
                 name="Sale 1",
                 sold_on=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
                 customer_id=acme.id,
-                total=1000,
-                year_month="2026-04",
+                subtotal=1000,
             ),
             Sale(
                 name="Sale 2",
                 sold_on=datetime(2026, 4, 11, 12, 0, tzinfo=timezone.utc),
                 customer_id=acme.id,
-                total=500,
-                year_month="2026-04",
+                subtotal=500,
             ),
             Sale(
                 name="Sale 3",
                 sold_on=datetime(2026, 4, 12, 12, 0, tzinfo=timezone.utc),
                 customer_id=globex.id,
-                total=100,
-                year_month="2026-04",
+                subtotal=100,
             ),
         ]
     )
@@ -97,8 +92,8 @@ async def test_sales_by_customer(
     data = resp.json()
     assert data[0]["customer"] == "ACME"
     assert data[0]["sale_count"] == 2
-    assert data[0]["total_revenue"] == 1500.0
-    assert data[0]["average_ticket"] == 750.0
+    assert data[0]["total_revenue"] == 1740.0
+    assert data[0]["average_ticket"] == 870.0
 
 
 @pytest.mark.asyncio
@@ -116,9 +111,10 @@ async def test_gross_margin_by_product(
         quote=quote,
         product=product,
         sku="SKU-1",
+        qty_requested=10,
         qty_packed=10,
-        subtotal=1000,
-        purchase_subtotal=700,
+        unit_cost_sale=100,
+        unit_cost_purchase=70,
     )
     db_session.add_all([customer, product, quote, item])
     await db_session.commit()
@@ -176,9 +172,8 @@ async def test_dashboard_overview(
     sale = Sale(
         name="S1",
         sold_on=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
-        total=1000,
-        gross_margin=250,
-        year_month="2026-04",
+        subtotal=1000,
+        purchase_cost=750,
     )
     quote = Quote(
         name="Q1", approved_on=datetime(2026, 4, 9, 8, 0, tzinfo=timezone.utc)
@@ -197,7 +192,7 @@ async def test_dashboard_overview(
     assert resp.status_code == 200
     data = resp.json()
     assert data["sale_count"] == 1
-    assert data["total_revenue"] == 1000.0
+    assert data["total_revenue"] == 1160.0
     assert data["total_gross_margin"] == 250.0
     assert data["approved_quotes"] == 1
     assert data["cancelled_quotes"] == 1
