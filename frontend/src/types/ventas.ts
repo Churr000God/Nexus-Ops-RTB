@@ -26,6 +26,19 @@ export type SalesByCustomer = {
   average_ticket: number
 }
 
+export type SalesByCustomerType = {
+  tipo_cliente: string
+  total_ventas: number
+  porcentaje_ventas: number
+}
+
+export type MonthlyGrowthYoYByCustomerType = {
+  tipo_cliente: string
+  ventas_mes_actual: number
+  ventas_mismo_mes_anio_pasado: number
+  tasa_crecimiento_pct: number | null
+}
+
 export type SalesSummary = {
   start_date: string | null
   end_date: string | null
@@ -136,4 +149,31 @@ export type PaymentTrend = {
   promedio_dias_pago: number
   ultimo_pago: string | null
   riesgo_pago: "Bajo" | "Medio" | "Alto"
+}
+
+export type AvgSalesByCustomerType = {
+  tipo_cliente: string
+  numero_clientes: number
+  venta_promedio_por_cliente: number
+}
+
+export type ProductsByCustomerType = {
+  tipo_cliente: string
+  cantidad_productos: number
+}
+
+export type QuarterlyGrowthByCustomerType = {
+  tipo_cliente: string
+  ventas_trim_actual: number
+  ventas_trim_anio_pasado: number
+  crecimiento_trimestral_pct: number | null
+}
+
+export type PendingPaymentCustomer = {
+  customer_name: string
+  tipo_cliente: string | null
+  num_pedidos: number
+  total_adeudado: number
+  desde_fecha: string | null
+  dias_sin_pagar: number | null
 }

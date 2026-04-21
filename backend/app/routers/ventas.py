@@ -10,14 +10,20 @@ from app.models.user_model import User
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
     AtRiskCustomerResponse,
+    AvgSalesByCustomerTypeResponse,
     GrossMarginByProductResponse,
     MissingDemandResponse,
+    MonthlyGrowthYoYByCustomerTypeResponse,
     PaymentTrendResponse,
+    PendingPaymentCustomerResponse,
+    ProductsByCustomerTypeResponse,
+    QuarterlyGrowthByCustomerTypeResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
     SalesByProductDistributionResponse,
     SalesByCustomerResponse,
+    SalesByCustomerTypeResponse,
     SalesByMonthResponse,
     SalesForecastByProductResponse,
     SalesProjectionByMonthResponse,
@@ -89,6 +95,19 @@ async def sales_by_customer(
     service = VentasService(db)
     return await service.sales_by_customer(
         start_date=start_date, end_date=end_date, limit=limit
+    )
+
+
+@router.get("/sales-by-customer-type", response_model=list[SalesByCustomerTypeResponse])
+async def sales_by_customer_type(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SalesByCustomerTypeResponse]:
+    service = VentasService(db)
+    return await service.sales_by_customer_type(
+        start_date=start_date, end_date=end_date
     )
 
 
@@ -236,3 +255,81 @@ async def payment_trend(
     return await service.payment_trend(
         start_date=start_date, end_date=end_date, limit=limit
     )
+
+
+@router.get(
+    "/products-by-customer-type",
+    response_model=list[ProductsByCustomerTypeResponse],
+)
+async def products_by_customer_type(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[ProductsByCustomerTypeResponse]:
+    service = VentasService(db)
+    return await service.products_by_customer_type(
+        start_date=start_date, end_date=end_date
+    )
+
+
+@router.get(
+    "/avg-sales-by-customer-type",
+    response_model=list[AvgSalesByCustomerTypeResponse],
+)
+async def avg_sales_by_customer_type(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[AvgSalesByCustomerTypeResponse]:
+    """Venta promedio por cliente desglosado por tipo (Local vs Foraneo).
+
+    Solo considera cotizaciones con estado Aprobada.
+    """
+    service = VentasService(db)
+    return await service.avg_sales_by_customer_type(
+        start_date=start_date, end_date=end_date
+    )
+
+
+@router.get(
+    "/quarterly-growth-by-customer-type",
+    response_model=list[QuarterlyGrowthByCustomerTypeResponse],
+)
+async def quarterly_growth_by_customer_type(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[QuarterlyGrowthByCustomerTypeResponse]:
+    """Crecimiento trimestral por tipo de cliente (Local vs Foraneo).
+
+    Compara el trimestre actual contra el mismo trimestre del año anterior.
+    Solo considera cotizaciones aprobadas.
+    """
+    service = VentasService(db)
+    return await service.quarterly_growth_by_customer_type()
+
+
+@router.get(
+    "/monthly-growth-yoy-by-customer-type",
+    response_model=list[MonthlyGrowthYoYByCustomerTypeResponse],
+)
+async def monthly_growth_yoy_by_customer_type(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[MonthlyGrowthYoYByCustomerTypeResponse]:
+    service = VentasService(db)
+    return await service.monthly_growth_yoy_by_customer_type(
+        start_date=start_date, end_date=end_date
+    )
+
+
+@router.get("/pending-payments", response_model=list[PendingPaymentCustomerResponse])
+async def pending_payment_customers(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PendingPaymentCustomerResponse]:
+    service = VentasService(db)
+    return await service.pending_payment_customers()

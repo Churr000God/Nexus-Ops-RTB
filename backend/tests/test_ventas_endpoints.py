@@ -580,3 +580,70 @@ async def test_payment_trend(
     assert data[0]["promedio_dias_pago"] == pytest.approx(15.0)
     assert data[0]["ultimo_pago"] == "2026-02-21"
     assert data[0]["riesgo_pago"] == "Bajo"
+
+
+@pytest.mark.asyncio
+async def test_monthly_growth_yoy_by_customer_type(
+    db_session: AsyncSession, auth_header: dict[str, str]
+) -> None:
+    local_customer = Customer(
+        external_id="CUST-LOCAL", name="Local SA", category="Local"
+    )
+    foraneo_customer = Customer(
+        external_id="CUST-FOR", name="Foraneo SA", category="Foraneo"
+    )
+    db_session.add_all([local_customer, foraneo_customer])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            Sale(
+                name="Local current",
+                sold_on=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
+                customer_id=local_customer.id,
+                status="Aprobada",
+                subtotal=1000,
+            ),
+            Sale(
+                name="Local last year",
+                sold_on=datetime(2025, 4, 11, 12, 0, tzinfo=timezone.utc),
+                customer_id=local_customer.id,
+                status="Aprobada",
+                subtotal=500,
+            ),
+            Sale(
+                name="Foraneo current",
+                sold_on=datetime(2026, 4, 5, 12, 0, tzinfo=timezone.utc),
+                customer_id=foraneo_customer.id,
+                status="Aprobada",
+                subtotal=200,
+            ),
+            Sale(
+                name="Foraneo last year",
+                sold_on=datetime(2025, 4, 7, 12, 0, tzinfo=timezone.utc),
+                customer_id=foraneo_customer.id,
+                status="Aprobada",
+                subtotal=400,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.get(
+            "/api/ventas/monthly-growth-yoy-by-customer-type?end_date=2026-04-15",
+            headers=auth_header,
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {row["tipo_cliente"] for row in data} == {"Local", "Foraneo"}
+
+    local_row = next(row for row in data if row["tipo_cliente"] == "Local")
+    assert local_row["ventas_mes_actual"] == 1160.0
+    assert local_row["ventas_mismo_mes_anio_pasado"] == 580.0
+    assert local_row["tasa_crecimiento_pct"] == 100.0
+
+    for_row = next(row for row in data if row["tipo_cliente"] == "Foraneo")
+    assert for_row["ventas_mes_actual"] == 232.0
+    assert for_row["ventas_mismo_mes_anio_pasado"] == 464.0
+    assert for_row["tasa_crecimiento_pct"] == -50.0

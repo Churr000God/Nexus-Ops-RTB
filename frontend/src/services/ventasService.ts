@@ -2,14 +2,20 @@ import { requestJson } from "@/lib/http"
 import type {
   ApprovedVsCancelledByMonth,
   AtRiskCustomer,
+  AvgSalesByCustomerType,
   DashboardOverview,
   GrossMarginByProduct,
+  MonthlyGrowthYoYByCustomerType,
   MissingDemandByProduct,
   PaymentTrend,
+  PendingPaymentCustomer,
+  ProductsByCustomerType,
+  QuarterlyGrowthByCustomerType,
   QuoteStatusByMonth,
   RecentQuote,
   Sale,
   SalesByProductDistribution,
+  SalesByCustomerType,
   SalesByCustomer,
   SalesByMonth,
   SalesForecastByProduct,
@@ -116,6 +122,20 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
+      }),
+      { token, signal }
+    )
+  },
+
+  salesByCustomerType(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<SalesByCustomerType[]>(
+      withQuery("/api/ventas/sales-by-customer-type", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
       }),
       { token, signal }
     )
@@ -277,6 +297,62 @@ export const ventasService = {
         end_date: params?.endDate,
         limit: params?.limit,
       }),
+      { token, signal }
+    )
+  },
+
+  productsByCustomerType(
+    token: string,
+    params?: { startDate?: string; endDate?: string },
+    signal?: AbortSignal
+  ) {
+    return requestJson<ProductsByCustomerType[]>(
+      withQuery("/api/ventas/products-by-customer-type", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
+  avgSalesByCustomerType(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<AvgSalesByCustomerType[]>(
+      withQuery("/api/ventas/avg-sales-by-customer-type", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
+  monthlyGrowthYoYByCustomerType(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<MonthlyGrowthYoYByCustomerType[]>(
+      withQuery("/api/ventas/monthly-growth-yoy-by-customer-type", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
+      }),
+      { token, signal }
+    )
+  },
+
+  quarterlyGrowthByCustomerType(token: string, signal?: AbortSignal) {
+    return requestJson<QuarterlyGrowthByCustomerType[]>(
+      withQuery("/api/ventas/quarterly-growth-by-customer-type", {}),
+      { token, signal }
+    )
+  },
+
+  pendingPayments(token: string, signal?: AbortSignal) {
+    return requestJson<PendingPaymentCustomer[]>(
+      withQuery("/api/ventas/pending-payments", {}),
       { token, signal }
     )
   },

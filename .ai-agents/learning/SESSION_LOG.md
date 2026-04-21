@@ -62,6 +62,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-19 | Sprint 2 backend: Ventas (endpoints + service + tests) | backend | 2 | [2026-04-19_sprint-2-backend-ventas.md](sessions/2026-04-19_sprint-2-backend-ventas.md) |
 | 2026-04-19 | Sprint 2 frontend: Dashboard General + Ventas | frontend | 2 | [2026-04-19_sprint-2-frontend-dashboard-ventas.md](sessions/2026-04-19_sprint-2-frontend-dashboard-ventas.md) |
 | 2026-04-20 | Clientes en riesgo de abandono | backend + frontend | 2 | [2026-04-20_clientes-riesgo-abandono.md](sessions/2026-04-20_clientes-riesgo-abandono.md) |
+| 2026-04-21 | Ventas: crecimiento mensual YoY por tipo de cliente | backend + frontend | 2 | [2026-04-21_ventas-crecimiento-mensual-yoy.md](sessions/2026-04-21_ventas-crecimiento-mensual-yoy.md) |
 
 ---
 
@@ -69,6 +70,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 7 |
-| Errores registrados | 3 |
-| Lecciones documentadas | 8 |
+| Total sesiones | 8 |
+| Errores registrados | 7 |
+| Lecciones documentadas | 9 |

@@ -36,6 +36,12 @@ class SalesByCustomerResponse(BaseModel):
     average_ticket: float
 
 
+class SalesByCustomerTypeResponse(BaseModel):
+    tipo_cliente: str
+    total_ventas: float
+    porcentaje_ventas: float
+
+
 class GrossMarginByProductResponse(BaseModel):
     product: str
     sku: str | None = None
@@ -148,3 +154,37 @@ class PaymentTrendResponse(BaseModel):
     promedio_dias_pago: float
     ultimo_pago: date | None = None
     riesgo_pago: str
+
+
+class ProductsByCustomerTypeResponse(BaseModel):
+    tipo_cliente: str
+    cantidad_productos: float
+
+
+class PendingPaymentCustomerResponse(BaseModel):
+    customer_name: str
+    tipo_cliente: str | None = None
+    num_pedidos: int
+    total_adeudado: float
+    desde_fecha: date | None = None
+    dias_sin_pagar: int | None = None
+
+
+class QuarterlyGrowthByCustomerTypeResponse(BaseModel):
+    tipo_cliente: str
+    ventas_trim_actual: float
+    ventas_trim_anio_pasado: float
+    crecimiento_trimestral_pct: float | None
+
+
+class MonthlyGrowthYoYByCustomerTypeResponse(BaseModel):
+    tipo_cliente: str
+    ventas_mes_actual: float
+    ventas_mismo_mes_anio_pasado: float
+    tasa_crecimiento_pct: float | None
+
+
+class AvgSalesByCustomerTypeResponse(BaseModel):
+    tipo_cliente: str
+    numero_clientes: int
+    venta_promedio_por_cliente: float

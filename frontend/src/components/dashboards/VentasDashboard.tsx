@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ChartPanel } from "@/components/common/ChartPanel"
 import { BarChart } from "@/components/charts/BarChart"
+import { ComboBarLineChart } from "@/components/charts/ComboBarLineChart"
 import { LineChart } from "@/components/charts/LineChart"
 import { PieChart } from "@/components/charts/PieChart"
 import { DataTable } from "@/components/common/DataTable"
@@ -26,7 +27,17 @@ import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
-import type { AtRiskCustomer, PaymentTrend, RecentQuote } from "@/types/ventas"
+import type {
+  AtRiskCustomer,
+  PendingPaymentCustomer,
+  AvgSalesByCustomerType,
+  MonthlyGrowthYoYByCustomerType,
+  PaymentTrend,
+  ProductsByCustomerType,
+  QuarterlyGrowthByCustomerType,
+  RecentQuote,
+  SalesByCustomerType,
+} from "@/types/ventas"
 
 export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
@@ -164,6 +175,16 @@ export function VentasDashboard() {
     token
   )
 
+  const fetchPendingPayments = useCallback(
+    (signal: AbortSignal) => ventasService.pendingPayments(token ?? "", signal),
+    [token]
+  )
+  const pendingPayments = useApi(
+    fetchPendingPayments,
+    { enabled: Boolean(token) },
+    token
+  )
+
   const fetchPaymentTrend = useCallback(
     (signal: AbortSignal) =>
       ventasService.paymentTrend(token ?? "", { startDate, endDate, limit: 20 }, signal),
@@ -171,6 +192,69 @@ export function VentasDashboard() {
   )
   const paymentTrend = useApi(
     fetchPaymentTrend,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
+  const fetchProductsByCustomerType = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.productsByCustomerType(token ?? "", { startDate: startDate ?? undefined, endDate: endDate ?? undefined }, signal),
+    [token, startDate, endDate]
+  )
+  const productsByCustomerType = useApi(
+    fetchProductsByCustomerType,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
+  const fetchSalesByCustomerType = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.salesByCustomerType(token ?? "", { startDate, endDate }, signal),
+    [token, startDate, endDate]
+  )
+  const salesByCustomerType = useApi(
+    fetchSalesByCustomerType,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
+  const fetchAvgSalesByCustomerType = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.avgSalesByCustomerType(token ?? "", { startDate, endDate }, signal),
+    [token, startDate, endDate]
+  )
+  const avgSalesByCustomerType = useApi(
+    fetchAvgSalesByCustomerType,
+    { enabled: Boolean(token) },
+    token,
+    startDate,
+    endDate
+  )
+
+  const fetchQuarterlyGrowth = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.quarterlyGrowthByCustomerType(token ?? "", signal),
+    [token]
+  )
+  const quarterlyGrowth = useApi(
+    fetchQuarterlyGrowth,
+    { enabled: Boolean(token) },
+    token
+  )
+
+  const fetchMonthlyGrowthYoY = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.monthlyGrowthYoYByCustomerType(token ?? "", { startDate, endDate }, signal),
+    [token, startDate, endDate]
+  )
+  const monthlyGrowthYoY = useApi(
+    fetchMonthlyGrowthYoY,
     { enabled: Boolean(token) },
     token,
     startDate,
@@ -215,6 +299,13 @@ export function VentasDashboard() {
       sales: row.sale_count,
     }))
   }, [topCustomers.data])
+
+  const productsByCustomerTypeChart = useMemo(() => {
+    return (productsByCustomerType.data ?? []).map((row: ProductsByCustomerType) => ({
+      tipo: row.tipo_cliente,
+      cantidad: row.cantidad_productos,
+    }))
+  }, [productsByCustomerType.data])
 
   const projectionChart = useMemo(() => {
     const rows = salesProjection.data ?? []
@@ -329,6 +420,72 @@ export function VentasDashboard() {
     }))
   }, [paymentTrend.data])
 
+  const salesByCustomerTypeChart = useMemo(() => {
+    const labelFor = (tipo: string) => {
+      const normalized = (tipo ?? "").trim().toLowerCase()
+      if (normalized === "foraneo" || normalized === "foráneo") return "Foráneo"
+      if (normalized === "local") return "Local"
+      return tipo || "Sin tipo"
+    }
+
+    return (salesByCustomerType.data ?? []).map((row: SalesByCustomerType) => ({
+      tipo: labelFor(row.tipo_cliente),
+      ventas: row.total_ventas,
+      porcentaje: row.porcentaje_ventas,
+    }))
+  }, [salesByCustomerType.data])
+
+  const salesByCustomerTypePie = useMemo(() => {
+    return salesByCustomerTypeChart.map((row) => ({ name: row.tipo, value: row.ventas }))
+  }, [salesByCustomerTypeChart])
+
+  const avgSalesByCustomerTypeChart = useMemo(() => {
+    const labelFor = (tipo: string) => {
+      const normalized = (tipo ?? "").trim().toLowerCase()
+      if (normalized === "foraneo" || normalized === "foráneo") return "Foráneo"
+      if (normalized === "local") return "Local"
+      return tipo || "Sin tipo"
+    }
+
+    return (avgSalesByCustomerType.data ?? []).map((row: AvgSalesByCustomerType) => ({
+      tipo: labelFor(row.tipo_cliente),
+      venta_promedio: row.venta_promedio_por_cliente,
+      numero_clientes: row.numero_clientes,
+    }))
+  }, [avgSalesByCustomerType.data])
+
+  const quarterlyGrowthChart = useMemo(() => {
+    const labelFor = (tipo: string) => {
+      const normalized = (tipo ?? "").trim().toLowerCase()
+      if (normalized === "foraneo" || normalized === "foráneo") return "Foráneo"
+      if (normalized === "local") return "Local"
+      return tipo || "Sin tipo"
+    }
+
+    return (quarterlyGrowth.data ?? []).map((row: QuarterlyGrowthByCustomerType) => ({
+      tipo: labelFor(row.tipo_cliente),
+      trim_actual: row.ventas_trim_actual,
+      trim_anio_pasado: row.ventas_trim_anio_pasado,
+      crecimiento_pct: row.crecimiento_trimestral_pct ?? 0,
+    }))
+  }, [quarterlyGrowth.data])
+
+  const monthlyGrowthYoYChart = useMemo(() => {
+    const labelFor = (tipo: string) => {
+      const normalized = (tipo ?? "").trim().toLowerCase()
+      if (normalized === "foraneo" || normalized === "foráneo") return "Foráneo"
+      if (normalized === "local") return "Local"
+      return tipo || "Sin tipo"
+    }
+
+    return (monthlyGrowthYoY.data ?? []).map((row: MonthlyGrowthYoYByCustomerType) => ({
+      tipo: labelFor(row.tipo_cliente),
+      mes_actual: row.ventas_mes_actual,
+      mes_anio_pasado: row.ventas_mismo_mes_anio_pasado,
+      crecimiento_pct: row.tasa_crecimiento_pct,
+    }))
+  }, [monthlyGrowthYoY.data])
+
   const filteredQuotes = useMemo(() => {
     const rows = recentQuotes.data ?? []
     if (statusFilter === "all") return rows
@@ -418,6 +575,10 @@ export function VentasDashboard() {
     summary.status === "error" ||
     salesProjection.status === "error" ||
     topCustomers.status === "error" ||
+    salesByCustomerType.status === "error" ||
+    avgSalesByCustomerType.status === "error" ||
+    monthlyGrowthYoY.status === "error" ||
+    quarterlyGrowth.status === "error" ||
     productDistribution.status === "error" ||
     quoteStatusByMonth.status === "error" ||
     grossMarginByProduct.status === "error" ||
@@ -430,6 +591,10 @@ export function VentasDashboard() {
     summary.error ??
     salesProjection.error ??
     topCustomers.error ??
+    salesByCustomerType.error ??
+    avgSalesByCustomerType.error ??
+    monthlyGrowthYoY.error ??
+    quarterlyGrowth.error ??
     productDistribution.error ??
     quoteStatusByMonth.error ??
     grossMarginByProduct.error ??
@@ -442,6 +607,10 @@ export function VentasDashboard() {
     summary.status === "loading" ||
     salesProjection.status === "loading" ||
     topCustomers.status === "loading" ||
+    salesByCustomerType.status === "loading" ||
+    avgSalesByCustomerType.status === "loading" ||
+    monthlyGrowthYoY.status === "loading" ||
+    quarterlyGrowth.status === "loading" ||
     productDistribution.status === "loading" ||
     quoteStatusByMonth.status === "loading" ||
     grossMarginByProduct.status === "loading" ||
@@ -552,6 +721,20 @@ export function VentasDashboard() {
 
       <div className="grid gap-4">
         <ChartPanel
+          title="Productos Vendidos por Tipo de Cliente"
+          subtitle="Unidades totales de cotizaciones Aprobadas — Local vs. Foráneo"
+          infoLabel="3.1.2 Volumen por segmento"
+        >
+          <BarChart
+            data={productsByCustomerTypeChart}
+            xKey="tipo"
+            bars={[{ dataKey: "cantidad", name: "Unidades", color: "hsl(var(--primary))" }]}
+            valueFormatter={(v) => formatNumber(v)}
+            height={260}
+          />
+        </ChartPanel>
+
+        <ChartPanel
           title="Top 10 Clientes por Ventas"
           subtitle="Se cruza `ventas.customer_id` contra `clientes.id` para obtener el nombre del cliente"
           infoLabel="Top de clientes"
@@ -563,6 +746,384 @@ export function VentasDashboard() {
             valueFormatter={formatCurrencyMXN}
             height={360}
           />
+        </ChartPanel>
+
+        <ChartPanel
+          title="Ventas por Tipo de Cliente"
+          subtitle="Monto total de ventas (solo ventas con estado Aprobada) para Local vs Foráneo"
+          infoLabel="3.1.1 Tipo de cliente"
+        >
+          {salesByCustomerType.status === "loading" ? (
+            <div
+              className="flex items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground"
+              style={{ height: 340 }}
+            >
+              Cargando ventas por tipo de cliente...
+            </div>
+          ) : salesByCustomerType.status === "error" ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+              No se pudo cargar la métrica de ventas por tipo de cliente.{" "}
+              {salesByCustomerType.error?.message ?? "Error desconocido"}
+            </div>
+          ) : salesByCustomerTypeChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin ventas para Local/Foráneo en el periodo
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)_420px] xl:items-start">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Participación
+                </div>
+                <PieChart
+                  data={salesByCustomerTypePie}
+                  nameKey="name"
+                  valueKey="value"
+                  valueFormatter={formatCurrencyMXN}
+                  height={280}
+                  innerRadius={70}
+                  outerRadius={110}
+                />
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Comparación
+                </div>
+                <BarChart
+                  data={salesByCustomerTypeChart}
+                  xKey="tipo"
+                  bars={[{ dataKey: "ventas", name: "Ventas", color: "hsl(var(--primary))" }]}
+                  valueFormatter={formatCurrencyMXN}
+                  height={280}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Detalle
+                </div>
+                <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                  <table className="w-full text-sm" aria-label="Ventas por tipo de cliente">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Tipo
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Ventas
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          %
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salesByCustomerTypeChart.map((row) => (
+                        <tr key={row.tipo} className="border-t">
+                          <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
+                          <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                            {formatCurrencyMXN(row.ventas)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                            {formatNumber(row.porcentaje)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  Indicador: permite identificar qué tipo de cliente genera mayor ingreso.
+                </div>
+              </div>
+            </div>
+          )}
+        </ChartPanel>
+
+        <ChartPanel
+          title="Venta Promedio por Cliente"
+          subtitle="Monto promedio vendido por cliente (solo ventas con estado Aprobada) — Locales vs Foráneos"
+          infoLabel="3.2.1 Venta promedio"
+        >
+          {avgSalesByCustomerType.status === "loading" ? (
+            <div
+              className="flex items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground"
+              style={{ height: 340 }}
+            >
+              Cargando venta promedio por cliente...
+            </div>
+          ) : avgSalesByCustomerType.status === "error" ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+              No se pudo cargar la métrica de venta promedio por cliente.{" "}
+              {avgSalesByCustomerType.error?.message ?? "Error desconocido"}
+            </div>
+          ) : avgSalesByCustomerTypeChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin datos de clientes Local/Foráneo en el periodo
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Comparación
+                </div>
+                <BarChart
+                  data={avgSalesByCustomerTypeChart}
+                  xKey="tipo"
+                  bars={[{ dataKey: "venta_promedio", name: "Venta promedio", color: "#AF52DE" }]}
+                  valueFormatter={formatCurrencyMXN}
+                  height={320}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Detalle
+                </div>
+                <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                  <table className="w-full text-sm" aria-label="Venta promedio por tipo de cliente">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Tipo
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Clientes
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Promedio
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {avgSalesByCustomerTypeChart.map((row) => (
+                        <tr key={row.tipo} className="border-t">
+                          <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
+                          <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                            {formatNumber(row.numero_clientes)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                            {formatCurrencyMXN(row.venta_promedio)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  Indicador: permite detectar si un tipo de cliente genera ventas más grandes en promedio.
+                </div>
+              </div>
+            </div>
+          )}
+        </ChartPanel>
+
+        <ChartPanel
+          title="Crecimiento mensual vs mismo mes del año anterior"
+          subtitle="Variación porcentual de ventas por tipo de cliente frente al mismo mes del año pasado"
+          infoLabel="3.3.1 Crecimiento mensual YoY"
+        >
+          {monthlyGrowthYoY.status === "loading" ? (
+            <div
+              className="flex items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground"
+              style={{ height: 340 }}
+            >
+              Cargando crecimiento mensual...
+            </div>
+          ) : monthlyGrowthYoY.status === "error" ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+              No se pudo cargar el crecimiento mensual. {monthlyGrowthYoY.error?.message ?? "Error desconocido"}
+            </div>
+          ) : monthlyGrowthYoYChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin datos de crecimiento mensual
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Columnas + línea de crecimiento
+                </div>
+                <ComboBarLineChart
+                  data={monthlyGrowthYoYChart}
+                  xKey="tipo"
+                  bars={[
+                    { dataKey: "mes_actual", name: "Mes actual", color: "#0051FF" },
+                    { dataKey: "mes_anio_pasado", name: "Mismo mes año pasado", color: "#8E8E93" },
+                  ]}
+                  lines={[
+                    { dataKey: "crecimiento_pct", name: "Crecimiento %", color: "#34C759", yAxisId: "right" },
+                  ]}
+                  leftValueFormatter={formatCurrencyMXN}
+                  rightValueFormatter={(v) => `${formatNumber(v)}%`}
+                  height={340}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Detalle
+                </div>
+                <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                  <table className="w-full text-sm" aria-label="Crecimiento mensual vs año anterior por tipo de cliente">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Tipo
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Mes actual
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Año ant.
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Crec. %
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyGrowthYoYChart.map((row) => {
+                        const growth = row.crecimiento_pct
+                        const growthValue = typeof growth === "number" ? growth : null
+                        return (
+                          <tr key={row.tipo} className="border-t">
+                            <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
+                            <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                              {formatCurrencyMXN(row.mes_actual)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                              {formatCurrencyMXN(row.mes_anio_pasado)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-[13px]">
+                              {growthValue === null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span
+                                  className={
+                                    growthValue > 0
+                                      ? "font-semibold text-green-600"
+                                      : growthValue < 0
+                                        ? "font-semibold text-red-600"
+                                        : "text-muted-foreground"
+                                  }
+                                >
+                                  {growthValue > 0 ? "+" : ""}
+                                  {formatNumber(growthValue)}%
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  Indicador: permite ver si el crecimiento viene más de clientes Locales o Foráneos.
+                </div>
+              </div>
+            </div>
+          )}
+        </ChartPanel>
+
+        <ChartPanel
+          title="Crecimiento Trimestral por Tipo de Cliente"
+          subtitle="Compara el trimestre actual contra el mismo trimestre del año anterior (solo cotizaciones aprobadas)"
+          infoLabel="3.3.2 Crecimiento trimestral"
+        >
+          {quarterlyGrowth.status === "loading" ? (
+            <div
+              className="flex items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground"
+              style={{ height: 340 }}
+            >
+              Cargando crecimiento trimestral...
+            </div>
+          ) : quarterlyGrowth.status === "error" ? (
+            <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+              No se pudo cargar el crecimiento trimestral.{" "}
+              {quarterlyGrowth.error?.message ?? "Error desconocido"}
+            </div>
+          ) : quarterlyGrowthChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin datos de crecimiento trimestral
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Comparación de trimestres
+                </div>
+                <BarChart
+                  data={quarterlyGrowthChart}
+                  xKey="tipo"
+                  bars={[
+                    { dataKey: "trim_actual", name: "Trimestre actual", color: "#0051FF" },
+                    { dataKey: "trim_anio_pasado", name: "Mismo trimestre año pasado", color: "#8E8E93" },
+                  ]}
+                  valueFormatter={formatCurrencyMXN}
+                  height={320}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Variación %
+                </div>
+                <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                  <table className="w-full text-sm" aria-label="Crecimiento trimestral por tipo de cliente">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Tipo
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Actual
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Año ant.
+                        </th>
+                        <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                          Crec. %
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quarterlyGrowthChart.map((row) => (
+                        <tr key={row.tipo} className="border-t">
+                          <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
+                          <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                            {formatCurrencyMXN(row.trim_actual)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                            {formatCurrencyMXN(row.trim_anio_pasado)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[13px]">
+                            <span
+                              className={
+                                row.crecimiento_pct > 0
+                                  ? "font-semibold text-green-600"
+                                  : row.crecimiento_pct < 0
+                                    ? "font-semibold text-red-600"
+                                    : "text-muted-foreground"
+                              }
+                            >
+                              {row.crecimiento_pct > 0 ? "+" : ""}
+                              {formatNumber(row.crecimiento_pct)}%
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  Indicador: mide evolución menos sensible al ruido mensual.
+                </div>
+              </div>
+            </div>
+          )}
         </ChartPanel>
 
         <ChartPanel
@@ -744,7 +1305,7 @@ export function VentasDashboard() {
         subtitle="Cantidad pendiente por surtir/empacar desde cotizaciones aprobadas, pendientes o en seguimiento"
         infoLabel="Presión operativa"
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_360px] xl:items-start">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
           <BarChart
             data={missingDemandChart}
             xKey="product"
@@ -1011,18 +1572,20 @@ export function VentasDashboard() {
         subtitle="Promedio de días de pago histórico — Bajo ≤15 d, Medio ≤30 d, Alto >30 d"
         infoLabel="2.3.1 Comportamiento de pago"
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-          <BarChart
-            data={paymentTrendChart}
-            xKey="customer"
-            bars={[{ dataKey: "dias", name: "Días promedio de pago" }]}
-            height={Math.max(380, paymentTrendChart.length * 95)}
-            valueFormatter={(v) => `${formatNumber(v)} días`}
-            horizontal
-            colorScale={paymentTrendChart.map((row) =>
-              row.riesgo === "Bajo" ? "#1AAD58" : row.riesgo === "Medio" ? "#FFB020" : "#FF453A"
-            )}
-          />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_580px] xl:items-start">
+          <div className="max-w-lg">
+            <BarChart
+              data={paymentTrendChart}
+              xKey="customer"
+              bars={[{ dataKey: "dias", name: "Días promedio de pago" }]}
+              height={Math.max(380, paymentTrendChart.length * 95)}
+              valueFormatter={(v) => `${formatNumber(v)} días`}
+              horizontal
+              colorScale={paymentTrendChart.map((row) =>
+                row.riesgo === "Bajo" ? "#1AAD58" : row.riesgo === "Medio" ? "#FFB020" : "#FF453A"
+              )}
+            />
+          </div>
           <div className="flex flex-col gap-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Semáforo de riesgo
@@ -1049,7 +1612,7 @@ export function VentasDashboard() {
                   {paymentTrendChart.map((row) => (
                     <tr key={row.customer} className="border-t">
                       <td className="px-3 py-2 text-[13px] text-foreground">
-                        <div className="truncate max-w-[140px]" title={row.customer}>
+                        <div className="truncate max-w-[260px]" title={row.customer}>
                           {row.customer}
                         </div>
                       </td>
@@ -1084,6 +1647,87 @@ export function VentasDashboard() {
             ) : null}
           </div>
         </div>
+      </ChartPanel>
+
+      <ChartPanel
+        title="Clientes con Pagos Pendientes"
+        subtitle="Pedidos con estatus 'No pagada' o 'Pagada Parcial', ordenados por monto adeudado"
+        infoLabel="Cobranza"
+      >
+        <div className="overflow-hidden rounded-[var(--radius-md)] border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60">
+              <tr>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Cliente
+                </th>
+                <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Tipo
+                </th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  # Pedidos
+                </th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Total adeudado
+                </th>
+                <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Desde
+                </th>
+                <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Días sin pagar
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {(pendingPayments.data ?? []).map((row: PendingPaymentCustomer) => {
+                const dias = row.dias_sin_pagar ?? 0
+                const urgencia =
+                  dias > 90
+                    ? "error"
+                    : dias > 45
+                      ? "warning"
+                      : "neutral"
+                return (
+                  <tr key={row.customer_name} className="border-t">
+                    <td className="px-3 py-2 text-[13px] text-foreground">
+                      <div className="truncate max-w-[200px]" title={row.customer_name}>
+                        {row.customer_name}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {row.tipo_cliente ? (
+                        <StatusBadge variant={row.tipo_cliente === "Local" ? "info" : "neutral"}>
+                          {row.tipo_cliente}
+                        </StatusBadge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right text-[13px] text-foreground">
+                      {row.num_pedidos}
+                    </td>
+                    <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                      {formatCurrencyMXN(row.total_adeudado)}
+                    </td>
+                    <td className="px-3 py-2 text-center text-[13px] text-muted-foreground">
+                      {row.desde_fecha ? formatIsoDate(row.desde_fecha) : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <StatusBadge variant={urgencia}>
+                        {row.dias_sin_pagar !== null ? `${row.dias_sin_pagar} d` : "—"}
+                      </StatusBadge>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {(pendingPayments.data ?? []).length === 0 && pendingPayments.status !== "loading" ? (
+          <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+            Sin pagos pendientes
+          </div>
+        ) : null}
       </ChartPanel>
 
       <section className="grid gap-4 xl:grid-cols-3">

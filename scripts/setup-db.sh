@@ -86,6 +86,35 @@ if [[ "$DB_EXISTS" != "1" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 3b. Sanear estado inconsistente: tablas staging huerfanas sin alembic_version
+#     Ocurre cuando tablas fueron creadas fuera de Alembic (backups parciales,
+#     contenedor recreado, etc.) pero alembic_version no existe. Si se deja
+#     asi, "alembic upgrade head" falla con DuplicateTable en staging.csv_files.
+# ---------------------------------------------------------------------------
+ALEMBIC_EXISTS="$(compose_cmd "$MODE" exec -T "$SERVICE" \
+  psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+  "SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version' AND table_schema='public'" \
+  2>/dev/null || true)"
+
+if [[ "$ALEMBIC_EXISTS" != "1" ]]; then
+  STAGING_TABLES="$(compose_cmd "$MODE" exec -T "$SERVICE" \
+    psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='staging'" \
+    2>/dev/null || echo "0")"
+
+  if [[ "$STAGING_TABLES" =~ ^[0-9]+$ ]] && [[ "$STAGING_TABLES" -gt 0 ]]; then
+    warn "Detectadas $STAGING_TABLES tablas en staging sin alembic_version. Saneando..."
+    compose_cmd "$MODE" exec -T "$SERVICE" \
+      psql -U "$DB_USER" -d "$DB_NAME" -c \
+      "DROP TABLE IF EXISTS staging.csv_rows CASCADE;
+       DROP TABLE IF EXISTS staging.csv_row_errors CASCADE;
+       DROP TABLE IF EXISTS staging.csv_files CASCADE;" \
+      >/dev/null 2>&1
+    ok "Tablas staging huerfanas eliminadas. Alembic correra desde cero."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 4. Ejecutar migraciones Alembic (crea tablas si no existen)
 # ---------------------------------------------------------------------------
 log "Paso 4/8 — Ejecutando migraciones Alembic..."

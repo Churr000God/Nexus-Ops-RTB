@@ -32,15 +32,21 @@ from app.models.ops_models import (
 from app.schemas.venta_schema import (
     ApprovedVsCancelledByMonthResponse,
     AtRiskCustomerResponse,
+    AvgSalesByCustomerTypeResponse,
     DashboardOverviewResponse,
     GrossMarginByProductResponse,
+    MonthlyGrowthYoYByCustomerTypeResponse,
     MissingDemandResponse,
     PaymentTrendResponse,
+    PendingPaymentCustomerResponse,
+    ProductsByCustomerTypeResponse,
+    QuarterlyGrowthByCustomerTypeResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
     SalesByProductDistributionResponse,
     SalesByCustomerResponse,
+    SalesByCustomerTypeResponse,
     SalesByMonthResponse,
     SalesForecastByProductResponse,
     SalesProjectionByMonthResponse,
@@ -956,7 +962,7 @@ class VentasService:
             WITH compras_cliente AS (
                 SELECT
                     v.customer_id,
-                    c.name AS customer_name,
+                    COALESCE(c.name, 'Sin cliente') AS customer_name,
                     SUM(CASE
                         WHEN v.sold_on >= CURRENT_DATE - INTERVAL '90 days'
                         THEN COALESCE(v.total, 0)
@@ -1070,3 +1076,354 @@ class VentasService:
                 )
             )
         return results
+
+    async def avg_sales_by_customer_type(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[AvgSalesByCustomerTypeResponse]:
+        """Venta promedio por cliente desglosado por tipo (Local vs Foraneo).
+
+        Solo considera cotizaciones aprobadas.
+        """
+        approved_condition = _approved_quote_condition()
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
+
+        quote_join = Quote.customer_id == Customer.id
+        if start_dt is not None:
+            quote_join = and_(
+                quote_join,
+                func.coalesce(Quote.created_on, Quote.created_at) >= start_dt,
+            )
+        if end_dt is not None:
+            quote_join = and_(
+                quote_join,
+                func.coalesce(Quote.created_on, Quote.created_at) < end_dt,
+            )
+
+        ventas_por_cliente = (
+            select(
+                Customer.id.label("customer_id"),
+                Customer.category.label("tipo_cliente"),
+                func.coalesce(func.sum(Quote.subtotal), 0).label(
+                    "ventas_totales_cliente"
+                ),
+            )
+            .select_from(Customer)
+            .outerjoin(Quote, and_(quote_join, approved_condition))
+            .where(Customer.category.in_(["Local", "Foraneo"]))
+            .group_by(Customer.id, Customer.category)
+        ).cte("ventas_por_cliente")
+
+        stmt = (
+            select(
+                ventas_por_cliente.c.tipo_cliente,
+                func.count(ventas_por_cliente.c.customer_id).label("numero_clientes"),
+                func.avg(ventas_por_cliente.c.ventas_totales_cliente).label(
+                    "venta_promedio_por_cliente"
+                ),
+            )
+            .group_by(ventas_por_cliente.c.tipo_cliente)
+            .order_by(ventas_por_cliente.c.tipo_cliente)
+        )
+
+        rows = (await self.db.execute(stmt)).all()
+        return [
+            AvgSalesByCustomerTypeResponse(
+                tipo_cliente=row.tipo_cliente,
+                numero_clientes=int(row.numero_clientes),
+                venta_promedio_por_cliente=_to_float(row.venta_promedio_por_cliente),
+            )
+            for row in rows
+            if row.tipo_cliente is not None
+        ]
+
+    async def monthly_growth_yoy_by_customer_type(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[MonthlyGrowthYoYByCustomerTypeResponse]:
+        base_date = end_date or start_date or date.today()
+        month_start = date(base_date.year, base_date.month, 1)
+        month_start_last_year = date(base_date.year - 1, base_date.month, 1)
+
+        def add_month(d: date) -> date:
+            if d.month == 12:
+                return date(d.year + 1, 1, 1)
+            return date(d.year, d.month + 1, 1)
+
+        month_end = add_month(month_start)
+        month_end_last_year = add_month(month_start_last_year)
+
+        month_start_dt = datetime.combine(month_start, time.min, tzinfo=timezone.utc)
+        month_end_dt = datetime.combine(month_end, time.min, tzinfo=timezone.utc)
+        last_start_dt = datetime.combine(
+            month_start_last_year, time.min, tzinfo=timezone.utc
+        )
+        last_end_dt = datetime.combine(
+            month_end_last_year, time.min, tzinfo=timezone.utc
+        )
+
+        status_text = func.lower(func.coalesce(Sale.status, literal("")))
+        not_cancelled = status_text.not_like("%cancel%")
+        approved = status_text.like("%aprob%")
+        sale_amount = func.coalesce(Sale.total, Sale.subtotal * 1.16, 0)
+
+        ventas_mes_actual = func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Sale.sold_on >= month_start_dt, Sale.sold_on < month_end_dt
+                        ),
+                        sale_amount,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("ventas_mes_actual")
+        ventas_mes_anio_pasado = func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(Sale.sold_on >= last_start_dt, Sale.sold_on < last_end_dt),
+                        sale_amount,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("ventas_mismo_mes_anio_pasado")
+
+        stmt = (
+            select(
+                Customer.category.label("tipo_cliente"),
+                ventas_mes_actual,
+                ventas_mes_anio_pasado,
+            )
+            .select_from(Customer)
+            .outerjoin(
+                Sale,
+                and_(
+                    Sale.customer_id == Customer.id,
+                    Sale.sold_on >= last_start_dt,
+                    Sale.sold_on < month_end_dt,
+                    approved,
+                    not_cancelled,
+                ),
+            )
+            .where(Customer.category.in_(["Local", "Foraneo"]))
+            .group_by(Customer.category)
+            .order_by(Customer.category)
+        )
+
+        rows = (await self.db.execute(stmt)).all()
+        results: list[MonthlyGrowthYoYByCustomerTypeResponse] = []
+        for row in rows:
+            current_value = _to_float(row.ventas_mes_actual)
+            last_value = _to_float(row.ventas_mismo_mes_anio_pasado)
+            growth = (
+                round(((current_value - last_value) / last_value) * 100.0, 2)
+                if last_value > 0
+                else None
+            )
+            results.append(
+                MonthlyGrowthYoYByCustomerTypeResponse(
+                    tipo_cliente=str(row.tipo_cliente),
+                    ventas_mes_actual=current_value,
+                    ventas_mismo_mes_anio_pasado=last_value,
+                    tasa_crecimiento_pct=growth,
+                )
+            )
+        return results
+
+    async def quarterly_growth_by_customer_type(
+        self,
+    ) -> list[QuarterlyGrowthByCustomerTypeResponse]:
+        """Crecimiento trimestral por tipo de cliente (Local vs Foraneo).
+
+        Compara el trimestre actual contra el mismo trimestre del año anterior.
+        Solo considera cotizaciones aprobadas.
+        """
+        sql = text(
+            """
+            WITH ventas_periodo AS (
+                SELECT
+                    cl.category AS tipo_cliente,
+                    SUM(CASE
+                        WHEN DATE_TRUNC('quarter', COALESCE(q.approved_on, q.created_on))
+                            = DATE_TRUNC('quarter', CURRENT_DATE)
+                        THEN COALESCE(q.subtotal, 0)
+                        ELSE 0
+                    END) AS ventas_trim_actual,
+                    SUM(CASE
+                        WHEN DATE_TRUNC('quarter', COALESCE(q.approved_on, q.created_on))
+                            = DATE_TRUNC('quarter', CURRENT_DATE - INTERVAL '1 year')
+                        THEN COALESCE(q.subtotal, 0)
+                        ELSE 0
+                    END) AS ventas_trim_anio_pasado
+                FROM cotizaciones q
+                LEFT JOIN clientes cl ON q.customer_id = cl.id
+                WHERE (
+                    q.approved_on IS NOT NULL
+                    OR LOWER(COALESCE(q.status, '')) LIKE '%aprob%'
+                )
+                AND cl.category IN ('Local', 'Foraneo')
+                GROUP BY cl.category
+            )
+            SELECT
+                tipo_cliente,
+                ventas_trim_actual,
+                ventas_trim_anio_pasado,
+                CASE
+                    WHEN ventas_trim_anio_pasado = 0 THEN NULL
+                    ELSE ROUND(
+                        ((ventas_trim_actual - ventas_trim_anio_pasado)
+                        / ventas_trim_anio_pasado) * 100, 2
+                    )
+                END AS crecimiento_trimestral_pct
+            FROM ventas_periodo
+            ORDER BY crecimiento_trimestral_pct DESC NULLS LAST
+            """
+        )
+
+        rows = (await self.db.execute(sql)).all()
+        return [
+            QuarterlyGrowthByCustomerTypeResponse(
+                tipo_cliente=row.tipo_cliente,
+                ventas_trim_actual=float(row.ventas_trim_actual),
+                ventas_trim_anio_pasado=float(row.ventas_trim_anio_pasado),
+                crecimiento_trimestral_pct=(
+                    float(row.crecimiento_trimestral_pct)
+                    if row.crecimiento_trimestral_pct is not None
+                    else None
+                ),
+            )
+            for row in rows
+            if row.tipo_cliente is not None
+        ]
+
+    async def products_by_customer_type(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[ProductsByCustomerTypeResponse]:
+        """Cantidad de productos (qty_packed o qty_requested) por tipo de cliente.
+
+        Solo incluye cotizaciones con status Aprobada.
+        """
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
+        filters = [
+            "LOWER(c.status) = 'aprobada'",
+            "cl.category IN ('Local', 'Foraneo')",
+        ]
+        params: dict = {}
+        if start_dt is not None:
+            filters.append("c.created_on >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            filters.append("c.created_on < :end_dt")
+            params["end_dt"] = end_dt
+
+        where_clause = " AND ".join(filters)
+        sql = text(
+            f"""
+            SELECT
+                cl.category AS tipo_cliente,
+                SUM(COALESCE(ci.qty_packed, ci.qty_requested, 0)) AS cantidad_productos
+            FROM cotizacion_items ci
+            INNER JOIN cotizaciones c ON ci.quote_id = c.id
+            LEFT JOIN clientes cl ON c.customer_id = cl.id
+            WHERE {where_clause}
+            GROUP BY cl.category
+            ORDER BY cl.category
+            """
+        )
+        rows = (await self.db.execute(sql, params)).all()
+        return [
+            ProductsByCustomerTypeResponse(
+                tipo_cliente=row.tipo_cliente,
+                cantidad_productos=float(row.cantidad_productos),
+            )
+            for row in rows
+        ]
+
+    async def sales_by_customer_type(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[SalesByCustomerTypeResponse]:
+        """Monto total vendido por tipo de cliente (Local vs Foraneo).
+
+        Se calcula desde cotizaciones aprobadas (Quote.subtotal) para no depender
+        de que exista un registro en la tabla ventas.
+        """
+        stmt = (
+            select(
+                Customer.category.label("tipo_cliente"),
+                func.coalesce(func.sum(Quote.subtotal), 0).label("total_ventas"),
+            )
+            .select_from(Quote)
+            .join(Customer, Customer.id == Quote.customer_id)
+            .where(_approved_quote_condition())
+            .where(Customer.category.in_(["Local", "Foraneo"]))
+            .group_by(Customer.category)
+            .order_by(func.coalesce(func.sum(Quote.subtotal), 0).desc())
+        )
+        stmt = _apply_quote_created_filter(stmt, start_date, end_date)
+
+        rows = (await self.db.execute(stmt)).all()
+        total = sum(_to_float(row.total_ventas) for row in rows)
+
+        return [
+            SalesByCustomerTypeResponse(
+                tipo_cliente=row.tipo_cliente,
+                total_ventas=_to_float(row.total_ventas),
+                porcentaje_ventas=(
+                    round(_to_float(row.total_ventas) / total * 100, 2)
+                    if total > 0
+                    else 0.0
+                ),
+            )
+            for row in rows
+            if row.tipo_cliente is not None
+        ]
+
+    async def pending_payment_customers(self) -> list[PendingPaymentCustomerResponse]:
+        """Clientes con pedidos pendientes de pago, ordenados por monto adeudado."""
+        sql = text(
+            """
+            SELECT
+                COALESCE(cl.name, 'Sin cliente') AS customer_name,
+                cl.category                      AS tipo_cliente,
+                COUNT(po.id)                     AS num_pedidos,
+                SUM(COALESCE(po.total, 0))       AS total_adeudado,
+                MIN(COALESCE(po.invoiced_on, po.ordered_on)) AS desde_fecha,
+                CURRENT_DATE - MIN(COALESCE(po.invoiced_on, po.ordered_on))
+                                                 AS dias_sin_pagar
+            FROM pedidos_clientes po
+            LEFT JOIN clientes cl ON po.customer_id = cl.id
+            WHERE po.payment_status IN ('No pagada', 'Pagada Parcial')
+              AND LOWER(COALESCE(po.order_status, '')) NOT IN ('cancelada', 'cancelado')
+              AND COALESCE(po.total, 0) > 0
+            GROUP BY cl.id, cl.name, cl.category
+            ORDER BY total_adeudado DESC
+            """
+        )
+        rows = (await self.db.execute(sql)).all()
+        return [
+            PendingPaymentCustomerResponse(
+                customer_name=row.customer_name,
+                tipo_cliente=row.tipo_cliente,
+                num_pedidos=int(row.num_pedidos),
+                total_adeudado=float(row.total_adeudado),
+                desde_fecha=row.desde_fecha.date()
+                if hasattr(row.desde_fecha, "date")
+                else row.desde_fecha,
+                dias_sin_pagar=int(row.dias_sin_pagar)
+                if row.dias_sin_pagar is not None
+                else None,
+            )
+            for row in rows
+        ]

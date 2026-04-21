@@ -51,6 +51,9 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0001 | 2026-04-18 | backend | medio | Pydantic Settings no parsea ALLOWED_ORIGINS desde env | resuelto | [ERR-0001_pydantic-settings-allowed-origins.md](resolutions/ERR-0001_pydantic-settings-allowed-origins.md) |
 | ERR-0002 | 2026-04-18 | backend | alto | passlib/bcrypt incompatible (bcrypt 5.x) rompe hashing | resuelto | [ERR-0002_passlib-bcrypt-incompatible.md](resolutions/ERR-0002_passlib-bcrypt-incompatible.md) |
 | ERR-0003 | 2026-04-18 | backend | medio | Logout devuelve status_code None y rompe respuesta | resuelto | [ERR-0003_logout-status-code-none.md](resolutions/ERR-0003_logout-status-code-none.md) |
+| ERR-0004 | 2026-04-21 | backend | alto | CORS 500 en /at-risk-customers: datetime con tz no convierte a date + customer_name NULL | resuelto | [ERR-0004_at-risk-customers-datetime-null-name.md](resolutions/ERR-0004_at-risk-customers-datetime-null-name.md) |
+| ERR-0005 | 2026-04-21 | db | alto | setup-db.sh falla: DuplicateTable staging.csv_files — alembic_version perdida | resuelto | [ERR-0005_alembic-version-missing-staging-tables-orphaned.md](resolutions/ERR-0005_alembic-version-missing-staging-tables-orphaned.md) |
+| ERR-0006 | 2026-04-21 | frontend | bajo | docker build frontend falla: TS2322 string\|null no asignable a string\|undefined en VentasDashboard | resuelto | [ERR-0006_ts-null-vs-undefined-ventasdashboard.md](resolutions/ERR-0006_ts-null-vs-undefined-ventasdashboard.md) |
 
 ---
 
@@ -58,8 +61,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 3 |
-| Resueltos | 3 |
+| Total errores registrados | 6 |
+| Resueltos | 6 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
