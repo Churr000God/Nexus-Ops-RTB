@@ -141,3 +141,10 @@ class AtRiskCustomerResponse(BaseModel):
     compras_90_previos: float
     ultima_compra: date | None = None
     riesgo_abandono: str
+
+
+class PaymentTrendResponse(BaseModel):
+    customer_name: str
+    promedio_dias_pago: float
+    ultimo_pago: date | None = None
+    riesgo_pago: str

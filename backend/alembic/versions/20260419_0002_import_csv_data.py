@@ -48,7 +48,7 @@ from app.models.ops_models import (
 
 # revision identifiers, used by Alembic.
 revision: str = "20260419_0002"
-down_revision: str | None = "f6a0e4534684"
+down_revision: str | None = "20260420_0007"
 branch_labels: str | None = None
 depends_on: str | None = None
 

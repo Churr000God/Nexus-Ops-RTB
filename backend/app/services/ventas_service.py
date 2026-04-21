@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.ops_models import (
     CancelledQuote,
     Customer,
+    CustomerOrder,
     Product,
     Quote,
     QuoteItem,
@@ -20,6 +21,7 @@ from app.schemas.venta_schema import (
     DashboardOverviewResponse,
     GrossMarginByProductResponse,
     MissingDemandResponse,
+    PaymentTrendResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
@@ -1002,3 +1004,55 @@ class VentasService:
             )
             for row in rows
         ]
+
+    async def payment_trend(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+        limit: int,
+    ) -> list[PaymentTrendResponse]:
+        customer_name_expr = func.coalesce(
+            Customer.name, literal("Sin cliente")
+        ).label("customer_name")
+        avg_days_expr = func.avg(
+            cast(CustomerOrder.paid_on - CustomerOrder.invoiced_on, Integer)
+        ).label("avg_days")
+        stmt = (
+            select(
+                customer_name_expr,
+                avg_days_expr,
+                func.max(CustomerOrder.paid_on).label("last_paid_on"),
+            )
+            .select_from(CustomerOrder)
+            .outerjoin(Customer, Customer.id == CustomerOrder.customer_id)
+            .where(CustomerOrder.paid_on.is_not(None))
+            .where(CustomerOrder.invoiced_on.is_not(None))
+            .group_by(customer_name_expr)
+            .order_by(avg_days_expr.desc())
+            .limit(limit)
+        )
+
+        if start_date is not None:
+            stmt = stmt.where(CustomerOrder.paid_on >= start_date)
+        if end_date is not None:
+            stmt = stmt.where(CustomerOrder.paid_on <= end_date)
+
+        rows = (await self.db.execute(stmt)).all()
+        results: list[PaymentTrendResponse] = []
+        for row in rows:
+            avg_days = float(row.avg_days) if row.avg_days is not None else 0.0
+            if avg_days <= 30:
+                risk = "Bajo"
+            elif avg_days <= 60:
+                risk = "Medio"
+            else:
+                risk = "Alto"
+            results.append(
+                PaymentTrendResponse(
+                    customer_name=row.customer_name,
+                    promedio_dias_pago=avg_days,
+                    ultimo_pago=row.last_paid_on,
+                    riesgo_pago=risk,
+                )
+            )
+        return results

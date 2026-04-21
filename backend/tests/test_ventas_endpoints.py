@@ -10,6 +10,7 @@ from app.main import app
 from app.models.ops_models import (
     CancelledQuote,
     Customer,
+    CustomerOrder,
     Product,
     Quote,
     QuoteItem,
@@ -274,7 +275,7 @@ async def test_sales_summary_and_top_customers(
     summary = summary_resp.json()
     assert summary["total_sales"] == 1500.0
     assert summary["pending_quotes"] == 1
-    assert summary["average_margin_percent"] == 27.5
+    assert summary["average_margin_percent"] == pytest.approx(27.5, rel=1e-9)
     assert summary["conversion_rate"] == 25.0
     assert summary["total_quotes"] == 4
     assert summary["approved_quotes"] == 1
@@ -539,3 +540,43 @@ async def test_quote_status_by_month_and_recent_quotes(
     assert recent_quotes[1]["name"] == "COT-2024-0156"
     assert recent_quotes[1]["can_convert"] is True
     assert recent_quotes[2]["can_convert"] is False
+
+
+@pytest.mark.asyncio
+async def test_payment_trend(
+    db_session: AsyncSession, auth_header: dict[str, str]
+) -> None:
+    customer = Customer(external_id="CUST-PAY-1", name="Pagos SA")
+    db_session.add(customer)
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            CustomerOrder(
+                name="ORD-1",
+                customer_id=customer.id,
+                invoiced_on=date(2026, 1, 1),
+                paid_on=date(2026, 1, 11),
+            ),
+            CustomerOrder(
+                name="ORD-2",
+                customer_id=customer.id,
+                invoiced_on=date(2026, 2, 1),
+                paid_on=date(2026, 2, 21),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.get(
+            "/api/ventas/payment-trend?start_date=2026-01-01&end_date=2026-04-30&limit=20",
+            headers=auth_header,
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[0]["customer_name"] == "Pagos SA"
+    assert data[0]["promedio_dias_pago"] == pytest.approx(15.0)
+    assert data[0]["ultimo_pago"] == "2026-02-21"
+    assert data[0]["riesgo_pago"] == "Bajo"

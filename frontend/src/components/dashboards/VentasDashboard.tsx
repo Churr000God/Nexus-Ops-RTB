@@ -26,7 +26,7 @@ import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
-import type { AtRiskCustomer, MissingDemandByProduct, PaymentTrend, RecentQuote } from "@/types/ventas"
+import type { AtRiskCustomer, PaymentTrend, RecentQuote } from "@/types/ventas"
 
 export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
@@ -744,7 +744,7 @@ export function VentasDashboard() {
         subtitle="Cantidad pendiente por surtir/empacar desde cotizaciones aprobadas, pendientes o en seguimiento"
         infoLabel="Presión operativa"
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_360px] xl:items-start">
           <BarChart
             data={missingDemandChart}
             xKey="product"

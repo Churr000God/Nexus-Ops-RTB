@@ -12,6 +12,7 @@ from app.schemas.venta_schema import (
     AtRiskCustomerResponse,
     GrossMarginByProductResponse,
     MissingDemandResponse,
+    PaymentTrendResponse,
     QuoteStatusByMonthResponse,
     RecentQuoteResponse,
     SaleResponse,
@@ -223,3 +224,17 @@ async def at_risk_customers(
     """
     service = VentasService(db)
     return await service.at_risk_customers()
+
+
+@router.get("/payment-trend", response_model=list[PaymentTrendResponse])
+async def payment_trend(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PaymentTrendResponse]:
+    service = VentasService(db)
+    return await service.payment_trend(
+        start_date=start_date, end_date=end_date, limit=limit
+    )

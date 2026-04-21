@@ -1,17 +1,28 @@
+import logging
 from collections.abc import AsyncIterator
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_db_session
+from app.db import AsyncSessionLocal
 from app.models.user_model import User
 from app.services.auth_service import AuthService, InvalidCredentialsError
 
+logger = logging.getLogger(__name__)
+
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async for session in get_db_session():
-        yield session
+    try:
+        async with AsyncSessionLocal() as session:
+            yield session
+    except SQLAlchemyError as exc:
+        logger.exception("Database connection error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de base de datos no disponible",
+        ) from exc
 
 
 async def get_current_user(

@@ -32,6 +32,10 @@ async def _db_schema() -> AsyncIterator[None]:
     from app.models import Base
 
     async with engine.begin() as conn:
+        # Limpiar schema public por completo para garantizar schema fresco
+        await conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+        await conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS staging"))
         await conn.run_sync(Base.metadata.create_all)
         sql_path = PROJECT_ROOT.parent / "scripts" / "bootstrap_triggers.sql"
@@ -39,7 +43,9 @@ async def _db_schema() -> AsyncIterator[None]:
             await conn.exec_driver_sql(sql_path.read_text(encoding="utf-8"))
     yield None
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+        await conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
 
 
 @pytest_asyncio.fixture()

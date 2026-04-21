@@ -3,6 +3,8 @@ services:
     build:
       context: ./backend
       target: prod
+    environment:
+      ENV: production
     volumes: []
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     restart: unless-stopped

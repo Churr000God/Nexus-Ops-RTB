@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         ]
         if configured:
             return configured
-        if self.ENV.lower() == "development":
+        if self.ENV.lower() in {"development", "dev", "local"}:
             return [
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",

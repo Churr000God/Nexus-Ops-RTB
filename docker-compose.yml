@@ -30,8 +30,11 @@ services:
     build:
       context: ./backend
     env_file: .env
+    environment:
+      ENV: development
     volumes:
       - ./backend:/app
+      - ./scripts:/scripts:ro
       - ./data/csv:/data/csv
       - ./data/reports:/data/reports
     depends_on:

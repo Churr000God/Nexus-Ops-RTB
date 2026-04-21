@@ -84,7 +84,12 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
-    access_token = service.create_access_token(user)
+    try:
+        access_token = service.create_access_token(user)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
     refresh_token = await service.issue_refresh_token(user.id)
     _set_refresh_cookie(response, refresh_token)
     return TokenResponse(access_token=access_token)
@@ -111,7 +116,12 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
-    access_token = service.create_access_token(user)
+    try:
+        access_token = service.create_access_token(user)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
     _set_refresh_cookie(response, rotated_token)
     return RefreshResponse(access_token=access_token)
 
