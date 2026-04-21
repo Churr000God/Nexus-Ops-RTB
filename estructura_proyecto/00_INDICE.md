@@ -20,6 +20,7 @@
 | 08 | [08_scripts_git.md](08_scripts_git.md) | Scripts de sincronización local ↔ remoto del repositorio |
 | 09 | [09_estructura_revisada.md](09_estructura_revisada.md) | Auditoría y estructura definitiva mejorada |
 | 10 | [10_plan_sprints.md](10_plan_sprints.md) | Plan de implementación por sprints (8 sprints) |
+| 11 | [11_bitacora_cambios.md](11_bitacora_cambios.md) | Bitácora de cambios por sesión |
 
 ---
 
