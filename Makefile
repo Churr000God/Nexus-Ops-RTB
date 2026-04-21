@@ -1,4 +1,4 @@
-.PHONY: up down logs ps rebuild prod-up prod-down deploy health backup restore update
+.PHONY: up down logs ps rebuild prod-up prod-down deploy health backup restore restore-latest setup-db update
 
 # === Desarrollo ===
 up:
@@ -59,6 +59,12 @@ backup:
 restore:
 	@echo "Uso: make restore FILE=data/backups/nombre.sql.gz"
 	@test -n "$(FILE)" && bash ./scripts/restore-db.sh $(FILE)
+
+restore-latest:
+	bash ./scripts/restore-db.sh
+
+setup-db:
+	bash ./scripts/setup-db.sh
 
 # === Desarrollo (lint/test) ===
 lint-backend:

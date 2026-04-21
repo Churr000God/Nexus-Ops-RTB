@@ -23,10 +23,17 @@ AUTO_CONFIRM="${AUTO_CONFIRM:-false}"
 SERVICE="$(postgres_service_name)"
 
 if [[ -z "$BACKUP_FILE" ]]; then
-  log "Backups disponibles:"
-  ls -1t data/backups/*.sql.gz 2>/dev/null || echo "  (ninguno)"
+  LATEST="$(ls -1t data/backups/*.sql.gz 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$LATEST" ]]; then
+    log "Backups disponibles:"
+    echo "  (ninguno)"
+    err "No hay backups en data/backups/. Usa: ./scripts/backup-db.sh primero."
+  fi
+  log "Backups disponibles (más reciente primero):"
+  ls -1t data/backups/*.sql.gz
   echo ""
-  err "Uso: ./scripts/restore-db.sh <ruta_backup>"
+  log "Usando el más reciente: $LATEST"
+  BACKUP_FILE="$LATEST"
 fi
 
 if [[ ! -f "$BACKUP_FILE" ]]; then
