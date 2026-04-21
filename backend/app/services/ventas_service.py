@@ -1009,7 +1009,9 @@ class VentasService:
                 customer_name=row.customer_name,
                 compras_ult_90=float(row.compras_ult_90),
                 compras_90_previos=float(row.compras_90_previos),
-                ultima_compra=row.ultima_compra,
+                ultima_compra=row.ultima_compra.date()
+                if hasattr(row.ultima_compra, "date")
+                else row.ultima_compra,
                 riesgo_abandono=row.riesgo_abandono,
             )
             for row in rows
@@ -1061,7 +1063,9 @@ class VentasService:
                 PaymentTrendResponse(
                     customer_name=row.customer_name,
                     promedio_dias_pago=avg_days,
-                    ultimo_pago=row.last_paid_on,
+                    ultimo_pago=row.last_paid_on.date()
+                    if hasattr(row.last_paid_on, "date")
+                    else row.last_paid_on,
                     riesgo_pago=risk,
                 )
             )
