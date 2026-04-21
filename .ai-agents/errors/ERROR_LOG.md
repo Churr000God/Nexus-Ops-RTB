@@ -54,6 +54,7 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0004 | 2026-04-21 | backend | alto | CORS 500 en /at-risk-customers: datetime con tz no convierte a date + customer_name NULL | resuelto | [ERR-0004_at-risk-customers-datetime-null-name.md](resolutions/ERR-0004_at-risk-customers-datetime-null-name.md) |
 | ERR-0005 | 2026-04-21 | db | alto | setup-db.sh falla: DuplicateTable staging.csv_files — alembic_version perdida | resuelto | [ERR-0005_alembic-version-missing-staging-tables-orphaned.md](resolutions/ERR-0005_alembic-version-missing-staging-tables-orphaned.md) |
 | ERR-0006 | 2026-04-21 | frontend | bajo | docker build frontend falla: TS2322 string\|null no asignable a string\|undefined en VentasDashboard | resuelto | [ERR-0006_ts-null-vs-undefined-ventasdashboard.md](resolutions/ERR-0006_ts-null-vs-undefined-ventasdashboard.md) |
+| ERR-0007 | 2026-04-21 | backend | bajo | ruff F821: Undefined name RecentQuoteResponse en app/routers/ventas.py | resuelto | [ERR-0007_ruff-f821-recentquoteresponse.md](resolutions/ERR-0007_ruff-f821-recentquoteresponse.md) |
 
 ---
 
@@ -61,8 +62,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 6 |
-| Resueltos | 6 |
+| Total errores registrados | 7 |
+| Resueltos | 7 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
