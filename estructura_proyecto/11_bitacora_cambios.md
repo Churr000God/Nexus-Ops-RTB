@@ -39,6 +39,21 @@
 - `docker-compose.prod.yml`:
   - Fuerza `ENV=production` en servicio backend.
 
+### Operación BD (scripts)
+
+- Makefile:
+  - Nuevos targets `make setup-db` y `make restore-latest` para acelerar operaciones de entorno local.
+- `scripts/setup-db.sh`:
+  - Setup end-to-end: levanta servicios, aplica migraciones, bootstrap de triggers, carga CSV (replace) y genera backup.
+  - Admin: se crea/actualiza solo si `ADMIN_EMAIL` y `ADMIN_PASSWORD` están definidos en `.env` (sin credenciales hardcodeadas).
+  - Reset opcional: `SETUP_DB_RESET=true` para recrear la base de datos.
+- `scripts/restore-db.sh`:
+  - Si no se pasa archivo, auto-selecciona el backup más reciente en `data/backups/`.
+- `backend/scripts/create_admin_user.py`:
+  - Script de upsert del usuario por email (actualiza password/rol si ya existe).
+- `docs/database_sync_runbook.md`:
+  - Se documenta recuperación y flujos de backup/restore + creación de admin, evitando secretos en texto plano.
+
 ### Tests
 
 - Se reforzó la inicialización de la BD de tests:

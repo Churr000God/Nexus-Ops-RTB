@@ -175,3 +175,69 @@ limit 50;
 - `replace` es el modo recomendado para evitar residuos de cargas previas.
 - `append` conviene para cargas incrementales controladas.
 - Siempre ejecutar migraciones `head` antes de la sincronizacion cuando haya cambios de esquema.
+
+## 9) Recuperacion cuando el contenedor de PostgreSQL se destruye
+
+**Causa del error:** Al reconstruir o eliminar el contenedor postgres (y su volumen), se pierden
+todas las bases de datos, tablas y datos. El backend responde con "no database available".
+
+**Solución rápida — un solo comando:**
+
+```bash
+bash ./scripts/setup-db.sh
+```
+
+Esto realiza automáticamente:
+1. Levanta el contenedor `postgres` + `redis` si no están corriendo
+2. Espera a que PostgreSQL acepte conexiones
+3. Crea la base de datos `nexus_ops` si no existe (o la recrea si `SETUP_DB_RESET=true`)
+4. Aplica todas las migraciones Alembic (crea tablas)
+5. Sincroniza los CSV desde `data/csv/` (modo replace)
+6. Crea o actualiza el usuario administrador si `ADMIN_EMAIL` y `ADMIN_PASSWORD` están configurados
+7. Genera un backup en `data/backups/`
+
+Equivalente en Makefile: `make setup-db`
+
+## 10) Scripts de backup y restauracion
+
+### Crear backup manual
+
+```bash
+bash ./scripts/backup-db.sh                           # Backup con timestamp automático
+bash ./scripts/backup-db.sh nombre_custom             # Backup con nombre personalizado
+make backup
+```
+
+El backup se guarda en `data/backups/` como `.sql.gz`. Se mantienen los últimos 10.
+
+### Restaurar el backup más reciente
+
+```bash
+bash ./scripts/restore-db.sh                          # Auto-selecciona el más reciente
+make restore-latest
+```
+
+### Restaurar un backup específico
+
+```bash
+bash ./scripts/restore-db.sh data/backups/nexus_ops_backup_20260420_120000.sql.gz
+make restore FILE=data/backups/nexus_ops_backup_20260420_120000.sql.gz
+```
+
+La restauración siempre genera un pre_restore backup de seguridad antes de reemplazar los datos.
+
+## 11) Crear usuario administrador manualmente
+
+Si necesitas re-crear el usuario sin ejecutar setup completo:
+
+Nota: no guardes contraseñas reales en el repositorio. Usa valores temporales o variables de entorno.
+
+```bash
+docker compose run --rm -T --no-deps backend \
+  python /app/scripts/create_admin_user.py \
+  --email admin@example.com \
+  --password 'cambia-esto' \
+  --role admin
+```
+
+El script hace upsert: si el usuario ya existe, actualiza la contraseña y el rol.
