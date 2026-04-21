@@ -3,7 +3,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import Date, Integer, Select, String, and_, bindparam, case, cast, func, literal, or_, select, text
+from sqlalchemy import (
+    Date,
+    Integer,
+    Select,
+    String,
+    and_,
+    bindparam,
+    case,
+    cast,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ops_models import (
@@ -763,9 +777,7 @@ class VentasService:
             .where(active_condition)
             .where(QuoteItem.qty_missing > 0)
             .group_by(product_key, QuoteItem.sku, QuoteItem.category)
-            .order_by(
-                func.coalesce(func.sum(QuoteItem.qty_missing), 0).desc()
-            )
+            .order_by(func.coalesce(func.sum(QuoteItem.qty_missing), 0).desc())
             .limit(limit)
         )
         rows = (await self.db.execute(stmt)).all()
@@ -775,9 +787,7 @@ class VentasService:
         for row in rows:
             demand = _to_float(row.demanda_faltante)
             cumulative += demand
-            pareto = (
-                (cumulative / total_demand * 100.0) if total_demand > 0 else 0.0
-            )
+            pareto = (cumulative / total_demand * 100.0) if total_demand > 0 else 0.0
             results.append(
                 MissingDemandResponse(
                     product=row.product,
@@ -1011,9 +1021,9 @@ class VentasService:
         end_date: date | None,
         limit: int,
     ) -> list[PaymentTrendResponse]:
-        customer_name_expr = func.coalesce(
-            Customer.name, literal("Sin cliente")
-        ).label("customer_name")
+        customer_name_expr = func.coalesce(Customer.name, literal("Sin cliente")).label(
+            "customer_name"
+        )
         avg_days_expr = func.avg(
             cast(CustomerOrder.paid_on - CustomerOrder.invoiced_on, Integer)
         ).label("avg_days")

@@ -4,6 +4,7 @@
 Uso (dentro del contenedor backend):
     python /app/scripts/create_admin_user.py --email foo@bar.com --password secret --role admin
 """
+
 from __future__ import annotations
 
 import argparse
@@ -17,10 +18,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Crea o actualiza usuario administrador.")
+    parser = argparse.ArgumentParser(
+        description="Crea o actualiza usuario administrador."
+    )
     parser.add_argument("--email", required=True, help="Email del usuario")
     parser.add_argument("--password", required=True, help="Contraseña en texto plano")
-    parser.add_argument("--role", default="admin", help="Rol del usuario (default: admin)")
+    parser.add_argument(
+        "--role", default="admin", help="Rol del usuario (default: admin)"
+    )
     args = parser.parse_args()
 
     db_url = os.getenv("DATABASE_URL")

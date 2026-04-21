@@ -162,9 +162,7 @@ async def quote_status_by_month(
     _: User = Depends(get_current_user),
 ) -> list[QuoteStatusByMonthResponse]:
     service = VentasService(db)
-    return await service.quote_status_by_month(
-        start_date=start_date, end_date=end_date
-    )
+    return await service.quote_status_by_month(start_date=start_date, end_date=end_date)
 
 
 @router.get("/recent-quotes", response_model=list[RecentQuoteResponse])
