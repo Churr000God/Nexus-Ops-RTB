@@ -31,6 +31,7 @@ class SalesByMonthResponse(BaseModel):
 
 class SalesByCustomerResponse(BaseModel):
     customer: str
+    category: str | None = None
     sale_count: int
     total_revenue: float
     average_ticket: float
@@ -158,7 +159,8 @@ class PaymentTrendResponse(BaseModel):
 
 class ProductsByCustomerTypeResponse(BaseModel):
     tipo_cliente: str
-    cantidad_productos: float
+    cantidad_solicitada: float
+    cantidad_empacada: float
 
 
 class PendingPaymentCustomerResponse(BaseModel):

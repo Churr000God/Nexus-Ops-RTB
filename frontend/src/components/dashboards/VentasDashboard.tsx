@@ -17,6 +17,7 @@ import { BarChart } from "@/components/charts/BarChart"
 import { ComboBarLineChart } from "@/components/charts/ComboBarLineChart"
 import { LineChart } from "@/components/charts/LineChart"
 import { PieChart } from "@/components/charts/PieChart"
+import { CustomerSearchInput } from "@/components/common/CustomerSearchInput"
 import { DataTable } from "@/components/common/DataTable"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { KpiCard } from "@/components/common/KpiCard"
@@ -26,6 +27,7 @@ import { useApi } from "@/hooks/useApi"
 import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
+import { useSyncStore } from "@/stores/syncStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
 import type {
   AtRiskCustomer,
@@ -41,85 +43,80 @@ import type {
 
 export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
+  const syncVersion = useSyncStore((s) => s.syncVersion)
   const { datePreset, startDate, endDate, setDatePreset, setDateRange, reset } = useFilters()
   const [statusFilter, setStatusFilter] = useState("all")
+  const [customerSearch, setCustomerSearch] = useState("")
+  const [selectedMonthYoY, setSelectedMonthYoY] = useState<number | null>(null)
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
       ventasService.salesSummary(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const summary = useApi(
     fetchSummary,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchSalesProjection = useCallback(
     (signal: AbortSignal) =>
       ventasService.salesVsProjection(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const salesProjection = useApi(
     fetchSalesProjection,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchTopCustomers = useCallback(
     (signal: AbortSignal) =>
-      ventasService.topCustomers(token ?? "", { startDate, endDate, limit: 10 }, signal),
-    [token, startDate, endDate]
+      ventasService.topCustomers(
+        token ?? "",
+        { startDate, endDate, limit: customerSearch ? 50 : 10, customerSearch: customerSearch || undefined },
+        signal
+      ),
+    [token, startDate, endDate, syncVersion, customerSearch]
   )
   const topCustomers = useApi(
     fetchTopCustomers,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion, customerSearch
   )
 
   const fetchProductDistribution = useCallback(
     (signal: AbortSignal) =>
       ventasService.productDistribution(token ?? "", { startDate, endDate, limit: 10 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const productDistribution = useApi(
     fetchProductDistribution,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchQuoteStatusByMonth = useCallback(
     (signal: AbortSignal) =>
       ventasService.quoteStatusByMonth(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const quoteStatusByMonth = useApi(
     fetchQuoteStatusByMonth,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchGrossMarginByProduct = useCallback(
     (signal: AbortSignal) =>
       ventasService.grossMarginByProduct(token ?? "", { startDate, endDate, limit: 10 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const grossMarginByProduct = useApi(
     fetchGrossMarginByProduct,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchRecentQuotes = useCallback(
@@ -129,136 +126,124 @@ export function VentasDashboard() {
         { limit: 10, status: statusFilter === "all" ? null : statusFilter },
         signal
       ),
-    [token, statusFilter]
+    [token, statusFilter, syncVersion]
   )
   const recentQuotes = useApi(
     fetchRecentQuotes,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchProductForecast = useCallback(
     (signal: AbortSignal) =>
       ventasService.productForecast(token ?? "", { startDate, endDate, limit: 15 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const productForecast = useApi(
     fetchProductForecast,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchMissingDemand = useCallback(
     (signal: AbortSignal) =>
       ventasService.missingDemand(token ?? "", { startDate, endDate, limit: 95 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const missingDemand = useApi(
     fetchMissingDemand,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchAtRiskCustomers = useCallback(
     (signal: AbortSignal) => ventasService.atRiskCustomers(token ?? "", signal),
-    [token]
+    [token, syncVersion]
   )
   const atRiskCustomers = useApi(
     fetchAtRiskCustomers,
     { enabled: Boolean(token) },
-    token
+    token, syncVersion
   )
 
   const fetchPendingPayments = useCallback(
     (signal: AbortSignal) => ventasService.pendingPayments(token ?? "", signal),
-    [token]
+    [token, syncVersion]
   )
   const pendingPayments = useApi(
     fetchPendingPayments,
     { enabled: Boolean(token) },
-    token
+    token, syncVersion
   )
 
   const fetchPaymentTrend = useCallback(
     (signal: AbortSignal) =>
       ventasService.paymentTrend(token ?? "", { startDate, endDate, limit: 20 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const paymentTrend = useApi(
     fetchPaymentTrend,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchProductsByCustomerType = useCallback(
     (signal: AbortSignal) =>
       ventasService.productsByCustomerType(token ?? "", { startDate: startDate ?? undefined, endDate: endDate ?? undefined }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const productsByCustomerType = useApi(
     fetchProductsByCustomerType,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchSalesByCustomerType = useCallback(
     (signal: AbortSignal) =>
       ventasService.salesByCustomerType(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const salesByCustomerType = useApi(
     fetchSalesByCustomerType,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchAvgSalesByCustomerType = useCallback(
     (signal: AbortSignal) =>
       ventasService.avgSalesByCustomerType(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const avgSalesByCustomerType = useApi(
     fetchAvgSalesByCustomerType,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchQuarterlyGrowth = useCallback(
     (signal: AbortSignal) =>
       ventasService.quarterlyGrowthByCustomerType(token ?? "", signal),
-    [token]
+    [token, syncVersion]
   )
   const quarterlyGrowth = useApi(
     fetchQuarterlyGrowth,
     { enabled: Boolean(token) },
-    token
+    token, syncVersion
   )
 
   const fetchMonthlyGrowthYoY = useCallback(
     (signal: AbortSignal) =>
-      ventasService.monthlyGrowthYoYByCustomerType(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+      ventasService.monthlyGrowthYoYByCustomerType(
+        token ?? "",
+        { selectedMonth: selectedMonthYoY },
+        signal
+      ),
+    [token, syncVersion, selectedMonthYoY]
   )
   const monthlyGrowthYoY = useApi(
     fetchMonthlyGrowthYoY,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, syncVersion, selectedMonthYoY
   )
 
   const kpis = useMemo(() => {
@@ -292,9 +277,14 @@ export function VentasDashboard() {
     return `Vencen el ${day} ${month}`
   }, [endDate])
 
+  const handleCustomerSearch = useCallback((value: string) => {
+    setCustomerSearch(value)
+  }, [])
+
   const byCustomerChart = useMemo(() => {
     return (topCustomers.data ?? []).map((row) => ({
       customer: row.customer,
+      category: row.category ?? "—",
       revenue: row.total_revenue,
       sales: row.sale_count,
     }))
@@ -303,7 +293,8 @@ export function VentasDashboard() {
   const productsByCustomerTypeChart = useMemo(() => {
     return (productsByCustomerType.data ?? []).map((row: ProductsByCustomerType) => ({
       tipo: row.tipo_cliente,
-      cantidad: row.cantidad_productos,
+      solicitada: row.cantidad_solicitada,
+      empacada: row.cantidad_empacada,
     }))
   }, [productsByCustomerType.data])
 
@@ -470,16 +461,20 @@ export function VentasDashboard() {
     }))
   }, [quarterlyGrowth.data])
 
-  const monthlyGrowthYoYChart = useMemo(() => {
-    const labelFor = (tipo: string) => {
-      const normalized = (tipo ?? "").trim().toLowerCase()
-      if (normalized === "foraneo" || normalized === "foráneo") return "Foráneo"
-      if (normalized === "local") return "Local"
-      return tipo || "Sin tipo"
-    }
+  const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
+  const availableMonthsYoY = useMemo(() => {
+    const current = new Date().getMonth() + 1
+    return Array.from({ length: current }, (_, i) => ({ value: i + 1, label: MONTHS_ES[i] }))
+  }, [])
+
+  const selectedMonthYoYLabel = selectedMonthYoY
+    ? MONTHS_ES[selectedMonthYoY - 1]
+    : MONTHS_ES[new Date().getMonth()]
+
+  const monthlyGrowthYoYChart = useMemo(() => {
     return (monthlyGrowthYoY.data ?? []).map((row: MonthlyGrowthYoYByCustomerType) => ({
-      tipo: labelFor(row.tipo_cliente),
+      tipo: row.tipo_cliente,
       mes_actual: row.ventas_mes_actual,
       mes_anio_pasado: row.ventas_mismo_mes_anio_pasado,
       crecimiento_pct: row.tasa_crecimiento_pct,
@@ -722,30 +717,46 @@ export function VentasDashboard() {
       <div className="grid gap-4">
         <ChartPanel
           title="Productos Vendidos por Tipo de Cliente"
-          subtitle="Unidades totales de cotizaciones Aprobadas — Local vs. Foráneo"
+          subtitle="Unidades de cotizaciones Aprobadas — cantidad solicitada vs. empacada"
           infoLabel="3.1.2 Volumen por segmento"
         >
           <BarChart
             data={productsByCustomerTypeChart}
             xKey="tipo"
-            bars={[{ dataKey: "cantidad", name: "Unidades", color: "hsl(var(--primary))" }]}
+            bars={[
+              { dataKey: "solicitada", name: "Solicitada", color: "hsl(var(--primary))" },
+              { dataKey: "empacada", name: "Empacada", color: "hsl(var(--chart-2))" },
+            ]}
             valueFormatter={(v) => formatNumber(v)}
             height={260}
           />
         </ChartPanel>
 
         <ChartPanel
-          title="Top 10 Clientes por Ventas"
-          subtitle="Se cruza `ventas.customer_id` contra `clientes.id` para obtener el nombre del cliente"
+          title={customerSearch ? `Clientes: "${customerSearch}"` : "Top 10 Clientes por Ventas"}
+          subtitle="Cotizaciones Aprobadas — monto subtotal por cliente, de mayor a menor"
           infoLabel="Top de clientes"
         >
-          <BarChart
-            data={byCustomerChart}
-            xKey="customer"
-            bars={[{ dataKey: "revenue", name: "Ventas", color: "hsl(var(--primary))" }]}
-            valueFormatter={formatCurrencyMXN}
-            height={360}
+          {/* Buscador con sugerencias */}
+          <CustomerSearchInput
+            suggestions={byCustomerChart}
+            loading={topCustomers.status === "loading"}
+            onSearch={handleCustomerSearch}
           />
+
+          {byCustomerChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              {customerSearch ? `Sin resultados para "${customerSearch}"` : "Sin datos"}
+            </div>
+          ) : (
+            <BarChart
+              data={byCustomerChart}
+              xKey="customer"
+              bars={[{ dataKey: "revenue", name: "Subtotal (cotiz. aprobadas)", color: "hsl(var(--primary))" }]}
+              valueFormatter={formatCurrencyMXN}
+              height={360}
+            />
+          )}
         </ChartPanel>
 
         <ChartPanel
@@ -920,9 +931,22 @@ export function VentasDashboard() {
         </ChartPanel>
 
         <ChartPanel
-          title="Crecimiento mensual vs mismo mes del año anterior"
-          subtitle="Variación porcentual de ventas por tipo de cliente frente al mismo mes del año pasado"
+          title={`Crecimiento mensual — ${selectedMonthYoYLabel} vs ${selectedMonthYoYLabel} año anterior`}
+          subtitle="Ventas reales (subtotal ventas) por tipo de cliente vs mismo mes del año pasado"
           infoLabel="3.3.1 Crecimiento mensual YoY"
+          action={
+            <select
+              value={selectedMonthYoY ?? ""}
+              onChange={(e) => setSelectedMonthYoY(e.target.value ? Number(e.target.value) : null)}
+              className="h-8 rounded-[var(--radius-md)] border bg-background px-2 text-xs text-foreground shadow-soft-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Seleccionar mes"
+            >
+              <option value="">Mes actual</option>
+              {availableMonthsYoY.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          }
         >
           {monthlyGrowthYoY.status === "loading" ? (
             <div

@@ -11,56 +11,52 @@ import { useApi } from "@/hooks/useApi"
 import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
+import { useSyncStore } from "@/stores/syncStore"
 import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
 
 export function DashboardGeneral() {
   const token = useAuthStore((s) => s.accessToken)
+  const syncVersion = useSyncStore((s) => s.syncVersion)
   const { datePreset, startDate, endDate, setDatePreset, setDateRange, reset } = useFilters()
 
   const fetchOverview = useCallback(
     (signal: AbortSignal) =>
       ventasService.dashboardOverview(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
-  const overview = useApi(fetchOverview, { enabled: Boolean(token) }, token, startDate, endDate)
+  const overview = useApi(fetchOverview, { enabled: Boolean(token) }, token, startDate, endDate, syncVersion)
 
   const fetchSalesByMonth = useCallback(
     (signal: AbortSignal) =>
       ventasService.salesByMonth(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const salesByMonth = useApi(
     fetchSalesByMonth,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchApprovedVsCancelled = useCallback(
     (signal: AbortSignal) =>
       ventasService.approvedVsCancelled(token ?? "", { startDate, endDate }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const approvedVsCancelled = useApi(
     fetchApprovedVsCancelled,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const fetchGrossMarginByProduct = useCallback(
     (signal: AbortSignal) =>
       ventasService.grossMarginByProduct(token ?? "", { startDate, endDate, limit: 12 }, signal),
-    [token, startDate, endDate]
+    [token, startDate, endDate, syncVersion]
   )
   const grossMarginByProduct = useApi(
     fetchGrossMarginByProduct,
     { enabled: Boolean(token) },
-    token,
-    startDate,
-    endDate
+    token, startDate, endDate, syncVersion
   )
 
   const kpis = useMemo(() => {

@@ -143,7 +143,7 @@ export const ventasService = {
 
   topCustomers(
     token: string,
-    params?: { startDate?: string | null; endDate?: string | null; limit?: number },
+    params?: { startDate?: string | null; endDate?: string | null; limit?: number; customerSearch?: string },
     signal?: AbortSignal
   ) {
     return requestJson<SalesByCustomer[]>(
@@ -151,6 +151,7 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
+        customer_search: params?.customerSearch || undefined,
       }),
       { token, signal }
     )
@@ -331,13 +332,12 @@ export const ventasService = {
 
   monthlyGrowthYoYByCustomerType(
     token: string,
-    params?: { startDate?: string | null; endDate?: string | null },
+    params?: { selectedMonth?: number | null },
     signal?: AbortSignal
   ) {
     return requestJson<MonthlyGrowthYoYByCustomerType[]>(
       withQuery("/api/ventas/monthly-growth-yoy-by-customer-type", {
-        start_date: params?.startDate,
-        end_date: params?.endDate,
+        selected_month: params?.selectedMonth ?? undefined,
       }),
       { token, signal }
     )

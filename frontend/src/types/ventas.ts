@@ -21,6 +21,7 @@ export type SalesByMonth = {
 
 export type SalesByCustomer = {
   customer: string
+  category: string | null
   sale_count: number
   total_revenue: number
   average_ticket: number
@@ -159,7 +160,8 @@ export type AvgSalesByCustomerType = {
 
 export type ProductsByCustomerType = {
   tipo_cliente: string
-  cantidad_productos: number
+  cantidad_solicitada: number
+  cantidad_empacada: number
 }
 
 export type QuarterlyGrowthByCustomerType = {

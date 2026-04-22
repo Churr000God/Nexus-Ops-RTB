@@ -116,12 +116,16 @@ async def top_customers(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
+    customer_search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[SalesByCustomerResponse]:
     service = VentasService(db)
     return await service.top_customers_by_sales(
-        start_date=start_date, end_date=end_date, limit=limit
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        customer_search=customer_search,
     )
 
 
@@ -315,14 +319,13 @@ async def quarterly_growth_by_customer_type(
     response_model=list[MonthlyGrowthYoYByCustomerTypeResponse],
 )
 async def monthly_growth_yoy_by_customer_type(
-    start_date: date | None = Query(default=None),
-    end_date: date | None = Query(default=None),
+    selected_month: int | None = Query(default=None, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[MonthlyGrowthYoYByCustomerTypeResponse]:
     service = VentasService(db)
     return await service.monthly_growth_yoy_by_customer_type(
-        start_date=start_date, end_date=end_date
+        selected_month=selected_month
     )
 
 
