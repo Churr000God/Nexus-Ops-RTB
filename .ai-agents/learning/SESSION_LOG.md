@@ -68,6 +68,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-22 | Correcciones gráficas ventas: proyecciones desde ventas reales y estados desde subtotal | backend + frontend | 2 | [2026-04-22_correcciones-graficas-ventas-proyecciones.md](sessions/2026-04-22_correcciones-graficas-ventas-proyecciones.md) |
 | 2026-04-22 | Fix TS2322 docker build frontend — MissingDemandByProduct vs ProductSuggestion | frontend | 2 | [2026-04-22_fix-ts2322-docker-build-frontend.md](sessions/2026-04-22_fix-ts2322-docker-build-frontend.md) |
 | 2026-04-22 | Dashboard Ventas — Busqueda, Prediccion, Export CSV y UI | backend + frontend | 2 | [2026-04-22_dashboard-ventas-busqueda-export-csv.md](sessions/2026-04-22_dashboard-ventas-busqueda-export-csv.md) |
+| 2026-04-22 | Clientes con Pagos Pendientes y Tendencia de Pagos — búsqueda y tabla enriquecida | backend + frontend | 2 | [2026-04-22_pagos-pendientes-tendencia-pagos-busqueda.md](sessions/2026-04-22_pagos-pendientes-tendencia-pagos-busqueda.md) |
 
 ---
 
@@ -75,6 +76,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 12 |
-| Errores registrados | 11 |
-| Lecciones documentadas | 15 |
+| Total sesiones | 13 |
+| Errores registrados | 15 |
+| Lecciones documentadas | 17 |
