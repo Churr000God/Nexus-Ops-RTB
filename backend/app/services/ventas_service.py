@@ -338,46 +338,68 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
         limit: int,
+        product_search: str | None = None,
     ) -> list[GrossMarginByProductResponse]:
-        product_key = func.coalesce(
-            Product.name, QuoteItem.sku, literal("Sin producto")
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
+
+        filters = [
+            "(c.approved_on IS NOT NULL OR LOWER(COALESCE(c.status, '')) LIKE '%aprob%')"
+        ]
+        params: dict = {}
+        if start_dt is not None:
+            filters.append("c.approved_on >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            filters.append("c.approved_on < :end_dt")
+            params["end_dt"] = end_dt
+        if product_search and product_search.strip():
+            filters.append("(p.name ILIKE :search OR ci.sku ILIKE :search)")
+            params["search"] = f"%{product_search.strip()}%"
+
+        where_clause = " AND ".join(filters)
+        params["limit"] = limit
+
+        sql = text(
+            f"""
+            SELECT
+                COALESCE(p.name, ci.sku, 'Sin producto') AS product,
+                ci.sku,
+                COALESCE(SUM(ci.qty_requested), 0) AS qty,
+                COALESCE(SUM(ci.subtotal), 0) AS revenue,
+                COALESCE(SUM(ci.purchase_subtotal), 0) AS cost,
+                COALESCE(SUM(ci.subtotal), 0) - COALESCE(SUM(ci.purchase_subtotal), 0) AS gross_margin,
+                CASE
+                    WHEN COALESCE(SUM(ci.subtotal), 0) > 0
+                    THEN ROUND(
+                        ((COALESCE(SUM(ci.subtotal), 0) - COALESCE(SUM(ci.purchase_subtotal), 0))
+                         / COALESCE(SUM(ci.subtotal), 0)) * 100,
+                        2
+                    )
+                    ELSE NULL
+                END AS margin_percent
+            FROM cotizacion_items ci
+            JOIN cotizaciones c ON ci.quote_id = c.id
+            LEFT JOIN productos p ON ci.product_id = p.id
+            WHERE {where_clause}
+            GROUP BY COALESCE(p.name, ci.sku, 'Sin producto'), ci.sku
+            ORDER BY gross_margin DESC
+            LIMIT :limit
+            """
         )
-        stmt = (
-            select(
-                product_key.label("product"),
-                QuoteItem.sku.label("sku"),
-                func.coalesce(func.sum(QuoteItem.qty_packed), 0).label("qty"),
-                func.coalesce(func.sum(QuoteItem.subtotal), 0).label("revenue"),
-                func.coalesce(func.sum(QuoteItem.purchase_subtotal), 0).label("cost"),
+
+        rows = (await self.db.execute(sql, params)).all()
+        return [
+            GrossMarginByProductResponse(
+                product=row.product,
+                sku=row.sku,
+                qty=_to_float(row.qty),
+                revenue=_to_float(row.revenue),
+                cost=_to_float(row.cost),
+                gross_margin=_to_float(row.gross_margin),
+                margin_percent=float(row.margin_percent) if row.margin_percent is not None else None,
             )
-            .select_from(QuoteItem)
-            .join(Quote, Quote.id == QuoteItem.quote_id)
-            .outerjoin(Product, Product.id == QuoteItem.product_id)
-            .where(_approved_quote_condition())
-            .group_by(product_key, QuoteItem.sku)
-            .order_by(func.coalesce(func.sum(QuoteItem.subtotal), 0).desc())
-            .limit(limit)
-        )
-        stmt = _apply_approved_on_filter(stmt, start_date, end_date)
-        rows = (await self.db.execute(stmt)).all()
-        results: list[GrossMarginByProductResponse] = []
-        for row in rows:
-            revenue = _to_float(row.revenue)
-            cost = _to_float(row.cost)
-            gross_margin = revenue - cost
-            margin_percent = (gross_margin / revenue * 100.0) if revenue > 0 else None
-            results.append(
-                GrossMarginByProductResponse(
-                    product=row.product,
-                    sku=row.sku,
-                    qty=_to_float(row.qty),
-                    revenue=revenue,
-                    cost=cost,
-                    gross_margin=gross_margin,
-                    margin_percent=margin_percent,
-                )
-            )
-        return results
+            for row in rows
+        ]
 
     async def approved_vs_cancelled_by_month(
         self,
@@ -543,36 +565,75 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
         limit: int,
+        product_search: str | None = None,
     ) -> list[SalesByProductDistributionResponse]:
-        product_key = func.coalesce(
-            Product.name, QuoteItem.sku, literal("Sin producto")
-        )
-        stmt = (
-            select(
-                product_key.label("product"),
-                func.coalesce(func.sum(QuoteItem.subtotal), 0).label("revenue"),
-            )
-            .select_from(QuoteItem)
-            .join(Quote, Quote.id == QuoteItem.quote_id)
-            .outerjoin(Product, Product.id == QuoteItem.product_id)
-            .where(_approved_quote_condition())
-            .group_by(product_key)
-            .order_by(func.coalesce(func.sum(QuoteItem.subtotal), 0).desc())
-            .limit(limit)
-        )
-        stmt = _apply_approved_on_filter(stmt, start_date, end_date)
-        rows = (await self.db.execute(stmt)).all()
-        total_revenue = sum(_to_float(row.revenue) for row in rows)
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
 
+        base_filters = [
+            "(c.approved_on IS NOT NULL OR LOWER(COALESCE(c.status, '')) LIKE '%aprob%')"
+        ]
+        params: dict = {}
+        if start_dt is not None:
+            base_filters.append("c.approved_on >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            base_filters.append("c.approved_on < :end_dt")
+            params["end_dt"] = end_dt
+
+        product_filters = list(base_filters)
+        if product_search and product_search.strip():
+            product_filters.append("(p.name ILIKE :search OR ci.sku ILIKE :search)")
+            params["search"] = f"%{product_search.strip()}%"
+
+        base_where = " AND ".join(base_filters)
+        product_where = " AND ".join(product_filters)
+        params["limit"] = limit
+
+        sql = text(
+            f"""
+            WITH total_ventas AS (
+                SELECT COALESCE(SUM(ci.subtotal), 0) AS total
+                FROM cotizacion_items ci
+                JOIN cotizaciones c ON ci.quote_id = c.id
+                WHERE {base_where}
+            ),
+            productos_venta AS (
+                SELECT
+                    COALESCE(p.name, ci.sku, 'Sin producto') AS product,
+                    ci.sku,
+                    COALESCE(SUM(ci.qty_packed), 0) AS qty,
+                    COALESCE(SUM(ci.subtotal), 0) AS revenue
+                FROM cotizacion_items ci
+                JOIN cotizaciones c ON ci.quote_id = c.id
+                LEFT JOIN productos p ON ci.product_id = p.id
+                WHERE {product_where}
+                GROUP BY COALESCE(p.name, ci.sku, 'Sin producto'), ci.sku
+                ORDER BY revenue DESC
+                LIMIT :limit
+            )
+            SELECT
+                pv.product,
+                pv.sku,
+                pv.qty,
+                pv.revenue,
+                CASE
+                    WHEN tv.total > 0 THEN ROUND((pv.revenue / tv.total) * 100, 2)
+                    ELSE 0
+                END AS percentage
+            FROM productos_venta pv
+            CROSS JOIN total_ventas tv
+            ORDER BY pv.revenue DESC
+            """
+        )
+
+        rows = (await self.db.execute(sql, params)).all()
         return [
             SalesByProductDistributionResponse(
                 product=row.product,
+                sku=row.sku,
+                qty=_to_float(row.qty),
                 revenue=_to_float(row.revenue),
-                percentage=(
-                    _to_float(row.revenue) / total_revenue * 100.0
-                    if total_revenue > 0
-                    else 0.0
-                ),
+                percentage=float(row.percentage),
             )
             for row in rows
         ]
@@ -582,66 +643,65 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
     ) -> list[SalesProjectionByMonthResponse]:
-        month_key = func.to_char(
-            func.coalesce(Quote.approved_on, Quote.created_on), "YYYY-MM"
+        month_key_sold = func.to_char(
+            func.date_trunc("month", Sale.sold_on), "YYYY-MM"
         )
 
         actual_stmt = (
             select(
-                month_key.label("year_month"),
-                func.coalesce(func.sum(Quote.subtotal), 0).label("actual_sales"),
+                month_key_sold.label("year_month"),
+                func.count(Sale.id).label("num_ventas"),
+                func.coalesce(func.sum(Sale.subtotal), 0).label("subtotal"),
+                func.coalesce(func.sum(Sale.total), 0).label("total_con_iva"),
+                func.coalesce(func.sum(Sale.gross_margin), 0).label("margen_bruto"),
+                func.coalesce(func.sum(Sale.purchase_cost), 0).label("costo_compra"),
             )
-            .select_from(Quote)
-            .join(Sale, Sale.quote_id == Quote.id)
+            .select_from(Sale)
+            .join(Quote, Quote.id == Sale.quote_id)
             .where(_approved_quote_condition())
-            .order_by(month_key.asc())
-            .group_by(month_key)
+            .where(Sale.sold_on.is_not(None))
+            .group_by(month_key_sold)
+            .order_by(month_key_sold.asc())
         )
-        actual_stmt = _apply_quote_created_filter(actual_stmt, start_date, end_date)
+        actual_stmt = _apply_sold_on_filter(actual_stmt, start_date, end_date)
         actual_rows = [
             row
             for row in (await self.db.execute(actual_stmt)).all()
             if row.year_month is not None
         ]
 
-        projection_stmt = (
-            select(
-                month_key.label("year_month"),
-                func.coalesce(func.sum(Quote.subtotal), 0).label("projected_base"),
-            )
-            .select_from(Quote)
-            .where(_approved_quote_condition())
-            .order_by(month_key.asc())
-            .group_by(month_key)
-        )
-        projection_stmt = _apply_quote_created_filter(
-            projection_stmt, start_date, end_date
-        )
-        projection_rows = [
-            row
-            for row in (await self.db.execute(projection_stmt)).all()
-            if row.year_month is not None
-        ]
-
-        actual_by_month = {
-            row.year_month: _to_float(row.actual_sales) for row in actual_rows
+        actual_by_month: dict[str, dict] = {
+            row.year_month: {
+                "num_ventas": int(row.num_ventas),
+                "subtotal": _to_float(row.subtotal),
+                "total_con_iva": _to_float(row.total_con_iva),
+                "margen_bruto": _to_float(row.margen_bruto),
+                "costo_compra": _to_float(row.costo_compra),
+            }
+            for row in actual_rows
         }
-        projected_base_by_month = {
-            row.year_month: _to_float(row.projected_base) for row in projection_rows
-        }
-        months = sorted(
-            set(actual_by_month.keys()) | set(projected_base_by_month.keys())
-        )
-        projected_bases = [projected_base_by_month.get(month, 0.0) for month in months]
+        months = sorted(actual_by_month.keys())
+        subtotal_bases = [actual_by_month[month]["subtotal"] for month in months]
         projected_series = [
-            _compute_projected_sales(projected_bases, index)
+            _compute_projected_sales(subtotal_bases, index)
             for index, _ in enumerate(months)
         ]
 
+        _empty: dict = {
+            "num_ventas": 0,
+            "subtotal": 0.0,
+            "total_con_iva": 0.0,
+            "margen_bruto": 0.0,
+            "costo_compra": 0.0,
+        }
         return [
             SalesProjectionByMonthResponse(
                 year_month=month,
-                actual_sales=actual_by_month.get(month, 0.0),
+                num_ventas=actual_by_month.get(month, _empty)["num_ventas"],
+                subtotal=actual_by_month.get(month, _empty)["subtotal"],
+                total_con_iva=actual_by_month.get(month, _empty)["total_con_iva"],
+                margen_bruto=actual_by_month.get(month, _empty)["margen_bruto"],
+                costo_compra=actual_by_month.get(month, _empty)["costo_compra"],
                 projected_sales=projected_series[index],
             )
             for index, month in enumerate(months)
@@ -655,7 +715,7 @@ class VentasService:
         effective_created = func.coalesce(Quote.created_on, Quote.created_at)
         month_key = func.to_char(effective_created, "YYYY-MM")
         status_bucket = _quote_status_bucket_expr()
-        amount_value = func.coalesce(Quote.total, Quote.subtotal, 0)
+        amount_value = func.coalesce(Quote.subtotal, 0)
         amount_sum = func.coalesce(func.sum(amount_value), 0).label("amount_sum")
 
         stmt = (

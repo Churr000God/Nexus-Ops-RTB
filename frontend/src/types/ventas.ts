@@ -56,12 +56,18 @@ export type SalesSummary = {
 
 export type SalesProjectionByMonth = {
   year_month: string
-  actual_sales: number
+  num_ventas: number
+  subtotal: number
+  total_con_iva: number
+  margen_bruto: number
+  costo_compra: number
   projected_sales: number
 }
 
 export type SalesByProductDistribution = {
   product: string
+  sku: string | null
+  qty: number
   revenue: number
   percentage: number
 }

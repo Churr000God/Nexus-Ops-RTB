@@ -65,6 +65,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-21 | Ventas: crecimiento mensual YoY por tipo de cliente | backend + frontend | 2 | [2026-04-21_ventas-crecimiento-mensual-yoy.md](sessions/2026-04-21_ventas-crecimiento-mensual-yoy.md) |
 | 2026-04-21 | Sync n8n → webhook → PostgreSQL y validación de gráficas | backend + n8n + frontend | 2 | [2026-04-21_sync-n8n-y-validacion-graficas-ventas.md](sessions/2026-04-21_sync-n8n-y-validacion-graficas-ventas.md) |
 | 2026-04-22 | Crecimiento trimestral: línea de porcentaje de crecimiento | frontend | 2 | [2026-04-22_crecimiento-trimestral-linea-porcentaje.md](sessions/2026-04-22_crecimiento-trimestral-linea-porcentaje.md) |
+| 2026-04-22 | Correcciones gráficas ventas: proyecciones desde ventas reales y estados desde subtotal | backend + frontend | 2 | [2026-04-22_correcciones-graficas-ventas-proyecciones.md](sessions/2026-04-22_correcciones-graficas-ventas-proyecciones.md) |
 
 ---
 
@@ -72,6 +73,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 10 |
+| Total sesiones | 11 |
 | Errores registrados | 11 |
-| Lecciones documentadas | 11 |
+| Lecciones documentadas | 14 |

@@ -18,6 +18,7 @@ import { ComboBarLineChart } from "@/components/charts/ComboBarLineChart"
 import { LineChart } from "@/components/charts/LineChart"
 import { PieChart } from "@/components/charts/PieChart"
 import { CustomerSearchInput } from "@/components/common/CustomerSearchInput"
+import { ProductSearchInput } from "@/components/common/ProductSearchInput"
 import { DataTable } from "@/components/common/DataTable"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { KpiCard } from "@/components/common/KpiCard"
@@ -49,6 +50,10 @@ export function VentasDashboard() {
   const [customerSearch, setCustomerSearch] = useState("")
   const [selectedMonthYoY, setSelectedMonthYoY] = useState<number | null>(null)
   const [selectedQuarter, setSelectedQuarter] = useState<number | null>(null)
+  const [productSearch, setProductSearch] = useState("")
+  const [selectedProductSku, setSelectedProductSku] = useState<string | null>(null)
+  const [marginProductSearch, setMarginProductSearch] = useState("")
+  const [selectedMarginProductSku, setSelectedMarginProductSku] = useState<string | null>(null)
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
@@ -89,13 +94,22 @@ export function VentasDashboard() {
 
   const fetchProductDistribution = useCallback(
     (signal: AbortSignal) =>
-      ventasService.productDistribution(token ?? "", { startDate, endDate, limit: 10 }, signal),
-    [token, startDate, endDate, syncVersion]
+      ventasService.productDistribution(
+        token ?? "",
+        {
+          startDate,
+          endDate,
+          limit: selectedProductSku ? 1 : 10,
+          productSearch: selectedProductSku || productSearch || undefined,
+        },
+        signal
+      ),
+    [token, startDate, endDate, syncVersion, productSearch, selectedProductSku]
   )
   const productDistribution = useApi(
     fetchProductDistribution,
     { enabled: Boolean(token) },
-    token, startDate, endDate, syncVersion
+    token, startDate, endDate, syncVersion, productSearch, selectedProductSku
   )
 
   const fetchQuoteStatusByMonth = useCallback(
@@ -111,13 +125,22 @@ export function VentasDashboard() {
 
   const fetchGrossMarginByProduct = useCallback(
     (signal: AbortSignal) =>
-      ventasService.grossMarginByProduct(token ?? "", { startDate, endDate, limit: 10 }, signal),
-    [token, startDate, endDate, syncVersion]
+      ventasService.grossMarginByProduct(
+        token ?? "",
+        {
+          startDate,
+          endDate,
+          limit: selectedMarginProductSku ? 1 : 10,
+          productSearch: selectedMarginProductSku || marginProductSearch || undefined,
+        },
+        signal
+      ),
+    [token, startDate, endDate, syncVersion, marginProductSearch, selectedMarginProductSku]
   )
   const grossMarginByProduct = useApi(
     fetchGrossMarginByProduct,
     { enabled: Boolean(token) },
-    token, startDate, endDate, syncVersion
+    token, startDate, endDate, syncVersion, marginProductSearch, selectedMarginProductSku
   )
 
   const fetchRecentQuotes = useCallback(
@@ -286,6 +309,28 @@ export function VentasDashboard() {
     setCustomerSearch(value)
   }, [])
 
+  const handleProductSearch = useCallback((value: string) => {
+    setProductSearch(value)
+    if (!value.trim()) {
+      setSelectedProductSku(null)
+    }
+  }, [])
+
+  const handleProductSelect = useCallback((sku: string | null, _name: string) => {
+    setSelectedProductSku(sku)
+  }, [])
+
+  const handleMarginProductSearch = useCallback((value: string) => {
+    setMarginProductSearch(value)
+    if (!value.trim()) {
+      setSelectedMarginProductSku(null)
+    }
+  }, [])
+
+  const handleMarginProductSelect = useCallback((sku: string | null, _name: string) => {
+    setSelectedMarginProductSku(sku)
+  }, [])
+
   const byCustomerChart = useMemo(() => {
     return (topCustomers.data ?? []).map((row) => ({
       customer: row.customer,
@@ -306,17 +351,21 @@ export function VentasDashboard() {
   const projectionChart = useMemo(() => {
     const rows = salesProjection.data ?? []
     return rows.map((row, index) => {
-      const prev = index > 0 ? rows[index - 1]?.actual_sales : null
+      const prev = index > 0 ? rows[index - 1]?.subtotal : null
       const momChange =
         typeof prev === "number" && prev > 0
-          ? ((row.actual_sales - prev) / prev) * 100
+          ? ((row.subtotal - prev) / prev) * 100
           : null
 
       return {
         month: row.year_month,
-        actual_sales: row.actual_sales,
-        projected_sales: row.projected_sales,
-        mom_change_percent: momChange,
+        subtotal: row.subtotal,
+        total_con_iva: row.total_con_iva,
+        margen_bruto: row.margen_bruto,
+        costo_compra: row.costo_compra,
+        proyeccion: row.projected_sales,
+        cantidad_ventas: row.num_ventas,
+        variacion_porcentual: momChange,
       }
     })
   }, [salesProjection.data])
@@ -341,12 +390,15 @@ export function VentasDashboard() {
 
   const marginByProductChart = useMemo(() => {
     return (grossMarginByProduct.data ?? []).map((row) => ({
-      product: row.product,
+      product: selectedMarginProductSku ? row.sku ?? row.product : row.product,
       gross_margin: row.gross_margin,
       margin_percent: row.margin_percent ?? 0,
       revenue: row.revenue,
+      sku: row.sku,
+      qty: row.qty,
+      cost: row.cost,
     }))
-  }, [grossMarginByProduct.data])
+  }, [grossMarginByProduct.data, selectedMarginProductSku])
 
   const forecastChart = useMemo(() => {
     return (productForecast.data ?? []).map((row) => ({
@@ -389,6 +441,8 @@ export function VentasDashboard() {
   const productDistributionRows = useMemo(() => {
     return (productDistribution.data ?? []).map((row) => ({
       product: row.product,
+      sku: row.sku ?? "—",
+      qty: formatNumber(row.qty),
       revenue: formatCurrencyMXN(row.revenue),
       percentage: `${formatNumber(row.percentage)}%`,
     }))
@@ -402,7 +456,7 @@ export function VentasDashboard() {
     const rest = rows.slice(8)
     const restValue = rest.reduce((acc, row) => acc + row.revenue, 0)
 
-    const base = top.map((row) => ({ name: row.product, value: row.revenue }))
+    const base = top.map((row) => ({ name: row.sku ?? row.product, value: row.revenue }))
     if (restValue > 0) base.push({ name: "Otros", value: restValue })
     return base
   }, [productDistribution.data])
@@ -1191,111 +1245,182 @@ export function VentasDashboard() {
         </ChartPanel>
 
         <ChartPanel
-          title="Distribución de Ventas por Producto"
-          subtitle="Participación de cada producto aprobado sobre el ingreso total"
+          title={selectedProductSku ? `Producto: ${selectedProductSku}` : "Distribución de Ventas por Producto"}
+          subtitle={selectedProductSku ? "Detalle del producto seleccionado" : "Top 10 productos más vendidos por monto — participación real sobre el total de ventas"}
           infoLabel="Mix de productos"
         >
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-center">
-            <PieChart
-              data={productPie}
-              nameKey="name"
-              valueKey="value"
-              valueFormatter={formatCurrencyMXN}
-              height={360}
-              colors={["#0051FF", "#1AAD58", "#FFB020", "#AF52DE", "#FF6B6B", "#8E8E93"]}
-              innerRadius={74}
-              outerRadius={112}
-            />
-            <div className="overflow-hidden rounded-[var(--radius-md)] border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Producto
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Venta
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      %
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productDistributionRows.map((row) => (
-                    <tr key={row.product} className="border-t">
-                      <td className="px-3 py-2 text-[13px] text-foreground">{row.product}</td>
-                      <td className="px-3 py-2 text-right text-[13px] text-foreground">{row.revenue}</td>
-                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
-                        {row.percentage}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <ProductSearchInput
+            suggestions={productDistribution.data ?? []}
+            loading={productDistribution.status === "loading"}
+            onSearch={handleProductSearch}
+            onSelect={handleProductSelect}
+            selectedProduct={selectedProductSku}
+          />
+
+          {productSearch && !selectedProductSku ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Selecciona un producto de la lista para ver su información
             </div>
-          </div>
+          ) : productDistributionRows.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin datos de productos en el periodo
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)] xl:items-start">
+              <PieChart
+                data={productPie}
+                nameKey="name"
+                valueKey="value"
+                valueFormatter={formatCurrencyMXN}
+                height={300}
+                colors={["#0051FF", "#1AAD58", "#FFB020", "#AF52DE", "#FF6B6B", "#8E8E93"]}
+                innerRadius={60}
+                outerRadius={100}
+              />
+              <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Producto
+                      </th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        SKU
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Cant.
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Venta
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        %
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productDistributionRows.map((row) => (
+                      <tr key={row.sku + row.product} className="border-t">
+                        <td className="px-3 py-2 text-[13px] text-foreground max-w-[160px] truncate" title={row.product}>{row.product}</td>
+                        <td className="px-3 py-2 text-[13px] text-muted-foreground break-all max-w-[70px] leading-tight">{row.sku}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">{row.qty}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">{row.revenue}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                          {row.percentage}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </ChartPanel>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <ChartPanel
           title="Ventas Reales vs Proyecciones"
-          subtitle="La línea real usa cotizaciones aprobadas confirmadas contra `ventas.quote_id`; la proyección usa histórico aprobado"
+          subtitle="Datos reales desde ventas.sold_on; proyección con promedio móvil 3 meses de cotizaciones aprobadas"
           infoLabel="Serie temporal"
         >
           <LineChart
             data={projectionChart}
             xKey="month"
             lines={[
-              { dataKey: "actual_sales", name: "Ventas reales", color: "#0051FF" },
+              { dataKey: "subtotal", name: "Subtotal", color: "#0051FF" },
+              { dataKey: "margen_bruto", name: "Margen Bruto", color: "#1AAD58" },
+              { dataKey: "costo_compra", name: "Costo Compra", color: "#E5534B" },
               {
-                dataKey: "projected_sales",
+                dataKey: "proyeccion",
                 name: "Proyección",
                 color: "#8E8E93",
                 dashed: true,
               },
               {
-                dataKey: "mom_change_percent",
+                dataKey: "variacion_porcentual",
                 name: "Variación % mes a mes",
-                color: "#FFB020",
+                color: "#9B59B6",
                 dashed: true,
                 yAxisId: "right",
               },
             ]}
             valueFormatter={formatCurrencyMXN}
             rightAxisFormatter={(value) => `${value > 0 ? "+" : ""}${formatNumber(value)}%`}
-            height={320}
+            height={400}
           />
         </ChartPanel>
 
         <ChartPanel
-          title="Margen de Ganancia por Producto"
-          subtitle="Se muestra el margen bruto en monto; el porcentaje queda como referencia complementaria"
+          title={selectedMarginProductSku ? `Margen: ${selectedMarginProductSku}` : "Margen de Ganancia por Producto"}
+          subtitle={selectedMarginProductSku ? "Detalle del producto seleccionado" : "Top 10 productos con mayor margen bruto total — ordenados de mayor a menor margen"}
           infoLabel="Rentabilidad"
         >
-          <div className="space-y-4">
-            <BarChart
-              data={marginByProductChart}
-              xKey="product"
-              bars={[{ dataKey: "gross_margin", name: "Margen bruto", color: "#1AAD58" }]}
-              valueFormatter={formatCurrencyMXN}
-              height={320}
-            />
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {marginByProductChart.slice(0, 6).map((row) => (
-                <div key={row.product} className="rounded-[var(--radius-md)] border bg-muted/30 px-3 py-2">
-                  <div className="truncate text-xs font-semibold text-foreground">{row.product}</div>
-                  <div className="mt-1 text-sm font-semibold text-[hsl(var(--success))]">
-                    {formatCurrencyMXN(row.gross_margin)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatNumber(row.margin_percent)}% de margen
-                  </div>
-                </div>
-              ))}
+          <ProductSearchInput
+            suggestions={grossMarginByProduct.data ?? []}
+            loading={grossMarginByProduct.status === "loading"}
+            onSearch={handleMarginProductSearch}
+            onSelect={handleMarginProductSelect}
+            selectedProduct={selectedMarginProductSku}
+          />
+
+          {marginProductSearch && !selectedMarginProductSku ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Selecciona un producto de la lista para ver su información
             </div>
-          </div>
+          ) : marginByProductChart.length === 0 ? (
+            <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+              Sin datos de margen en el periodo
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <BarChart
+                data={marginByProductChart}
+                xKey="product"
+                bars={[{ dataKey: "gross_margin", name: "Margen bruto", color: "#1AAD58" }]}
+                valueFormatter={formatCurrencyMXN}
+                height={360}
+              />
+              <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Producto
+                      </th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        SKU
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Cant. Solicitada
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Costo
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Margen
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        %
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marginByProductChart.map((row) => (
+                      <tr key={row.sku + row.product} className="border-t">
+                        <td className="px-3 py-2 text-[13px] text-foreground max-w-[160px] truncate" title={row.product}>{row.product}</td>
+                        <td className="px-3 py-2 text-[13px] text-muted-foreground break-all max-w-[70px] leading-tight">{row.sku}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">{formatNumber(row.qty)}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">{formatCurrencyMXN(row.cost)}</td>
+                        <td className="px-3 py-2 text-right text-[13px] font-semibold text-[hsl(var(--success))]">{formatCurrencyMXN(row.gross_margin)}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">{formatNumber(row.margin_percent)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </ChartPanel>
       </div>
 

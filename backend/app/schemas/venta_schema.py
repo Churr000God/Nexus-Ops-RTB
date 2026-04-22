@@ -85,12 +85,18 @@ class SalesSummaryResponse(BaseModel):
 
 class SalesProjectionByMonthResponse(BaseModel):
     year_month: str = Field(min_length=7, max_length=7)
-    actual_sales: float
+    num_ventas: int
+    subtotal: float
+    total_con_iva: float
+    margen_bruto: float
+    costo_compra: float
     projected_sales: float
 
 
 class SalesByProductDistributionResponse(BaseModel):
     product: str
+    sku: str | None = None
+    qty: float
     revenue: float
     percentage: float
 

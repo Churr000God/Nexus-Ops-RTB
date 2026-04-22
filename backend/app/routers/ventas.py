@@ -136,12 +136,13 @@ async def gross_margin_by_product(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
+    product_search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[GrossMarginByProductResponse]:
     service = VentasService(db)
     return await service.gross_margin_by_product(
-        start_date=start_date, end_date=end_date, limit=limit
+        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
     )
 
 
@@ -153,12 +154,13 @@ async def product_distribution(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
+    product_search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[SalesByProductDistributionResponse]:
     service = VentasService(db)
     return await service.sales_distribution_by_product(
-        start_date=start_date, end_date=end_date, limit=limit
+        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
     )
 
 

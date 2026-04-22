@@ -159,7 +159,7 @@ export const ventasService = {
 
   grossMarginByProduct(
     token: string,
-    params?: { startDate?: string | null; endDate?: string | null; limit?: number },
+    params?: { startDate?: string | null; endDate?: string | null; limit?: number; productSearch?: string },
     signal?: AbortSignal
   ) {
     return requestJson<GrossMarginByProduct[]>(
@@ -167,6 +167,7 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
+        product_search: params?.productSearch || undefined,
       }),
       { token, signal }
     )
@@ -174,7 +175,7 @@ export const ventasService = {
 
   productDistribution(
     token: string,
-    params?: { startDate?: string | null; endDate?: string | null; limit?: number },
+    params?: { startDate?: string | null; endDate?: string | null; limit?: number; productSearch?: string },
     signal?: AbortSignal
   ) {
     return requestJson<SalesByProductDistribution[]>(
@@ -182,6 +183,7 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
+        product_search: params?.productSearch || undefined,
       }),
       { token, signal }
     )
