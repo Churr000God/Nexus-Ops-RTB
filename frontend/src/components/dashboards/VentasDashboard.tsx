@@ -32,12 +32,14 @@ import { useFilters } from "@/hooks/useFilters"
 import { ventasService } from "@/services/ventasService"
 import { useAuthStore } from "@/stores/authStore"
 import { useSyncStore } from "@/stores/syncStore"
+import { exportVentasDashboardToZip } from "@/lib/dashboardExport"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
 import type {
   AtRiskCustomer,
   CustomerPaymentStat,
   CustomerSearchItem,
   PendingPaymentCustomer,
+  PendingPaymentStat,
   AvgSalesByCustomerType,
   MonthlyGrowthYoYByCustomerType,
   PaymentTrend,
@@ -68,6 +70,8 @@ export function VentasDashboard() {
   const [selectedAtRiskCustomer, setSelectedAtRiskCustomer] = useState<AtRiskCustomer | null>(null)
   const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<CustomerSearchItem | null>(null)
   const [paymentCustomerQuery, setPaymentCustomerQuery] = useState("")
+  const [selectedPendingCustomer, setSelectedPendingCustomer] = useState<CustomerSearchItem | null>(null)
+  const [pendingCustomerQuery, setPendingCustomerQuery] = useState("")
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
@@ -270,6 +274,34 @@ export function VentasDashboard() {
     fetchCustomerPaymentStats,
     { enabled: Boolean(token) },
     token, selectedPaymentCustomer?.id, syncVersion
+  )
+
+  const fetchPendingCustomerSearch = useCallback(
+    (signal: AbortSignal) =>
+      pendingCustomerQuery.length >= 2
+        ? ventasService.customerSearch(token ?? "", pendingCustomerQuery, signal)
+        : Promise.resolve([] as CustomerSearchItem[]),
+    [token, pendingCustomerQuery]
+  )
+  const pendingCustomerSearchResult = useApi(
+    fetchPendingCustomerSearch,
+    { enabled: Boolean(token) && pendingCustomerQuery.length >= 2 },
+    token, pendingCustomerQuery
+  )
+
+  const fetchPendingPaymentStats = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.pendingPaymentStats(
+        token ?? "",
+        { customerId: selectedPendingCustomer?.id ?? undefined },
+        signal
+      ),
+    [token, selectedPendingCustomer?.id, syncVersion]
+  )
+  const pendingPaymentStats = useApi(
+    fetchPendingPaymentStats,
+    { enabled: Boolean(token) },
+    token, selectedPendingCustomer?.id, syncVersion
   )
 
   const fetchProductsByCustomerType = useCallback(
@@ -831,11 +863,7 @@ export function VentasDashboard() {
             </p>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[360px]">
-            <Button type="button" onClick={() => showPendingToast("La actualización manual")}>
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Actualizar
-            </Button>
+          <div className="grid gap-2 xl:min-w-[200px]">
             <Button
               type="button"
               variant="outline"
@@ -844,7 +872,37 @@ export function VentasDashboard() {
               <FileText className="h-4 w-4" aria-hidden="true" />
               Reporte
             </Button>
-            <Button type="button" variant="outline" onClick={() => showPendingToast("La descarga CSV")}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                toast.info("Generando archivos CSV, espera un momento…")
+                try {
+                  await exportVentasDashboardToZip({
+                    summary: summary.data,
+                    salesVsProjection: salesProjection.data,
+                    topCustomers: topCustomers.data,
+                    salesByCustomerType: salesByCustomerType.data,
+                    productDistribution: productDistribution.data,
+                    grossMarginByProduct: grossMarginByProduct.data,
+                    quoteStatusByMonth: quoteStatusByMonth.data,
+                    missingDemand: missingDemand.data,
+                    productForecast: productForecast.data,
+                    atRiskCustomers: atRiskCustomers.data,
+                    paymentTrend: paymentTrend.data,
+                    recentQuotes: recentQuotes.data,
+                    pendingPayments: pendingPayments.data,
+                    productsByCustomerType: productsByCustomerType.data,
+                    avgSalesByCustomerType: avgSalesByCustomerType.data,
+                    quarterlyGrowth: quarterlyGrowth.data,
+                    monthlyGrowthYoY: monthlyGrowthYoY.data,
+                  })
+                  toast.success("Dashboard exportado correctamente")
+                } catch {
+                  toast.error("Error al exportar el dashboard")
+                }
+              }}
+            >
               <Download className="h-4 w-4" aria-hidden="true" />
               CSV
             </Button>
@@ -2063,9 +2121,32 @@ export function VentasDashboard() {
 
       <ChartPanel
         title="Clientes con Pagos Pendientes"
-        subtitle="Pedidos con estatus 'No pagada' o 'Pagada Parcial', ordenados por monto adeudado"
+        subtitle={
+          selectedPendingCustomer
+            ? `Cliente: ${selectedPendingCustomer.name}`
+            : "Top 10 por monto pendiente — cotizaciones aprobadas sin pagar"
+        }
         infoLabel="Cobranza"
       >
+        <PaymentCustomerSearch
+          query={pendingCustomerQuery}
+          onQueryChange={(q) => {
+            setPendingCustomerQuery(q)
+            if (!q) setSelectedPendingCustomer(null)
+          }}
+          suggestions={pendingCustomerSearchResult.data ?? []}
+          loading={pendingCustomerSearchResult.status === "loading"}
+          selectedCustomer={selectedPendingCustomer}
+          onSelect={(item) => {
+            setSelectedPendingCustomer(item)
+            setPendingCustomerQuery(item.name)
+          }}
+          onClear={() => {
+            setSelectedPendingCustomer(null)
+            setPendingCustomerQuery("")
+          }}
+        />
+
         <div className="overflow-hidden rounded-[var(--radius-md)] border">
           <table className="w-full text-sm">
             <thead className="bg-muted/60">
@@ -2073,17 +2154,14 @@ export function VentasDashboard() {
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   Cliente
                 </th>
-                <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Tipo
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Cot. pendientes
                 </th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  # Pedidos
-                </th>
-                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Total adeudado
+                  Monto pendiente
                 </th>
                 <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Desde
+                  Fecha más antigua
                 </th>
                 <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   Días sin pagar
@@ -2091,43 +2169,33 @@ export function VentasDashboard() {
               </tr>
             </thead>
             <tbody>
-              {(pendingPayments.data ?? []).map((row: PendingPaymentCustomer) => {
+              {(pendingPaymentStats.data ?? []).map((row: PendingPaymentStat) => {
                 const dias = row.dias_sin_pagar ?? 0
-                const urgencia =
-                  dias > 90
-                    ? "error"
-                    : dias > 45
-                      ? "warning"
-                      : "neutral"
+                const urgencia = dias > 90 ? "error" : dias > 45 ? "warning" : "neutral"
                 return (
                   <tr key={row.customer_name} className="border-t">
                     <td className="px-3 py-2 text-[13px] text-foreground">
-                      <div className="truncate max-w-[200px]" title={row.customer_name}>
+                      <div className="truncate max-w-[220px]" title={row.customer_name}>
                         {row.customer_name}
                       </div>
                     </td>
+                    <td className="px-3 py-2 text-right text-[13px] text-foreground">
+                      {row.cot_pendientes}
+                    </td>
+                    <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                      {formatCurrencyMXN(row.monto_pendiente)}
+                    </td>
+                    <td className="px-3 py-2 text-center text-[13px] text-muted-foreground">
+                      {row.fecha_mas_antigua ? formatIsoDate(row.fecha_mas_antigua) : "—"}
+                    </td>
                     <td className="px-3 py-2 text-center">
-                      {row.tipo_cliente ? (
-                        <StatusBadge variant={row.tipo_cliente === "Local" ? "info" : "neutral"}>
-                          {row.tipo_cliente}
+                      {row.dias_sin_pagar !== null ? (
+                        <StatusBadge variant={urgencia}>
+                          {row.dias_sin_pagar} d
                         </StatusBadge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[13px] text-foreground">
-                      {row.num_pedidos}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
-                      {formatCurrencyMXN(row.total_adeudado)}
-                    </td>
-                    <td className="px-3 py-2 text-center text-[13px] text-muted-foreground">
-                      {row.desde_fecha ? formatIsoDate(row.desde_fecha) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <StatusBadge variant={urgencia}>
-                        {row.dias_sin_pagar !== null ? `${row.dias_sin_pagar} d` : "—"}
-                      </StatusBadge>
                     </td>
                   </tr>
                 )
@@ -2135,11 +2203,12 @@ export function VentasDashboard() {
             </tbody>
           </table>
         </div>
-        {(pendingPayments.data ?? []).length === 0 && pendingPayments.status !== "loading" ? (
-          <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-            Sin pagos pendientes
-          </div>
-        ) : null}
+        {(pendingPaymentStats.data ?? []).length === 0 &&
+          pendingPaymentStats.status !== "loading" && (
+            <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+              Sin pagos pendientes
+            </div>
+          )}
       </ChartPanel>
 
       <section className="grid gap-4 xl:grid-cols-3">

@@ -40,6 +40,7 @@ from app.schemas.venta_schema import (
     CustomerPaymentStatResponse,
     CustomerSearchItemResponse,
     PaymentTrendResponse,
+    PendingPaymentStatResponse,
     PendingPaymentCustomerResponse,
     ProductsByCustomerTypeResponse,
     QuarterlyGrowthByCustomerTypeResponse,
@@ -1628,6 +1629,69 @@ class VentasService:
                 cot_sin_pagar=int(row.cot_sin_pagar),
                 max_dias_sin_pago=int(row.max_dias_sin_pago)
                 if row.max_dias_sin_pago is not None
+                else None,
+            )
+            for row in rows
+        ]
+
+    async def pending_payment_stats(
+        self, customer_id: str | None = None
+    ) -> list[PendingPaymentStatResponse]:
+        """Top-10 (o cliente específico) con cotizaciones aprobadas sin pagar.
+
+        Fuente: clientes → cotizaciones(Aprobada) → pedidos_clientes(No pagada|Parcial).
+        Sin filtro: top-10 por monto_pendiente DESC.
+        """
+        customer_filter = "AND c.id = :customer_id ::uuid" if customer_id else ""
+        limit_clause = "" if customer_id else "LIMIT 10"
+        sql = text(
+            f"""
+            SELECT
+                c.id::text                                                  AS customer_id,
+                c.name                                                      AS customer_name,
+                COUNT(DISTINCT cot.id)                                      AS cot_pendientes,
+                ROUND(SUM(COALESCE(pc.total, 0))::numeric, 2)              AS monto_pendiente,
+                MIN(COALESCE(
+                    pc.invoiced_on,
+                    pc.approved_on,
+                    cot.approved_on::date,
+                    pc.ordered_on,
+                    cot.created_on::date
+                ))                                                          AS fecha_mas_antigua,
+                (CURRENT_DATE - MIN(COALESCE(
+                    pc.invoiced_on,
+                    pc.approved_on,
+                    cot.approved_on::date,
+                    pc.ordered_on,
+                    cot.created_on::date
+                )))::int                                                    AS dias_sin_pagar
+            FROM clientes c
+            JOIN cotizaciones cot
+                ON cot.customer_id = c.id
+                AND cot.status = 'Aprobada'
+            JOIN pedidos_clientes pc
+                ON pc.quote_id = cot.id
+                AND pc.payment_status IN ('No pagada', 'Pagada Parcial')
+            WHERE 1=1
+            {customer_filter}
+            GROUP BY c.id, c.name
+            ORDER BY monto_pendiente DESC
+            {limit_clause}
+            """
+        )
+        params: dict = {}
+        if customer_id:
+            params["customer_id"] = customer_id
+        rows = (await self.db.execute(sql, params)).all()
+        return [
+            PendingPaymentStatResponse(
+                customer_id=row.customer_id,
+                customer_name=row.customer_name,
+                cot_pendientes=int(row.cot_pendientes),
+                monto_pendiente=float(row.monto_pendiente),
+                fecha_mas_antigua=row.fecha_mas_antigua,
+                dias_sin_pagar=int(row.dias_sin_pagar)
+                if row.dias_sin_pagar is not None
                 else None,
             )
             for row in rows

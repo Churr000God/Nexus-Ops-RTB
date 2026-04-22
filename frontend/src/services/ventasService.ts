@@ -5,6 +5,7 @@ import type {
   AvgSalesByCustomerType,
   CustomerPaymentStat,
   CustomerSearchItem,
+  PendingPaymentStat,
   DashboardOverview,
   GrossMarginByProduct,
   MonthlyGrowthYoYByCustomerType,
@@ -389,6 +390,19 @@ export const ventasService = {
   customerSearch(token: string, q: string, signal?: AbortSignal) {
     return requestJson<CustomerSearchItem[]>(
       withQuery("/api/ventas/customer-search", { q }),
+      { token, signal }
+    )
+  },
+
+  pendingPaymentStats(
+    token: string,
+    params?: { customerId?: string },
+    signal?: AbortSignal
+  ) {
+    return requestJson<PendingPaymentStat[]>(
+      withQuery("/api/ventas/pending-payment-stats", {
+        customer_id: params?.customerId,
+      }),
       { token, signal }
     )
   },

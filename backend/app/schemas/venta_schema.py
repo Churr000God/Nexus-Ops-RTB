@@ -214,3 +214,12 @@ class CustomerSearchItemResponse(BaseModel):
     id: str
     name: str
     external_id: str | None = None
+
+
+class PendingPaymentStatResponse(BaseModel):
+    customer_id: str | None = None
+    customer_name: str
+    cot_pendientes: int
+    monto_pendiente: float
+    fecha_mas_antigua: date | None = None
+    dias_sin_pagar: int | None = None

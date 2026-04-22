@@ -59,6 +59,7 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0009 | 2026-04-21 | n8n | medio | n8n envia "filesystem-v2" en lugar del contenido base64 del CSV | resuelto | [ERR-0009_n8n-filesystem-v2-en-lugar-de-base64.md](resolutions/ERR-0009_n8n-filesystem-v2-en-lugar-de-base64.md) |
 | ERR-0010 | 2026-04-21 | frontend | medio | Dropdown de sugerencias de clientes se cerraba antes de registrar el click | resuelto | [ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md](resolutions/ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md) |
 | ERR-0011 | 2026-04-21 | db | medio | PostgreSQL ORDER BY col DESC coloca NULLs primero por defecto | resuelto | [ERR-0011_postgresql-desc-nulls-first-por-defecto.md](resolutions/ERR-0011_postgresql-desc-nulls-first-por-defecto.md) |
+| ERR-0012 | 2026-04-22 | frontend | bajo | TS2322 MissingDemandByProduct[] no asignable a ProductSuggestion[] en docker build | resuelto | [ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md](resolutions/ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md) |
 
 ---
 
@@ -66,7 +67,7 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 11 |
+| Total errores registrados | 12 |
 | Resueltos | 11 |
 | Pendientes | 0 |
 | Workarounds | 0 |

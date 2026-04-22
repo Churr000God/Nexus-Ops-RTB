@@ -66,6 +66,8 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-21 | Sync n8n → webhook → PostgreSQL y validación de gráficas | backend + n8n + frontend | 2 | [2026-04-21_sync-n8n-y-validacion-graficas-ventas.md](sessions/2026-04-21_sync-n8n-y-validacion-graficas-ventas.md) |
 | 2026-04-22 | Crecimiento trimestral: línea de porcentaje de crecimiento | frontend | 2 | [2026-04-22_crecimiento-trimestral-linea-porcentaje.md](sessions/2026-04-22_crecimiento-trimestral-linea-porcentaje.md) |
 | 2026-04-22 | Correcciones gráficas ventas: proyecciones desde ventas reales y estados desde subtotal | backend + frontend | 2 | [2026-04-22_correcciones-graficas-ventas-proyecciones.md](sessions/2026-04-22_correcciones-graficas-ventas-proyecciones.md) |
+| 2026-04-22 | Fix TS2322 docker build frontend — MissingDemandByProduct vs ProductSuggestion | frontend | 2 | [2026-04-22_fix-ts2322-docker-build-frontend.md](sessions/2026-04-22_fix-ts2322-docker-build-frontend.md) |
+| 2026-04-22 | Dashboard Ventas — Busqueda, Prediccion, Export CSV y UI | backend + frontend | 2 | [2026-04-22_dashboard-ventas-busqueda-export-csv.md](sessions/2026-04-22_dashboard-ventas-busqueda-export-csv.md) |
 
 ---
 
@@ -73,6 +75,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 11 |
+| Total sesiones | 12 |
 | Errores registrados | 11 |
-| Lecciones documentadas | 14 |
+| Lecciones documentadas | 15 |

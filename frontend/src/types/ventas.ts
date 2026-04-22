@@ -203,3 +203,12 @@ export type CustomerSearchItem = {
   name: string
   external_id: string | null
 }
+
+export type PendingPaymentStat = {
+  customer_id: string | null
+  customer_name: string
+  cot_pendientes: number
+  monto_pendiente: number
+  fecha_mas_antigua: string | null
+  dias_sin_pagar: number | null
+}

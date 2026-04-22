@@ -29,6 +29,7 @@ from app.schemas.venta_schema import (
     SalesProjectionByMonthResponse,
     CustomerPaymentStatResponse,
     CustomerSearchItemResponse,
+    PendingPaymentStatResponse,
     SalesSummaryResponse,
 )
 from app.services.ventas_service import VentasService
@@ -366,3 +367,16 @@ async def customer_search(
 ) -> list[CustomerSearchItemResponse]:
     service = VentasService(db)
     return await service.search_customers_payment(q=q)
+
+
+@router.get(
+    "/pending-payment-stats",
+    response_model=list[PendingPaymentStatResponse],
+)
+async def pending_payment_stats(
+    customer_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PendingPaymentStatResponse]:
+    service = VentasService(db)
+    return await service.pending_payment_stats(customer_id=customer_id)
