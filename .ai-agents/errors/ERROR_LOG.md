@@ -55,6 +55,10 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0005 | 2026-04-21 | db | alto | setup-db.sh falla: DuplicateTable staging.csv_files — alembic_version perdida | resuelto | [ERR-0005_alembic-version-missing-staging-tables-orphaned.md](resolutions/ERR-0005_alembic-version-missing-staging-tables-orphaned.md) |
 | ERR-0006 | 2026-04-21 | frontend | bajo | docker build frontend falla: TS2322 string\|null no asignable a string\|undefined en VentasDashboard | resuelto | [ERR-0006_ts-null-vs-undefined-ventasdashboard.md](resolutions/ERR-0006_ts-null-vs-undefined-ventasdashboard.md) |
 | ERR-0007 | 2026-04-21 | backend | bajo | ruff F821: Undefined name RecentQuoteResponse en app/routers/ventas.py | resuelto | [ERR-0007_ruff-f821-recentquoteresponse.md](resolutions/ERR-0007_ruff-f821-recentquoteresponse.md) |
+| ERR-0008 | 2026-04-21 | backend | alto | ModuleNotFoundError: No module named 'app' en subprocess de sync_csv_data.py | resuelto | [ERR-0008_subprocess-pythonpath-modulo-app.md](resolutions/ERR-0008_subprocess-pythonpath-modulo-app.md) |
+| ERR-0009 | 2026-04-21 | n8n | medio | n8n envia "filesystem-v2" en lugar del contenido base64 del CSV | resuelto | [ERR-0009_n8n-filesystem-v2-en-lugar-de-base64.md](resolutions/ERR-0009_n8n-filesystem-v2-en-lugar-de-base64.md) |
+| ERR-0010 | 2026-04-21 | frontend | medio | Dropdown de sugerencias de clientes se cerraba antes de registrar el click | resuelto | [ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md](resolutions/ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md) |
+| ERR-0011 | 2026-04-21 | db | medio | PostgreSQL ORDER BY col DESC coloca NULLs primero por defecto | resuelto | [ERR-0011_postgresql-desc-nulls-first-por-defecto.md](resolutions/ERR-0011_postgresql-desc-nulls-first-por-defecto.md) |
 
 ---
 
@@ -62,8 +66,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 7 |
-| Resueltos | 7 |
+| Total errores registrados | 11 |
+| Resueltos | 11 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
