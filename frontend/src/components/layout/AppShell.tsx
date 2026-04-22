@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom"
 
 import { Header } from "@/components/layout/Header"
 import { Sidebar } from "@/components/layout/Sidebar"
+import { useSyncStatus } from "@/hooks/useSyncStatus"
 import { cn } from "@/lib/utils"
 
 type AppShellProps = {
@@ -21,6 +22,7 @@ const titlesByPath: Record<string, { title: string; subtitle?: string }> = {
 export function AppShell({ userEmail, onLogout }: AppShellProps) {
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { status: syncStatus, triggering, trigger } = useSyncStatus()
 
   const header = useMemo(() => {
     return titlesByPath[location.pathname] ?? { title: "Nexus Ops RTB" }
@@ -34,6 +36,9 @@ export function AppShell({ userEmail, onLogout }: AppShellProps) {
         subtitle={header.subtitle}
         userLabel={userEmail ?? undefined}
         onLogout={onLogout}
+        syncStatus={syncStatus}
+        triggering={triggering}
+        onSync={trigger}
       />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[220px] bg-[#1a1d21] md:block">
         <Sidebar />

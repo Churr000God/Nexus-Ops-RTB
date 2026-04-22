@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     N8N_BASE_URL: str | None = None
     N8N_WEBHOOK_TOKEN: str | None = None
+    N8N_WEBHOOK_URL: str | None = None
+    SYNC_API_KEY: str | None = None
 
     CSV_DIR: str = "/data/csv"
     REPORTS_DIR: str = "/data/reports"
