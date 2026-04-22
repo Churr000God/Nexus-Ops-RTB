@@ -144,6 +144,7 @@ export type SalesForecastByProduct = {
 
 export type AtRiskCustomer = {
   customer_id: string | null
+  external_id: string | null
   customer_name: string
   compras_ult_90: number
   compras_90_previos: number

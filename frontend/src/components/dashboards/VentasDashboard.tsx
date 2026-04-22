@@ -17,6 +17,7 @@ import { BarChart } from "@/components/charts/BarChart"
 import { ComboBarLineChart } from "@/components/charts/ComboBarLineChart"
 import { LineChart } from "@/components/charts/LineChart"
 import { PieChart } from "@/components/charts/PieChart"
+import { AtRiskCustomerSearch } from "@/components/common/AtRiskCustomerSearch"
 import { CustomerSearchInput } from "@/components/common/CustomerSearchInput"
 import { ProductSearchInput } from "@/components/common/ProductSearchInput"
 import { DataTable } from "@/components/common/DataTable"
@@ -54,6 +55,9 @@ export function VentasDashboard() {
   const [selectedProductSku, setSelectedProductSku] = useState<string | null>(null)
   const [marginProductSearch, setMarginProductSearch] = useState("")
   const [selectedMarginProductSku, setSelectedMarginProductSku] = useState<string | null>(null)
+  const [missingDemandSearch, setMissingDemandSearch] = useState("")
+  const [selectedMissingDemandSku, setSelectedMissingDemandSku] = useState<string | null>(null)
+  const [selectedAtRiskCustomer, setSelectedAtRiskCustomer] = useState<AtRiskCustomer | null>(null)
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
@@ -171,13 +175,22 @@ export function VentasDashboard() {
 
   const fetchMissingDemand = useCallback(
     (signal: AbortSignal) =>
-      ventasService.missingDemand(token ?? "", { startDate, endDate, limit: 95 }, signal),
-    [token, startDate, endDate, syncVersion]
+      ventasService.missingDemand(
+        token ?? "",
+        {
+          startDate,
+          endDate,
+          limit: selectedMissingDemandSku ? 1 : 10,
+          productSearch: selectedMissingDemandSku || missingDemandSearch || undefined,
+        },
+        signal
+      ),
+    [token, startDate, endDate, syncVersion, missingDemandSearch, selectedMissingDemandSku]
   )
   const missingDemand = useApi(
     fetchMissingDemand,
     { enabled: Boolean(token) },
-    token, startDate, endDate, syncVersion
+    token, startDate, endDate, syncVersion, missingDemandSearch, selectedMissingDemandSku
   )
 
   const fetchAtRiskCustomers = useCallback(
@@ -331,6 +344,17 @@ export function VentasDashboard() {
     setSelectedMarginProductSku(sku)
   }, [])
 
+  const handleMissingDemandSearch = useCallback((value: string) => {
+    setMissingDemandSearch(value)
+    if (!value.trim()) {
+      setSelectedMissingDemandSku(null)
+    }
+  }, [])
+
+  const handleMissingDemandSelect = useCallback((sku: string | null, _name: string) => {
+    setSelectedMissingDemandSku(sku)
+  }, [])
+
   const byCustomerChart = useMemo(() => {
     return (topCustomers.data ?? []).map((row) => ({
       customer: row.customer,
@@ -411,19 +435,35 @@ export function VentasDashboard() {
 
   const missingDemandChart = useMemo(() => {
     return (missingDemand.data ?? []).map((row) => ({
-      product: row.product,
+      product: selectedMissingDemandSku ? row.sku ?? row.product : row.product,
       demanda_faltante: row.demanda_faltante,
       sku: row.sku ?? "",
     }))
-  }, [missingDemand.data])
+  }, [missingDemand.data, selectedMissingDemandSku])
+
+  const RISK_ORDER: Record<string, number> = { Crítico: 0, Alto: 1, Medio: 2 }
+
+  const atRiskSorted = useMemo(() => {
+    const all = atRiskCustomers.data ?? []
+    return [...all].sort((a, b) => {
+      const rDiff = (RISK_ORDER[a.riesgo_abandono] ?? 3) - (RISK_ORDER[b.riesgo_abandono] ?? 3)
+      if (rDiff !== 0) return rDiff
+      return a.compras_ult_90 - b.compras_ult_90
+    })
+  }, [atRiskCustomers.data])
+
+  const atRiskVisible = useMemo(
+    () => (selectedAtRiskCustomer ? [selectedAtRiskCustomer] : atRiskSorted.slice(0, 10)),
+    [selectedAtRiskCustomer, atRiskSorted]
+  )
 
   const atRiskChart = useMemo(() => {
-    return (atRiskCustomers.data ?? []).slice(0, 15).map((row: AtRiskCustomer) => ({
+    return atRiskVisible.map((row) => ({
       customer: row.customer_name,
       ultimos_90: row.compras_ult_90,
       previos_90: row.compras_90_previos,
     }))
-  }, [atRiskCustomers.data])
+  }, [atRiskVisible])
 
   const missingDemandParetoRows = useMemo(() => {
     const rows = missingDemand.data ?? []
@@ -1395,13 +1435,16 @@ export function VentasDashboard() {
                         Cant. Solicitada
                       </th>
                       <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Costo de Venta
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                         Costo
                       </th>
                       <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                        Margen
+                        % Margen
                       </th>
                       <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                        %
+                        Margen Total
                       </th>
                     </tr>
                   </thead>
@@ -1411,9 +1454,10 @@ export function VentasDashboard() {
                         <td className="px-3 py-2 text-[13px] text-foreground max-w-[160px] truncate" title={row.product}>{row.product}</td>
                         <td className="px-3 py-2 text-[13px] text-muted-foreground break-all max-w-[70px] leading-tight">{row.sku}</td>
                         <td className="px-3 py-2 text-right text-[13px] text-foreground">{formatNumber(row.qty)}</td>
+                        <td className="px-3 py-2 text-right text-[13px] text-foreground">{formatCurrencyMXN(row.revenue)}</td>
                         <td className="px-3 py-2 text-right text-[13px] text-foreground">{formatCurrencyMXN(row.cost)}</td>
-                        <td className="px-3 py-2 text-right text-[13px] font-semibold text-[hsl(var(--success))]">{formatCurrencyMXN(row.gross_margin)}</td>
                         <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">{formatNumber(row.margin_percent)}%</td>
+                        <td className="px-3 py-2 text-right text-[13px] font-semibold text-[hsl(var(--success))]">{formatCurrencyMXN(row.gross_margin)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1490,79 +1534,99 @@ export function VentasDashboard() {
       </ChartPanel>
 
       <ChartPanel
-        title="Demanda de Productos Faltantes"
-        subtitle="Cantidad pendiente por surtir/empacar desde cotizaciones aprobadas, pendientes o en seguimiento"
+        title={selectedMissingDemandSku ? `Demanda: ${selectedMissingDemandSku}` : "Demanda de Productos Faltantes"}
+        subtitle={selectedMissingDemandSku ? "Detalle del producto seleccionado" : "Cantidad pendiente por empacar desde cotizaciones aprobadas — top productos con mayor faltante"}
         infoLabel="Presión operativa"
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
-          <BarChart
-            data={missingDemandChart}
-            xKey="product"
-            bars={[{ dataKey: "demanda_faltante", name: "Demanda faltante (u)" }]}
-            height={Math.max(320, missingDemandChart.length * 24)}
-            valueFormatter={(v) => `${formatNumber(v)} u`}
-            horizontal
-            colorScale={[
-              "#FF453A", "#FF6B6B", "#FF9F0A", "#FFB020",
-              "#FFD60A", "#1AAD58", "#30D158", "#34C759",
-              "#00C2FF", "#0A84FF", "#0051FF", "#AF52DE",
-              "#BF5AF2", "#E040FB", "#FF6E40",
-            ]}
-          />
-          <div className="flex flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Análisis Pareto
-            </div>
-            <div className="overflow-hidden rounded-[var(--radius-md)] border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Producto
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Faltante
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      % Acum
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Venta pend.
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {missingDemandParetoRows.map((row) => (
-                    <tr key={row.product + (row.sku ?? "")} className="border-t">
-                      <td className="px-3 py-2 text-[13px] text-foreground">
-                        <div className="truncate max-w-[140px]" title={row.product}>
-                          {row.product}
-                        </div>
-                        {row.sku ? (
-                          <div className="text-[11px] text-muted-foreground">SKU {row.sku}</div>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
-                        {formatNumber(row.demanda_faltante)} u
-                      </td>
-                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
-                        {formatNumber(row.pareto_percent ?? 0)}%
-                      </td>
-                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
-                        {formatCurrencyMXN(row.valor_venta_pendiente)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {missingDemandParetoRows.length === 0 && missingDemand.status !== "loading" ? (
-              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                Sin productos faltantes en el periodo
-              </div>
-            ) : null}
+        <ProductSearchInput
+          suggestions={(missingDemand.data ?? []).map((d) => ({
+            product: d.product,
+            sku: d.sku,
+            qty: d.demanda_faltante,
+            revenue: d.valor_venta_pendiente,
+          }))}
+          loading={missingDemand.status === "loading"}
+          onSearch={handleMissingDemandSearch}
+          onSelect={handleMissingDemandSelect}
+          selectedProduct={selectedMissingDemandSku}
+        />
+
+        {missingDemandSearch && !selectedMissingDemandSku ? (
+          <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+            Selecciona un producto de la lista para ver su información
           </div>
-        </div>
+        ) : missingDemandParetoRows.length === 0 ? (
+          <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+            Sin productos faltantes por empacar en el periodo
+          </div>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start" style={{ minHeight: 600 }}>
+            <div className="h-[600px]">
+              <BarChart
+                data={missingDemandChart}
+                xKey="product"
+                bars={[{ dataKey: "demanda_faltante", name: "Demanda faltante (u)" }]}
+                height="100%"
+                valueFormatter={(v) => `${formatNumber(v)} u`}
+                horizontal
+                colorScale={[
+                  "#FF453A", "#FF6B6B", "#FF9F0A", "#FFB020",
+                  "#FFD60A", "#1AAD58", "#30D158", "#34C759",
+                  "#00C2FF", "#0A84FF", "#0051FF", "#AF52DE",
+                  "#BF5AF2", "#E040FB", "#FF6E40",
+                ]}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Análisis Pareto
+              </div>
+              <div className="overflow-hidden rounded-[var(--radius-md)] border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Producto
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Faltante
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        % Acum
+                      </th>
+                      <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Venta pend.
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {missingDemandParetoRows.map((row) => (
+                      <tr key={row.product + (row.sku ?? "")} className="border-t">
+                        <td className="px-3 py-2 text-[13px] text-foreground">
+                          <div className="truncate max-w-[140px]" title={row.product}>
+                            {row.product}
+                          </div>
+                          {row.sku ? (
+                            <div className="text-[11px] text-muted-foreground">SKU {row.sku}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                          {formatNumber(row.demanda_faltante)} u
+                        </td>
+                        <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                          {formatNumber(row.pareto_percent ?? 0)}%
+                        </td>
+                        <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                          {formatCurrencyMXN(row.valor_venta_pendiente)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </ChartPanel>
 
       <ChartPanel
@@ -1627,24 +1691,30 @@ export function VentasDashboard() {
 
       <ChartPanel
         title="Clientes en Riesgo de Abandono"
-        subtitle="Comparación de compras: últimos 90 días vs 90 días previos"
+        subtitle="Subtotal acumulado (cotizaciones aprobadas): últimos 90 días vs historial anterior"
         infoLabel="Retención de clientes"
       >
+        <AtRiskCustomerSearch
+          customers={atRiskCustomers.data ?? []}
+          selected={selectedAtRiskCustomer}
+          onSelect={setSelectedAtRiskCustomer}
+        />
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
           <BarChart
             data={atRiskChart}
             xKey="customer"
             bars={[
               { dataKey: "ultimos_90", name: "Últimos 90 días", color: "#0051FF" },
-              { dataKey: "previos_90", name: "90 días previos", color: "#8E8E93" },
+              { dataKey: "previos_90", name: "Antes de 90 días", color: "#8E8E93" },
             ]}
-            height={Math.max(280, atRiskChart.length * 28)}
+            height={Math.max(280, atRiskChart.length * 40)}
             valueFormatter={formatCurrencyMXN}
             horizontal
           />
           <div className="flex flex-col gap-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Semáforo de riesgo
+              {selectedAtRiskCustomer ? "Detalle del cliente" : "Semáforo de riesgo"}
             </div>
             <div className="overflow-hidden rounded-[var(--radius-md)] border">
               <table className="w-full text-sm">
@@ -1657,7 +1727,7 @@ export function VentasDashboard() {
                       Últ. 90d
                     </th>
                     <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Prev. 90d
+                      Antes 90d
                     </th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                       Riesgo
@@ -1665,21 +1735,24 @@ export function VentasDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(atRiskCustomers.data ?? []).map((row) => {
+                  {atRiskVisible.map((row) => {
                     const riskColor =
                       row.riesgo_abandono === "Crítico"
                         ? "bg-red-100 text-red-700"
                         : row.riesgo_abandono === "Alto"
                           ? "bg-orange-100 text-orange-700"
-                          : row.riesgo_abandono === "Medio"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
                     return (
                       <tr key={row.customer_id ?? row.customer_name} className="border-t">
                         <td className="px-3 py-2 text-[13px] text-foreground">
                           <div className="truncate max-w-[140px]" title={row.customer_name}>
                             {row.customer_name}
                           </div>
+                          {row.external_id && (
+                            <div className="text-[11px] text-muted-foreground">
+                              ID: {row.external_id}
+                            </div>
+                          )}
                           {row.ultima_compra ? (
                             <div className="text-[11px] text-muted-foreground">
                               {formatIsoDate(row.ultima_compra)}
@@ -1705,12 +1778,6 @@ export function VentasDashboard() {
                 </tbody>
               </table>
             </div>
-            {(atRiskCustomers.data ?? []).length === 0 &&
-            atRiskCustomers.status !== "loading" ? (
-              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                Sin datos de clientes para evaluar riesgo
-              </div>
-            ) : null}
           </div>
         </div>
       </ChartPanel>

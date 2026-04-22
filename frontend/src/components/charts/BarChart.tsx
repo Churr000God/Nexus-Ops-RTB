@@ -22,7 +22,7 @@ type BarChartProps<T extends Record<string, unknown>> = {
   data: T[]
   xKey: keyof T & string
   bars: BarSeries<T>[]
-  height?: number
+  height?: number | string
   valueFormatter?: (value: number) => string
   className?: string
   horizontal?: boolean

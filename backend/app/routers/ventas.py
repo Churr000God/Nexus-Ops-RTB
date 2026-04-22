@@ -210,12 +210,13 @@ async def missing_demand(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
+    product_search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[MissingDemandResponse]:
     service = VentasService(db)
     return await service.missing_demand_by_product(
-        start_date=start_date, end_date=end_date, limit=limit
+        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
     )
 
 

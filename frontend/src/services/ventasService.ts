@@ -244,6 +244,7 @@ export const ventasService = {
       startDate?: string | null
       endDate?: string | null
       limit?: number
+      productSearch?: string
     },
     signal?: AbortSignal
   ) {
@@ -252,6 +253,7 @@ export const ventasService = {
         start_date: params?.startDate,
         end_date: params?.endDate,
         limit: params?.limit,
+        product_search: params?.productSearch || undefined,
       }),
       { token, signal }
     )

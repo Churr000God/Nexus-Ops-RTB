@@ -823,41 +823,48 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
         limit: int,
+        product_search: str | None = None,
     ) -> list[MissingDemandResponse]:
-        status_text = func.lower(func.coalesce(Quote.status, literal("")))
-        active_condition = or_(
-            status_text.like("%aprob%"),
-            status_text.like("%pend%"),
-            status_text.like("%seguim%"),
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
+
+        filters = [
+            "(c.approved_on IS NOT NULL OR LOWER(COALESCE(c.status, '')) LIKE '%aprob%')"
+        ]
+        params: dict = {}
+        if start_dt is not None:
+            filters.append("c.approved_on >= :start_dt")
+            params["start_dt"] = start_dt
+        if end_dt is not None:
+            filters.append("c.approved_on < :end_dt")
+            params["end_dt"] = end_dt
+        if product_search and product_search.strip():
+            filters.append("(p.name ILIKE :search OR ci.sku ILIKE :search)")
+            params["search"] = f"%{product_search.strip()}%"
+
+        where_clause = " AND ".join(filters)
+        params["limit"] = limit
+
+        sql = text(
+            f"""
+            SELECT
+                COALESCE(p.name, ci.sku, 'Sin producto') AS product,
+                ci.sku,
+                ci.category,
+                COALESCE(SUM(ci.qty_requested), 0) - COALESCE(SUM(ci.qty_packed), 0) AS demanda_faltante,
+                COALESCE(SUM(ci.subtotal), 0) AS valor_venta_pendiente,
+                COALESCE(SUM(ci.purchase_subtotal), 0) AS costo_compra_estimado
+            FROM cotizacion_items ci
+            JOIN cotizaciones c ON ci.quote_id = c.id
+            LEFT JOIN productos p ON ci.product_id = p.id
+            WHERE {where_clause}
+            GROUP BY COALESCE(p.name, ci.sku, 'Sin producto'), ci.sku, ci.category
+            HAVING COALESCE(SUM(ci.qty_requested), 0) - COALESCE(SUM(ci.qty_packed), 0) > 0
+            ORDER BY demanda_faltante DESC
+            LIMIT :limit
+            """
         )
-        product_key = func.coalesce(
-            Product.name, QuoteItem.sku, literal("Sin producto")
-        )
-        stmt = (
-            select(
-                product_key.label("product"),
-                QuoteItem.sku.label("sku"),
-                QuoteItem.category.label("category"),
-                func.coalesce(func.sum(QuoteItem.qty_missing), 0).label(
-                    "demanda_faltante"
-                ),
-                func.coalesce(func.sum(QuoteItem.subtotal), 0).label(
-                    "valor_venta_pendiente"
-                ),
-                func.coalesce(func.sum(QuoteItem.purchase_subtotal), 0).label(
-                    "costo_compra_estimado"
-                ),
-            )
-            .select_from(QuoteItem)
-            .join(Quote, Quote.id == QuoteItem.quote_id)
-            .outerjoin(Product, Product.id == QuoteItem.product_id)
-            .where(active_condition)
-            .where(QuoteItem.qty_missing > 0)
-            .group_by(product_key, QuoteItem.sku, QuoteItem.category)
-            .order_by(func.coalesce(func.sum(QuoteItem.qty_missing), 0).desc())
-            .limit(limit)
-        )
-        rows = (await self.db.execute(stmt)).all()
+
+        rows = (await self.db.execute(sql, params)).all()
         total_demand = sum(_to_float(row.demanda_faltante) for row in rows)
         cumulative = 0.0
         results: list[MissingDemandResponse] = []
@@ -1026,36 +1033,40 @@ class VentasService:
     async def at_risk_customers(self) -> list[AtRiskCustomerResponse]:
         """Detecta clientes cuya compra ha bajado respecto a periodos anteriores.
 
-        Compara compras de los ultimos 90 dias contra los 90 dias previos.
+        Compara subtotal acumulado de cotizaciones Aprobadas en ventas:
+        ultimos 90 dias vs todo el historial anterior a esos 90 dias.
         """
         sql = text(
             """
             WITH compras_cliente AS (
                 SELECT
-                    v.customer_id,
-                    COALESCE(c.name, 'Sin cliente') AS customer_name,
-                    SUM(CASE
+                    c.id          AS customer_id,
+                    c.external_id AS external_id,
+                    c.name        AS customer_name,
+                    COALESCE(SUM(CASE
                         WHEN v.sold_on >= CURRENT_DATE - INTERVAL '90 days'
-                        THEN COALESCE(v.total, 0)
-                        ELSE 0
-                    END) AS compras_ult_90,
-                    SUM(CASE
-                        WHEN v.sold_on >= CURRENT_DATE - INTERVAL '180 days'
-                         AND v.sold_on < CURRENT_DATE - INTERVAL '90 days'
-                        THEN COALESCE(v.total, 0)
-                        ELSE 0
-                    END) AS compras_90_previos,
+                        THEN v.subtotal
+                    END), 0)    AS compras_ult_90,
+                    COALESCE(SUM(CASE
+                        WHEN v.sold_on < CURRENT_DATE - INTERVAL '90 days'
+                        THEN v.subtotal
+                    END), 0)    AS compras_90_previos,
                     MAX(v.sold_on) AS ultima_compra
-                FROM ventas v
-                LEFT JOIN clientes c
-                    ON v.customer_id = c.id
-                WHERE v.status NOT IN ('cancelada', 'cancelado')
+                FROM clientes c
+                JOIN cotizaciones q
+                    ON q.customer_id = c.id
+                    AND q.status = 'Aprobada'
+                JOIN ventas v
+                    ON v.quote_id = q.id
+                WHERE v.subtotal IS NOT NULL
                 GROUP BY
-                    v.customer_id,
+                    c.id,
+                    c.external_id,
                     c.name
             )
             SELECT
                 customer_id,
+                external_id,
                 customer_name,
                 compras_ult_90,
                 compras_90_previos,
@@ -1067,14 +1078,10 @@ class VentasService:
                     ELSE 'Bajo'
                 END AS riesgo_abandono
             FROM compras_cliente
-            ORDER BY
-                CASE
-                    WHEN compras_90_previos > 0 AND compras_ult_90 = 0 THEN 1
-                    WHEN compras_ult_90 < compras_90_previos * 0.5 THEN 2
-                    WHEN compras_ult_90 < compras_90_previos * 0.8 THEN 3
-                    ELSE 4
-                END,
-                ultima_compra ASC
+            WHERE
+                (compras_90_previos > 0 AND compras_ult_90 = 0)
+                OR compras_ult_90 < compras_90_previos * 0.8
+            ORDER BY compras_ult_90 DESC
             """
         )
 
@@ -1083,6 +1090,7 @@ class VentasService:
         return [
             AtRiskCustomerResponse(
                 customer_id=row.customer_id,
+                external_id=row.external_id,
                 customer_name=row.customer_name,
                 compras_ult_90=float(row.compras_ult_90),
                 compras_90_previos=float(row.compras_90_previos),

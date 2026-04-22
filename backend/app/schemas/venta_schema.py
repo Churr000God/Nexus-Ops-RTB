@@ -149,6 +149,7 @@ class SalesForecastByProductResponse(BaseModel):
 
 class AtRiskCustomerResponse(BaseModel):
     customer_id: UUID | None = None
+    external_id: str | None = None
     customer_name: str
     compras_ult_90: float
     compras_90_previos: float
