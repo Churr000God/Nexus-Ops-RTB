@@ -37,6 +37,8 @@ from app.schemas.venta_schema import (
     GrossMarginByProductResponse,
     MonthlyGrowthYoYByCustomerTypeResponse,
     MissingDemandResponse,
+    CustomerPaymentStatResponse,
+    CustomerSearchItemResponse,
     PaymentTrendResponse,
     PendingPaymentCustomerResponse,
     ProductsByCustomerTypeResponse,
@@ -781,12 +783,14 @@ class VentasService:
         end_date: date | None,
         status: str | None,
         limit: int,
+        search: str | None = None,
     ) -> list[RecentQuoteResponse]:
         customer_name_expr = func.coalesce(Customer.name, literal("Sin cliente"))
         stmt = (
             select(
                 Quote.id.label("id"),
                 Quote.name.label("name"),
+                Quote.po_pr.label("po_pr"),
                 Quote.created_at.label("created_at"),
                 Quote.status.label("status"),
                 Quote.total.label("total"),
@@ -802,12 +806,22 @@ class VentasService:
             condition = _quote_status_filter(status)
             if condition is not None:
                 stmt = stmt.where(condition)
+        if search and search.strip():
+            pattern = f"%{search.strip()}%"
+            stmt = stmt.where(
+                or_(
+                    Quote.name.ilike(pattern),
+                    Quote.po_pr.ilike(pattern),
+                    Customer.name.ilike(pattern),
+                )
+            )
         rows = (await self.db.execute(stmt)).all()
 
         return [
             RecentQuoteResponse(
                 id=row.id,
                 name=row.name,
+                po_pr=row.po_pr,
                 created_on=row.created_at,
                 customer_name=row.customer_name,
                 status=row.status,
@@ -926,6 +940,7 @@ class VentasService:
         end_date: date | None,
         limit: int,
         months_window: int,
+        product_search: str | None = None,
     ) -> list[SalesForecastByProductResponse]:
         # Promedio móvil de los últimos N meses por producto.
         # Usa cotizacion_items como fuente de unidades y ventas/cotizaciones para fecha.
@@ -961,6 +976,10 @@ class VentasService:
                         :end_date IS NULL
                         OR COALESCE(v.sold_on, q.approved_on, q.created_on)
                             <= :end_date ::date
+                    )
+                    AND (
+                        :search IS NULL
+                        OR COALESCE(p.name, cl.sku, '') ILIKE :search
                     )
                 GROUP BY
                     cl.product_id,
@@ -1006,6 +1025,7 @@ class VentasService:
             bindparam("end_date", type_=Date()),
             bindparam("months_window", type_=Integer()),
             bindparam("limit", type_=Integer()),
+            bindparam("search", type_=String()),
         )
 
         rows = (
@@ -1016,6 +1036,7 @@ class VentasService:
                     "end_date": end_date,
                     "months_window": months_window,
                     "limit": limit,
+                    "search": f"%{product_search}%" if product_search and product_search.strip() else None,
                 },
             )
         ).all()
@@ -1503,6 +1524,133 @@ class VentasService:
                 dias_sin_pagar=int(row.dias_sin_pagar)
                 if row.dias_sin_pagar is not None
                 else None,
+            )
+            for row in rows
+        ]
+
+    async def customer_payment_stats(
+        self, customer_id: str | None = None
+    ) -> list[CustomerPaymentStatResponse]:
+        """Top-10 (o cliente específico) con días sin pago y monto pendiente.
+
+        Lógica de días:
+        - Pedidos pagados: usa payment_time_days guardado.
+        - Pedidos no pagados: CURRENT_DATE − COALESCE(pc.approved_on,
+          cot.approved_on::date, pc.ordered_on, cot.created_on::date).
+        Cuando no se filtra por cliente devuelve top-10 por max_dias_sin_pago
+        ordenados por monto_pendiente_mxn DESC.
+        """
+        customer_filter = "AND c.id = :customer_id ::uuid" if customer_id else ""
+        sql = text(
+            f"""
+            WITH datos_pago AS (
+                SELECT
+                    c.id                    AS cliente_id,
+                    c.name                  AS cliente,
+                    CASE
+                        WHEN pc.paid_on IS NULL OR pc.payment_time_days IS NULL
+                            THEN (CURRENT_DATE - COALESCE(
+                                    pc.approved_on,
+                                    cot.approved_on::date,
+                                    pc.ordered_on,
+                                    cot.created_on::date
+                                ))
+                        ELSE pc.payment_time_days
+                    END                     AS dias_pago_efectivo,
+                    CASE
+                        WHEN pc.payment_status IN ('No pagada', 'Pagada Parcial')
+                            THEN COALESCE(pc.total, 0)
+                        ELSE 0
+                    END                     AS monto_pendiente,
+                    CASE
+                        WHEN pc.paid_on IS NULL OR pc.payment_time_days IS NULL
+                            THEN 1 ELSE 0
+                    END                     AS es_sin_pagar,
+                    CASE
+                        WHEN pc.paid_on IS NULL OR pc.payment_time_days IS NULL
+                            THEN (CURRENT_DATE - COALESCE(
+                                    pc.approved_on,
+                                    cot.approved_on::date,
+                                    pc.ordered_on,
+                                    cot.created_on::date
+                                ))
+                        ELSE NULL
+                    END                     AS dias_sin_pago
+                FROM clientes c
+                JOIN cotizaciones cot
+                    ON cot.customer_id = c.id
+                    AND cot.status = 'Aprobada'
+                JOIN pedidos_clientes pc
+                    ON pc.quote_id = cot.id
+                WHERE (
+                    pc.payment_time_days IS NOT NULL
+                    OR pc.payment_status IN ('No pagada', 'Pagada Parcial')
+                    OR (
+                        pc.paid_on IS NULL
+                        AND COALESCE(
+                            pc.approved_on, cot.approved_on::date,
+                            pc.ordered_on, cot.created_on::date
+                        ) IS NOT NULL
+                    )
+                )
+                {customer_filter}
+            ),
+            agregado AS (
+                SELECT
+                    cliente_id::text                            AS customer_id,
+                    cliente                                     AS customer_name,
+                    COUNT(*)                                    AS cotizaciones_base,
+                    ROUND(AVG(dias_pago_efectivo)::numeric, 1) AS promedio_dias_pago,
+                    ROUND(SUM(monto_pendiente)::numeric, 2)    AS monto_pendiente_mxn,
+                    SUM(es_sin_pagar)::int                     AS cot_sin_pagar,
+                    MAX(dias_sin_pago)::int                    AS max_dias_sin_pago
+                FROM datos_pago
+                WHERE dias_pago_efectivo IS NOT NULL
+                GROUP BY cliente_id, cliente
+                ORDER BY max_dias_sin_pago DESC NULLS LAST
+                LIMIT 10
+            )
+            SELECT * FROM agregado
+            ORDER BY monto_pendiente_mxn DESC
+            """
+        )
+        params: dict = {}
+        if customer_id:
+            params["customer_id"] = customer_id
+        rows = (await self.db.execute(sql, params)).all()
+        return [
+            CustomerPaymentStatResponse(
+                customer_id=row.customer_id,
+                customer_name=row.customer_name,
+                cotizaciones_base=int(row.cotizaciones_base),
+                promedio_dias_pago=float(row.promedio_dias_pago),
+                monto_pendiente_mxn=float(row.monto_pendiente_mxn),
+                cot_sin_pagar=int(row.cot_sin_pagar),
+                max_dias_sin_pago=int(row.max_dias_sin_pago)
+                if row.max_dias_sin_pago is not None
+                else None,
+            )
+            for row in rows
+        ]
+
+    async def search_customers_payment(self, q: str) -> list[CustomerSearchItemResponse]:
+        """Búsqueda de clientes por nombre o external_id (ILIKE, límite 10)."""
+        like = f"%{q}%"
+        sql = text(
+            """
+            SELECT id::text, name, external_id
+            FROM clientes
+            WHERE name ILIKE :like OR external_id ILIKE :like
+            ORDER BY name
+            LIMIT 10
+            """
+        )
+        rows = (await self.db.execute(sql, {"like": like})).all()
+        return [
+            CustomerSearchItemResponse(
+                id=row.id,
+                name=row.name,
+                external_id=row.external_id,
             )
             for row in rows
         ]

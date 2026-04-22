@@ -27,6 +27,8 @@ from app.schemas.venta_schema import (
     SalesByMonthResponse,
     SalesForecastByProductResponse,
     SalesProjectionByMonthResponse,
+    CustomerPaymentStatResponse,
+    CustomerSearchItemResponse,
     SalesSummaryResponse,
 )
 from app.services.ventas_service import VentasService
@@ -196,12 +198,13 @@ async def recent_quotes(
     end_date: date | None = Query(default=None),
     status: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=100),
+    search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[RecentQuoteResponse]:
     service = VentasService(db)
     return await service.recent_quotes(
-        start_date=start_date, end_date=end_date, status=status, limit=limit
+        start_date=start_date, end_date=end_date, status=status, limit=limit, search=search
     )
 
 
@@ -226,6 +229,7 @@ async def product_forecast(
     end_date: date | None = Query(default=None),
     limit: int = Query(default=15, ge=1, le=50),
     months_window: int = Query(default=3, ge=1, le=12),
+    product_search: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[SalesForecastByProductResponse]:
@@ -235,6 +239,7 @@ async def product_forecast(
         end_date=end_date,
         limit=limit,
         months_window=months_window,
+        product_search=product_search,
     )
 
 
@@ -335,3 +340,29 @@ async def pending_payment_customers(
 ) -> list[PendingPaymentCustomerResponse]:
     service = VentasService(db)
     return await service.pending_payment_customers()
+
+
+@router.get(
+    "/customer-payment-stats",
+    response_model=list[CustomerPaymentStatResponse],
+)
+async def customer_payment_stats(
+    customer_id: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[CustomerPaymentStatResponse]:
+    service = VentasService(db)
+    return await service.customer_payment_stats(customer_id=customer_id)
+
+
+@router.get(
+    "/customer-search",
+    response_model=list[CustomerSearchItemResponse],
+)
+async def customer_search(
+    q: str = Query(min_length=2, max_length=100),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[CustomerSearchItemResponse]:
+    service = VentasService(db)
+    return await service.search_customers_payment(q=q)

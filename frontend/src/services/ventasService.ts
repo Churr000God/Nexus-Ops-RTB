@@ -3,6 +3,8 @@ import type {
   ApprovedVsCancelledByMonth,
   AtRiskCustomer,
   AvgSalesByCustomerType,
+  CustomerPaymentStat,
+  CustomerSearchItem,
   DashboardOverview,
   GrossMarginByProduct,
   MonthlyGrowthYoYByCustomerType,
@@ -224,6 +226,7 @@ export const ventasService = {
       endDate?: string | null
       status?: string | null
       limit?: number
+      search?: string
     },
     signal?: AbortSignal
   ) {
@@ -233,6 +236,7 @@ export const ventasService = {
         end_date: params?.endDate,
         status: params?.status,
         limit: params?.limit,
+        search: params?.search || undefined,
       }),
       { token, signal }
     )
@@ -266,6 +270,7 @@ export const ventasService = {
       endDate?: string | null
       limit?: number
       monthsWindow?: number
+      productSearch?: string
     },
     signal?: AbortSignal
   ) {
@@ -275,6 +280,7 @@ export const ventasService = {
         end_date: params?.endDate,
         limit: params?.limit,
         months_window: params?.monthsWindow,
+        product_search: params?.productSearch || undefined,
       }),
       { token, signal }
     )
@@ -363,6 +369,26 @@ export const ventasService = {
   pendingPayments(token: string, signal?: AbortSignal) {
     return requestJson<PendingPaymentCustomer[]>(
       withQuery("/api/ventas/pending-payments", {}),
+      { token, signal }
+    )
+  },
+
+  customerPaymentStats(
+    token: string,
+    params?: { customerId?: string },
+    signal?: AbortSignal
+  ) {
+    return requestJson<CustomerPaymentStat[]>(
+      withQuery("/api/ventas/customer-payment-stats", {
+        customer_id: params?.customerId,
+      }),
+      { token, signal }
+    )
+  },
+
+  customerSearch(token: string, q: string, signal?: AbortSignal) {
+    return requestJson<CustomerSearchItem[]>(
+      withQuery("/api/ventas/customer-search", { q }),
       { token, signal }
     )
   },

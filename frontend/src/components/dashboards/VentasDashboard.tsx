@@ -19,7 +19,9 @@ import { LineChart } from "@/components/charts/LineChart"
 import { PieChart } from "@/components/charts/PieChart"
 import { AtRiskCustomerSearch } from "@/components/common/AtRiskCustomerSearch"
 import { CustomerSearchInput } from "@/components/common/CustomerSearchInput"
+import { PaymentCustomerSearch } from "@/components/common/PaymentCustomerSearch"
 import { ProductSearchInput } from "@/components/common/ProductSearchInput"
+import { QuoteSearchInput } from "@/components/common/QuoteSearchInput"
 import { DataTable } from "@/components/common/DataTable"
 import { DateRangePicker } from "@/components/common/DateRangePicker"
 import { KpiCard } from "@/components/common/KpiCard"
@@ -33,6 +35,8 @@ import { useSyncStore } from "@/stores/syncStore"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
 import type {
   AtRiskCustomer,
+  CustomerPaymentStat,
+  CustomerSearchItem,
   PendingPaymentCustomer,
   AvgSalesByCustomerType,
   MonthlyGrowthYoYByCustomerType,
@@ -57,7 +61,13 @@ export function VentasDashboard() {
   const [selectedMarginProductSku, setSelectedMarginProductSku] = useState<string | null>(null)
   const [missingDemandSearch, setMissingDemandSearch] = useState("")
   const [selectedMissingDemandSku, setSelectedMissingDemandSku] = useState<string | null>(null)
+  const [forecastProductSearch, setForecastProductSearch] = useState("")
+  const [selectedForecastProductSku, setSelectedForecastProductSku] = useState<string | null>(null)
+  const [quoteSearch, setQuoteSearch] = useState("")
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
   const [selectedAtRiskCustomer, setSelectedAtRiskCustomer] = useState<AtRiskCustomer | null>(null)
+  const [selectedPaymentCustomer, setSelectedPaymentCustomer] = useState<CustomerSearchItem | null>(null)
+  const [paymentCustomerQuery, setPaymentCustomerQuery] = useState("")
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
@@ -151,26 +161,36 @@ export function VentasDashboard() {
     (signal: AbortSignal) =>
       ventasService.recentQuotes(
         token ?? "",
-        { limit: 10, status: statusFilter === "all" ? null : statusFilter },
+        {
+          limit: selectedQuoteId ? 1 : quoteSearch ? 30 : 10,
+          status: statusFilter === "all" ? null : statusFilter,
+          search: selectedQuoteId || quoteSearch || undefined,
+        },
         signal
       ),
-    [token, statusFilter, syncVersion]
+    [token, statusFilter, syncVersion, quoteSearch, selectedQuoteId]
   )
   const recentQuotes = useApi(
     fetchRecentQuotes,
     { enabled: Boolean(token) },
-    token, startDate, endDate, syncVersion
+    token, startDate, endDate, syncVersion, statusFilter, quoteSearch, selectedQuoteId
   )
 
   const fetchProductForecast = useCallback(
     (signal: AbortSignal) =>
-      ventasService.productForecast(token ?? "", { startDate, endDate, limit: 15 }, signal),
-    [token, startDate, endDate, syncVersion]
+      ventasService.productForecast(token ?? "", {
+        startDate,
+        endDate,
+        limit: selectedForecastProductSku ? 1 : 10,
+        monthsWindow: 3,
+        productSearch: selectedForecastProductSku || forecastProductSearch || undefined,
+      }, signal),
+    [token, startDate, endDate, syncVersion, forecastProductSearch, selectedForecastProductSku]
   )
   const productForecast = useApi(
     fetchProductForecast,
     { enabled: Boolean(token) },
-    token, startDate, endDate, syncVersion
+    token, startDate, endDate, syncVersion, forecastProductSearch, selectedForecastProductSku
   )
 
   const fetchMissingDemand = useCallback(
@@ -222,6 +242,34 @@ export function VentasDashboard() {
     fetchPaymentTrend,
     { enabled: Boolean(token) },
     token, startDate, endDate, syncVersion
+  )
+
+  const fetchPaymentCustomerSearch = useCallback(
+    (signal: AbortSignal) =>
+      paymentCustomerQuery.length >= 2
+        ? ventasService.customerSearch(token ?? "", paymentCustomerQuery, signal)
+        : Promise.resolve([] as CustomerSearchItem[]),
+    [token, paymentCustomerQuery]
+  )
+  const paymentCustomerSearchResult = useApi(
+    fetchPaymentCustomerSearch,
+    { enabled: Boolean(token) && paymentCustomerQuery.length >= 2 },
+    token, paymentCustomerQuery
+  )
+
+  const fetchCustomerPaymentStats = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.customerPaymentStats(
+        token ?? "",
+        { customerId: selectedPaymentCustomer?.id ?? undefined },
+        signal
+      ),
+    [token, selectedPaymentCustomer?.id, syncVersion]
+  )
+  const customerPaymentStats = useApi(
+    fetchCustomerPaymentStats,
+    { enabled: Boolean(token) },
+    token, selectedPaymentCustomer?.id, syncVersion
   )
 
   const fetchProductsByCustomerType = useCallback(
@@ -355,6 +403,28 @@ export function VentasDashboard() {
     setSelectedMissingDemandSku(sku)
   }, [])
 
+  const handleForecastProductSearch = useCallback((value: string) => {
+    setForecastProductSearch(value)
+    if (!value.trim()) {
+      setSelectedForecastProductSku(null)
+    }
+  }, [])
+
+  const handleForecastProductSelect = useCallback((sku: string | null, _name: string) => {
+    setSelectedForecastProductSku(sku)
+  }, [])
+
+  const handleQuoteSearch = useCallback((value: string) => {
+    setQuoteSearch(value)
+    if (!value.trim()) {
+      setSelectedQuoteId(null)
+    }
+  }, [])
+
+  const handleQuoteSelect = useCallback((id: string | null) => {
+    setSelectedQuoteId(id)
+  }, [])
+
   const byCustomerChart = useMemo(() => {
     return (topCustomers.data ?? []).map((row) => ({
       customer: row.customer,
@@ -430,6 +500,14 @@ export function VentasDashboard() {
       predicted_units: row.predicted_units,
       sku: row.sku ?? "",
       category: row.category ?? "",
+    }))
+  }, [productForecast.data])
+
+  const forecastProductSuggestions = useMemo(() => {
+    return (productForecast.data ?? []).map((row) => ({
+      product: row.product,
+      sku: row.sku,
+      qty: row.predicted_units,
     }))
   }, [productForecast.data])
 
@@ -593,6 +671,9 @@ export function VentasDashboard() {
 
   const filteredQuotes = useMemo(() => {
     const rows = recentQuotes.data ?? []
+    if (selectedQuoteId) {
+      return rows.filter((row) => row.id === selectedQuoteId)
+    }
     if (statusFilter === "all") return rows
 
     return rows.filter((row) => {
@@ -609,7 +690,7 @@ export function VentasDashboard() {
       if (statusFilter === "expired") return normalized.includes("expir")
       return normalized === statusFilter
     })
-  }, [recentQuotes.data, statusFilter])
+  }, [recentQuotes.data, statusFilter, selectedQuoteId])
 
   const salesTableSummary = useMemo(() => {
     return `${formatNumber(filteredQuotes.length)} cotizaciones visibles`
@@ -1630,8 +1711,8 @@ export function VentasDashboard() {
       </ChartPanel>
 
       <ChartPanel
-        title="Predicción de Ventas por Producto"
-        subtitle="Promedio móvil de los últimos 3 meses — estima unidades a vender el próximo periodo"
+        title={selectedForecastProductSku ? `Predicción: ${selectedForecastProductSku}` : "Predicción de Ventas por Producto"}
+        subtitle={selectedForecastProductSku ? "Detalle del producto seleccionado" : "Promedio móvil de los últimos 3 meses — top 10 productos con mayor demanda proyectada"}
         infoLabel="Pronóstico"
         action={
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--primary)/0.08)] px-2.5 py-1 text-[11px] font-medium text-[hsl(var(--primary))]">
@@ -1640,53 +1721,66 @@ export function VentasDashboard() {
           </span>
         }
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start">
-          <BarChart
-            data={forecastChart}
-            xKey="product"
-            bars={[{ dataKey: "predicted_units", name: "Unidades proyectadas" }]}
-            height={Math.max(320, forecastChart.length * 36)}
-            valueFormatter={(v) => `${formatNumber(v)} u`}
-            horizontal
-            colorScale={[
-              "#0051FF", "#1AAD58", "#FFB020", "#AF52DE",
-              "#FF6B6B", "#00C2FF", "#34C759", "#FF9F0A",
-              "#BF5AF2", "#FF453A", "#0A84FF", "#30D158",
-              "#FFD60A", "#E040FB", "#FF6E40",
-            ]}
-          />
-          <div className="flex flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Top productos
-            </div>
-            {forecastChart.slice(0, 8).map((row, index) => (
-              <div
-                key={row.product}
-                className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border bg-muted/30 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold text-foreground">
-                    {index + 1}. {row.product}
-                  </div>
-                  {row.sku ? (
-                    <div className="text-[11px] text-muted-foreground">SKU {row.sku}</div>
-                  ) : null}
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm font-bold text-[hsl(var(--primary))]">
-                    {formatNumber(row.predicted_units)}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">u / mes</div>
-                </div>
-              </div>
-            ))}
-            {forecastChart.length === 0 && productForecast.status !== "loading" ? (
-              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                Sin datos suficientes para proyectar
-              </div>
-            ) : null}
+        <ProductSearchInput
+          suggestions={forecastProductSuggestions}
+          loading={productForecast.status === "loading"}
+          onSearch={handleForecastProductSearch}
+          onSelect={handleForecastProductSelect}
+          selectedProduct={selectedForecastProductSku}
+        />
+
+        {forecastProductSearch && !selectedForecastProductSku ? (
+          <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+            Selecciona un producto de la lista para ver su información
           </div>
-        </div>
+        ) : forecastChart.length === 0 ? (
+          <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+            Sin datos suficientes para proyectar
+          </div>
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start">
+            <BarChart
+              data={forecastChart}
+              xKey="product"
+              bars={[{ dataKey: "predicted_units", name: "Unidades proyectadas" }]}
+              height={Math.max(320, forecastChart.length * 36)}
+              valueFormatter={(v) => `${formatNumber(v)} u`}
+              horizontal
+              colorScale={[
+                "#0051FF", "#1AAD58", "#FFB020", "#AF52DE",
+                "#FF6B6B", "#00C2FF", "#34C759", "#FF9F0A",
+                "#BF5AF2", "#FF453A", "#0A84FF", "#30D158",
+                "#FFD60A", "#E040FB", "#FF6E40",
+              ]}
+            />
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {selectedForecastProductSku ? "Producto seleccionado" : "Top productos"}
+              </div>
+              {forecastChart.map((row, index) => (
+                <div
+                  key={row.product}
+                  className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border bg-muted/30 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-foreground">
+                      {selectedForecastProductSku ? row.product : `${index + 1}. ${row.product}`}
+                    </div>
+                    {row.sku ? (
+                      <div className="text-[11px] text-muted-foreground">SKU {row.sku}</div>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-sm font-bold text-[hsl(var(--primary))]">
+                      {formatNumber(row.predicted_units)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">u / mes</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </ChartPanel>
 
       <ChartPanel
@@ -1789,30 +1883,41 @@ export function VentasDashboard() {
         maxHeight="430px"
         toolbar={
           <>
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-foreground">Cotizaciones recientes</div>
-              <div className="text-xs text-muted-foreground">
-                {salesTableSummary} · Últimas cotizaciones ordenadas por created_at
+            <div className="space-y-2 w-full">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-foreground">Cotizaciones recientes</div>
+                  <div className="text-xs text-muted-foreground">
+                    {salesTableSummary} · Últimas cotizaciones ordenadas por created_at
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge variant={recentQuotes.status === "error" ? "error" : "success"}>
+                    {recentQuotes.status === "error" ? "Revisar cotizaciones" : "Datos cargados"}
+                  </StatusBadge>
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    className="h-10 rounded-[var(--radius-md)] border bg-background px-3 text-sm text-foreground shadow-soft-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label="Filtrar ventas por estado"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="approved">Aprobadas</option>
+                    <option value="review">En revisión</option>
+                    <option value="quoting">En Cotización</option>
+                    <option value="cancelled">Canceladas</option>
+                    <option value="expired">Expiradas</option>
+                    <option value="rejected">Rechazadas</option>
+                  </select>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge variant={recentQuotes.status === "error" ? "error" : "success"}>
-                {recentQuotes.status === "error" ? "Revisar cotizaciones" : "Datos cargados"}
-              </StatusBadge>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="h-10 rounded-[var(--radius-md)] border bg-background px-3 text-sm text-foreground shadow-soft-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                aria-label="Filtrar ventas por estado"
-              >
-                <option value="all">Todos los estados</option>
-                <option value="approved">Aprobadas</option>
-                <option value="review">En revisión</option>
-                <option value="quoting">En Cotización</option>
-                <option value="cancelled">Canceladas</option>
-                <option value="expired">Expiradas</option>
-                <option value="rejected">Rechazadas</option>
-              </select>
+              <QuoteSearchInput
+                suggestions={recentQuotes.data ?? []}
+                loading={recentQuotes.status === "loading"}
+                onSearch={handleQuoteSearch}
+                onSelect={handleQuoteSelect}
+                selectedQuoteId={selectedQuoteId}
+              />
             </div>
           </>
         }
@@ -1825,83 +1930,134 @@ export function VentasDashboard() {
 
       <ChartPanel
         title="Tendencia de Pagos por Cliente"
-        subtitle="Promedio de días de pago histórico — Bajo ≤15 d, Medio ≤30 d, Alto >30 d"
+        subtitle={
+          selectedPaymentCustomer
+            ? `Cliente: ${selectedPaymentCustomer.name}`
+            : "Top 10 por días sin pago — ordenados por monto pendiente"
+        }
         infoLabel="2.3.1 Comportamiento de pago"
       >
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_580px] xl:items-start">
-          <div className="max-w-lg">
-            <BarChart
-              data={paymentTrendChart}
-              xKey="customer"
-              bars={[{ dataKey: "dias", name: "Días promedio de pago" }]}
-              height={Math.max(380, paymentTrendChart.length * 95)}
-              valueFormatter={(v) => `${formatNumber(v)} días`}
-              horizontal
-              colorScale={paymentTrendChart.map((row) =>
-                row.riesgo === "Bajo" ? "#1AAD58" : row.riesgo === "Medio" ? "#FFB020" : "#FF453A"
-              )}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Semáforo de riesgo
+        {/* Barra de búsqueda */}
+        <PaymentCustomerSearch
+          query={paymentCustomerQuery}
+          onQueryChange={(q) => {
+            setPaymentCustomerQuery(q)
+            if (!q) setSelectedPaymentCustomer(null)
+          }}
+          suggestions={paymentCustomerSearchResult.data ?? []}
+          loading={paymentCustomerSearchResult.status === "loading"}
+          selectedCustomer={selectedPaymentCustomer}
+          onSelect={(item) => {
+            setSelectedPaymentCustomer(item)
+            setPaymentCustomerQuery(item.name)
+          }}
+          onClear={() => {
+            setSelectedPaymentCustomer(null)
+            setPaymentCustomerQuery("")
+          }}
+        />
+
+        <div className="flex flex-col gap-6">
+          {/* Gráfica: solo visible cuando hay cliente seleccionado */}
+          {selectedPaymentCustomer && (
+            <div className="max-w-lg">
+              <BarChart
+                data={(customerPaymentStats.data ?? []).map((row: CustomerPaymentStat) => ({
+                  customer: row.customer_name,
+                  dias: row.promedio_dias_pago,
+                  riesgo:
+                    row.promedio_dias_pago <= 30
+                      ? "Bajo"
+                      : row.promedio_dias_pago <= 60
+                        ? "Medio"
+                        : "Alto",
+                }))}
+                xKey="customer"
+                bars={[{ dataKey: "dias", name: "Días promedio de pago" }]}
+                height={180}
+                valueFormatter={(v) => `${formatNumber(v)} días`}
+                horizontal
+                colorScale={(customerPaymentStats.data ?? []).map((row: CustomerPaymentStat) =>
+                  row.promedio_dias_pago <= 30
+                    ? "#1AAD58"
+                    : row.promedio_dias_pago <= 60
+                      ? "#FFB020"
+                      : "#FF453A"
+                )}
+              />
             </div>
-            <div className="overflow-hidden rounded-[var(--radius-md)] border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Cliente
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Días prom.
-                    </th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Riesgo
-                    </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Último pago
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paymentTrendChart.map((row) => (
-                    <tr key={row.customer} className="border-t">
+          )}
+
+          {/* Tabla con nuevas columnas */}
+          <div className="overflow-hidden rounded-[var(--radius-md)] border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/60">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Cliente
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Cotizaciones
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Prom. días pago
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Monto pendiente
+                  </th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Sin pagar
+                  </th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Máx. días sin pago
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(customerPaymentStats.data ?? []).map((row: CustomerPaymentStat) => {
+                  const maxDias = row.max_dias_sin_pago ?? 0
+                  const urgencia =
+                    maxDias > 90 ? "error" : maxDias > 45 ? "warning" : "neutral"
+                  return (
+                    <tr key={row.customer_name} className="border-t">
                       <td className="px-3 py-2 text-[13px] text-foreground">
-                        <div className="truncate max-w-[260px]" title={row.customer}>
-                          {row.customer}
+                        <div className="truncate max-w-[220px]" title={row.customer_name}>
+                          {row.customer_name}
                         </div>
                       </td>
+                      <td className="px-3 py-2 text-right text-[13px] text-foreground">
+                        {row.cotizaciones_base}
+                      </td>
                       <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
-                        {formatNumber(row.dias)} d
+                        {formatNumber(row.promedio_dias_pago)} d
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                        {formatCurrencyMXN(row.monto_pendiente_mxn)}
+                      </td>
+                      <td className="px-3 py-2 text-center text-[13px] text-foreground">
+                        {row.cot_sin_pagar}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <StatusBadge
-                          variant={
-                            row.riesgo === "Bajo"
-                              ? "success"
-                              : row.riesgo === "Medio"
-                                ? "warning"
-                                : "error"
-                          }
-                        >
-                          {row.riesgo}
-                        </StatusBadge>
-                      </td>
-                      <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
-                        {row.ultimo_pago ? formatIsoDate(row.ultimo_pago) : "—"}
+                        {row.max_dias_sin_pago !== null ? (
+                          <StatusBadge variant={urgencia}>
+                            {row.max_dias_sin_pago} d
+                          </StatusBadge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {paymentTrendChart.length === 0 && paymentTrend.status !== "loading" ? (
-              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                Sin datos de tiempos de pago en el periodo
-              </div>
-            ) : null}
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
+          {(customerPaymentStats.data ?? []).length === 0 &&
+            customerPaymentStats.status !== "loading" && (
+              <div className="rounded-[var(--radius-md)] border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                Sin datos de pagos para mostrar
+              </div>
+            )}
         </div>
       </ChartPanel>
 

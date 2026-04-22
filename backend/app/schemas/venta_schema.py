@@ -122,6 +122,7 @@ class RecentQuoteResponse(BaseModel):
 
     id: UUID
     name: str
+    po_pr: str | None = None
     created_on: datetime | None = None
     customer_name: str | None = None
     status: str | None = None
@@ -197,3 +198,19 @@ class AvgSalesByCustomerTypeResponse(BaseModel):
     tipo_cliente: str
     numero_clientes: int
     venta_promedio_por_cliente: float
+
+
+class CustomerPaymentStatResponse(BaseModel):
+    customer_id: str | None = None
+    customer_name: str
+    cotizaciones_base: int
+    promedio_dias_pago: float
+    monto_pendiente_mxn: float
+    cot_sin_pagar: int
+    max_dias_sin_pago: int | None = None
+
+
+class CustomerSearchItemResponse(BaseModel):
+    id: str
+    name: str
+    external_id: str | None = None

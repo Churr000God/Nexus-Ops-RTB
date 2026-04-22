@@ -117,6 +117,7 @@ export type DashboardOverview = {
 export type RecentQuote = {
   id: string
   name: string
+  po_pr: string | null
   created_on: string | null
   customer_name: string | null
   status: string | null
@@ -185,4 +186,20 @@ export type PendingPaymentCustomer = {
   total_adeudado: number
   desde_fecha: string | null
   dias_sin_pagar: number | null
+}
+
+export type CustomerPaymentStat = {
+  customer_id: string | null
+  customer_name: string
+  cotizaciones_base: number
+  promedio_dias_pago: number
+  monto_pendiente_mxn: number
+  cot_sin_pagar: number
+  max_dias_sin_pago: number | null
+}
+
+export type CustomerSearchItem = {
+  id: string
+  name: string
+  external_id: string | null
 }
