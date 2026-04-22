@@ -1225,69 +1225,66 @@ class VentasService:
 
     async def quarterly_growth_by_customer_type(
         self,
+        selected_quarter: int | None = None,
     ) -> list[QuarterlyGrowthByCustomerTypeResponse]:
-        """Crecimiento trimestral por tipo de cliente (Local vs Foraneo).
+        today = date.today()
+        current_quarter = (today.month - 1) // 3 + 1
+        quarter = selected_quarter if selected_quarter is not None else current_quarter
 
-        Compara el trimestre actual contra el mismo trimestre del año anterior.
-        Solo considera cotizaciones aprobadas.
-        """
+        q_start_month = (quarter - 1) * 3 + 1
+        q_end_month = q_start_month + 3
+
+        year = today.year
+        quarter_start = date(year, q_start_month, 1)
+        quarter_end = date(year + 1, 1, 1) if q_end_month > 12 else date(year, q_end_month, 1)
+        last_year_start = date(year - 1, q_start_month, 1)
+        last_year_end = date(year, 1, 1) if q_end_month > 12 else date(year - 1, q_end_month, 1)
+
         sql = text(
             """
-            WITH ventas_periodo AS (
-                SELECT
-                    cl.category AS tipo_cliente,
-                    SUM(CASE
-                        WHEN DATE_TRUNC('quarter', COALESCE(q.approved_on, q.created_on))
-                            = DATE_TRUNC('quarter', CURRENT_DATE)
-                        THEN COALESCE(q.subtotal, 0)
-                        ELSE 0
-                    END) AS ventas_trim_actual,
-                    SUM(CASE
-                        WHEN DATE_TRUNC('quarter', COALESCE(q.approved_on, q.created_on))
-                            = DATE_TRUNC('quarter', CURRENT_DATE - INTERVAL '1 year')
-                        THEN COALESCE(q.subtotal, 0)
-                        ELSE 0
-                    END) AS ventas_trim_anio_pasado
-                FROM cotizaciones q
-                LEFT JOIN clientes cl ON q.customer_id = cl.id
-                WHERE (
-                    q.approved_on IS NOT NULL
-                    OR LOWER(COALESCE(q.status, '')) LIKE '%aprob%'
-                )
-                AND cl.category IN ('Local', 'Foraneo')
-                GROUP BY cl.category
-            )
             SELECT
-                tipo_cliente,
-                ventas_trim_actual,
-                ventas_trim_anio_pasado,
                 CASE
-                    WHEN ventas_trim_anio_pasado = 0 THEN NULL
-                    ELSE ROUND(
-                        ((ventas_trim_actual - ventas_trim_anio_pasado)
-                        / ventas_trim_anio_pasado) * 100, 2
-                    )
-                END AS crecimiento_trimestral_pct
-            FROM ventas_periodo
-            ORDER BY crecimiento_trimestral_pct DESC NULLS LAST
+                    WHEN NULLIF(TRIM(COALESCE(cl.category, '')), '') = 'Foraneo' THEN 'Foraneo'
+                    WHEN NULLIF(TRIM(COALESCE(cl.category, '')), '') = 'Local' THEN 'Local'
+                    ELSE 'Sin categoria'
+                END AS tipo_cliente,
+                COALESCE(SUM(CASE WHEN v.sold_on >= :trim_inicio AND v.sold_on < :trim_fin
+                    THEN v.subtotal ELSE 0 END), 0) AS ventas_trim_actual,
+                COALESCE(SUM(CASE WHEN v.sold_on >= :anio_ant_inicio AND v.sold_on < :anio_ant_fin
+                    THEN v.subtotal ELSE 0 END), 0) AS ventas_trim_anio_pasado
+            FROM ventas v
+            LEFT JOIN cotizaciones co ON v.quote_id = co.id
+            LEFT JOIN clientes cl ON co.customer_id = cl.id
+            WHERE v.sold_on >= :anio_ant_inicio AND v.sold_on < :trim_fin
+              AND LOWER(COALESCE(v.status, '')) NOT LIKE '%cancel%'
+            GROUP BY tipo_cliente
+            ORDER BY ventas_trim_actual DESC
             """
         )
-
-        rows = (await self.db.execute(sql)).all()
-        return [
-            QuarterlyGrowthByCustomerTypeResponse(
-                tipo_cliente=row.tipo_cliente,
-                ventas_trim_actual=float(row.ventas_trim_actual),
-                ventas_trim_anio_pasado=float(row.ventas_trim_anio_pasado),
-                crecimiento_trimestral_pct=(
-                    float(row.crecimiento_trimestral_pct)
-                    if row.crecimiento_trimestral_pct is not None
-                    else None
-                ),
+        params = {
+            "trim_inicio": quarter_start,
+            "trim_fin": quarter_end,
+            "anio_ant_inicio": last_year_start,
+            "anio_ant_fin": last_year_end,
+        }
+        _label_map = {"foraneo": "Foráneo", "local": "Local", "sin categoria": "Sin categoría"}
+        rows = (await self.db.execute(sql, params)).all()
+        results = []
+        for row in rows:
+            raw = (row.tipo_cliente or "").strip().lower()
+            label = _label_map.get(raw, row.tipo_cliente)
+            curr = float(row.ventas_trim_actual)
+            prev = float(row.ventas_trim_anio_pasado)
+            growth = round(((curr - prev) / prev) * 100, 2) if prev > 0 else None
+            results.append(
+                QuarterlyGrowthByCustomerTypeResponse(
+                    tipo_cliente=label,
+                    ventas_trim_actual=curr,
+                    ventas_trim_anio_pasado=prev,
+                    crecimiento_trimestral_pct=growth,
+                )
             )
-            for row in rows
-            if row.tipo_cliente is not None
-        ]
+        return results
 
     async def products_by_customer_type(
         self,

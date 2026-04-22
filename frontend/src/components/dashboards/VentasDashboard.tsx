@@ -48,6 +48,7 @@ export function VentasDashboard() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [customerSearch, setCustomerSearch] = useState("")
   const [selectedMonthYoY, setSelectedMonthYoY] = useState<number | null>(null)
+  const [selectedQuarter, setSelectedQuarter] = useState<number | null>(null)
 
   const fetchSummary = useCallback(
     (signal: AbortSignal) =>
@@ -222,13 +223,17 @@ export function VentasDashboard() {
 
   const fetchQuarterlyGrowth = useCallback(
     (signal: AbortSignal) =>
-      ventasService.quarterlyGrowthByCustomerType(token ?? "", signal),
-    [token, syncVersion]
+      ventasService.quarterlyGrowthByCustomerType(
+        token ?? "",
+        { selectedQuarter },
+        signal
+      ),
+    [token, syncVersion, selectedQuarter]
   )
   const quarterlyGrowth = useApi(
     fetchQuarterlyGrowth,
     { enabled: Boolean(token) },
-    token, syncVersion
+    token, syncVersion, selectedQuarter
   )
 
   const fetchMonthlyGrowthYoY = useCallback(
@@ -457,20 +462,31 @@ export function VentasDashboard() {
       tipo: labelFor(row.tipo_cliente),
       trim_actual: row.ventas_trim_actual,
       trim_anio_pasado: row.ventas_trim_anio_pasado,
-      crecimiento_pct: row.crecimiento_trimestral_pct ?? 0,
+      crecimiento_pct: row.crecimiento_trimestral_pct,
     }))
   }, [quarterlyGrowth.data])
 
   const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+  const QUARTERS_ES = ["T1 (Ene–Mar)", "T2 (Abr–Jun)", "T3 (Jul–Sep)", "T4 (Oct–Dic)"]
 
   const availableMonthsYoY = useMemo(() => {
     const current = new Date().getMonth() + 1
     return Array.from({ length: current }, (_, i) => ({ value: i + 1, label: MONTHS_ES[i] }))
   }, [])
 
+  const availableQuartersYoY = useMemo(() => {
+    const currentMonth = new Date().getMonth() + 1
+    const currentQuarter = Math.ceil(currentMonth / 3)
+    return Array.from({ length: currentQuarter }, (_, i) => ({ value: i + 1, label: QUARTERS_ES[i] }))
+  }, [])
+
   const selectedMonthYoYLabel = selectedMonthYoY
     ? MONTHS_ES[selectedMonthYoY - 1]
     : MONTHS_ES[new Date().getMonth()]
+
+  const selectedQuarterYoYLabel = selectedQuarter
+    ? QUARTERS_ES[selectedQuarter - 1]
+    : QUARTERS_ES[Math.ceil((new Date().getMonth() + 1) / 3) - 1]
 
   const monthlyGrowthYoYChart = useMemo(() => {
     return (monthlyGrowthYoY.data ?? []).map((row: MonthlyGrowthYoYByCustomerType) => ({
@@ -1053,9 +1069,22 @@ export function VentasDashboard() {
         </ChartPanel>
 
         <ChartPanel
-          title="Crecimiento Trimestral por Tipo de Cliente"
-          subtitle="Compara el trimestre actual contra el mismo trimestre del año anterior (solo cotizaciones aprobadas)"
+          title={`Crecimiento trimestral — ${selectedQuarterYoYLabel} vs ${selectedQuarterYoYLabel} año anterior`}
+          subtitle="Ventas reales (subtotal ventas) por tipo de cliente vs mismo trimestre del año pasado"
           infoLabel="3.3.2 Crecimiento trimestral"
+          action={
+            <select
+              value={selectedQuarter ?? ""}
+              onChange={(e) => setSelectedQuarter(e.target.value ? Number(e.target.value) : null)}
+              className="h-8 rounded-[var(--radius-md)] border bg-background px-2 text-xs text-foreground shadow-soft-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Seleccionar trimestre"
+            >
+              <option value="">Trimestre actual</option>
+              {availableQuartersYoY.map((q) => (
+                <option key={q.value} value={q.value}>{q.label}</option>
+              ))}
+            </select>
+          }
         >
           {quarterlyGrowth.status === "loading" ? (
             <div
@@ -1077,17 +1106,21 @@ export function VentasDashboard() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Comparación de trimestres
+                  Columnas + línea de crecimiento
                 </div>
-                <BarChart
+                <ComboBarLineChart
                   data={quarterlyGrowthChart}
                   xKey="tipo"
                   bars={[
                     { dataKey: "trim_actual", name: "Trimestre actual", color: "#0051FF" },
                     { dataKey: "trim_anio_pasado", name: "Mismo trimestre año pasado", color: "#8E8E93" },
                   ]}
-                  valueFormatter={formatCurrencyMXN}
-                  height={320}
+                  lines={[
+                    { dataKey: "crecimiento_pct", name: "Crecimiento %", color: "#34C759", yAxisId: "right" },
+                  ]}
+                  leftValueFormatter={formatCurrencyMXN}
+                  rightValueFormatter={(v) => `${formatNumber(v)}%`}
+                  height={340}
                 />
               </div>
 
@@ -1114,31 +1147,38 @@ export function VentasDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {quarterlyGrowthChart.map((row) => (
-                        <tr key={row.tipo} className="border-t">
-                          <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
-                          <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
-                            {formatCurrencyMXN(row.trim_actual)}
-                          </td>
-                          <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
-                            {formatCurrencyMXN(row.trim_anio_pasado)}
-                          </td>
-                          <td className="px-3 py-2 text-right text-[13px]">
-                            <span
-                              className={
-                                row.crecimiento_pct > 0
-                                  ? "font-semibold text-green-600"
-                                  : row.crecimiento_pct < 0
-                                    ? "font-semibold text-red-600"
-                                    : "text-muted-foreground"
-                              }
-                            >
-                              {row.crecimiento_pct > 0 ? "+" : ""}
-                              {formatNumber(row.crecimiento_pct)}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {quarterlyGrowthChart.map((row) => {
+                        const growthValue = typeof row.crecimiento_pct === "number" ? row.crecimiento_pct : null
+                        return (
+                          <tr key={row.tipo} className="border-t">
+                            <td className="px-3 py-2 text-[13px] text-foreground">{row.tipo}</td>
+                            <td className="px-3 py-2 text-right text-[13px] font-semibold text-foreground">
+                              {formatCurrencyMXN(row.trim_actual)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-[13px] text-muted-foreground">
+                              {formatCurrencyMXN(row.trim_anio_pasado)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-[13px]">
+                              {growthValue === null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span
+                                  className={
+                                    growthValue > 0
+                                      ? "font-semibold text-green-600"
+                                      : growthValue < 0
+                                        ? "font-semibold text-red-600"
+                                        : "text-muted-foreground"
+                                  }
+                                >
+                                  {growthValue > 0 ? "+" : ""}
+                                  {formatNumber(growthValue)}%
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

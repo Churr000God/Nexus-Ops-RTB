@@ -63,6 +63,8 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-19 | Sprint 2 frontend: Dashboard General + Ventas | frontend | 2 | [2026-04-19_sprint-2-frontend-dashboard-ventas.md](sessions/2026-04-19_sprint-2-frontend-dashboard-ventas.md) |
 | 2026-04-20 | Clientes en riesgo de abandono | backend + frontend | 2 | [2026-04-20_clientes-riesgo-abandono.md](sessions/2026-04-20_clientes-riesgo-abandono.md) |
 | 2026-04-21 | Ventas: crecimiento mensual YoY por tipo de cliente | backend + frontend | 2 | [2026-04-21_ventas-crecimiento-mensual-yoy.md](sessions/2026-04-21_ventas-crecimiento-mensual-yoy.md) |
+| 2026-04-21 | Sync n8n → webhook → PostgreSQL y validación de gráficas | backend + n8n + frontend | 2 | [2026-04-21_sync-n8n-y-validacion-graficas-ventas.md](sessions/2026-04-21_sync-n8n-y-validacion-graficas-ventas.md) |
+| 2026-04-22 | Crecimiento trimestral: línea de porcentaje de crecimiento | frontend | 2 | [2026-04-22_crecimiento-trimestral-linea-porcentaje.md](sessions/2026-04-22_crecimiento-trimestral-linea-porcentaje.md) |
 
 ---
 
@@ -70,6 +72,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 8 |
-| Errores registrados | 7 |
-| Lecciones documentadas | 9 |
+| Total sesiones | 10 |
+| Errores registrados | 11 |
+| Lecciones documentadas | 11 |

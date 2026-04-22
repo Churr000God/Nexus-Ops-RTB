@@ -302,16 +302,12 @@ async def avg_sales_by_customer_type(
     response_model=list[QuarterlyGrowthByCustomerTypeResponse],
 )
 async def quarterly_growth_by_customer_type(
+    selected_quarter: int | None = Query(default=None, ge=1, le=4),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[QuarterlyGrowthByCustomerTypeResponse]:
-    """Crecimiento trimestral por tipo de cliente (Local vs Foraneo).
-
-    Compara el trimestre actual contra el mismo trimestre del año anterior.
-    Solo considera cotizaciones aprobadas.
-    """
     service = VentasService(db)
-    return await service.quarterly_growth_by_customer_type()
+    return await service.quarterly_growth_by_customer_type(selected_quarter=selected_quarter)
 
 
 @router.get(

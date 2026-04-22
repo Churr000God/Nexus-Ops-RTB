@@ -343,9 +343,15 @@ export const ventasService = {
     )
   },
 
-  quarterlyGrowthByCustomerType(token: string, signal?: AbortSignal) {
+  quarterlyGrowthByCustomerType(
+    token: string,
+    params?: { selectedQuarter?: number | null },
+    signal?: AbortSignal
+  ) {
     return requestJson<QuarterlyGrowthByCustomerType[]>(
-      withQuery("/api/ventas/quarterly-growth-by-customer-type", {}),
+      withQuery("/api/ventas/quarterly-growth-by-customer-type", {
+        selected_quarter: params?.selectedQuarter ?? undefined,
+      }),
       { token, signal }
     )
   },
