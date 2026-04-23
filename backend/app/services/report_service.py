@@ -7,6 +7,7 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from lxml import etree
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.ventas_service import VentasService
@@ -65,10 +66,12 @@ def _add_table_header_row(table, headers: list[str]) -> None:
 
 
 def _style_header_cell(cell) -> None:
-    """Pinta la celda de encabezado con fondo azul oscuro."""
+    """Pinta la celda de encabezado con fondo azul oscuro usando lxml directo."""
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
-    shd = tcPr.get_or_add_shd()
+    for existing in tcPr.findall(qn("w:shd")):
+        tcPr.remove(existing)
+    shd = etree.SubElement(tcPr, qn("w:shd"))
     shd.set(qn("w:val"), "clear")
     shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), "1E40AF")

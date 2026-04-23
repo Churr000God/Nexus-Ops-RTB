@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
 from app.services.report_service import ReportService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reportes", tags=["reportes"])
 
 
@@ -26,12 +28,16 @@ async def generar_reporte_ventas(
 ) -> Response:
     """Genera y descarga un reporte de ventas en formato DOCX."""
     section_list = [s.strip() for s in sections.split(",") if s.strip()]
-    service = ReportService(db)
-    content = await service.generate_ventas_docx(
-        start_date=start_date,
-        end_date=end_date,
-        sections=section_list,
-    )
+    try:
+        service = ReportService(db)
+        content = await service.generate_ventas_docx(
+            start_date=start_date,
+            end_date=end_date,
+            sections=section_list,
+        )
+    except Exception as exc:
+        logger.exception("Error generando reporte de ventas: %s", exc)
+        raise HTTPException(status_code=500, detail="Error al generar el reporte") from exc
 
     filename = _build_filename(start_date, end_date)
     return Response(
