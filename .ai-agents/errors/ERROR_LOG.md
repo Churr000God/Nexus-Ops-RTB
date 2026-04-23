@@ -60,6 +60,7 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0010 | 2026-04-21 | frontend | medio | Dropdown de sugerencias de clientes se cerraba antes de registrar el click | resuelto | [ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md](resolutions/ERR-0010_dropdown-sugerencias-cierra-antes-de-click.md) |
 | ERR-0011 | 2026-04-21 | db | medio | PostgreSQL ORDER BY col DESC coloca NULLs primero por defecto | resuelto | [ERR-0011_postgresql-desc-nulls-first-por-defecto.md](resolutions/ERR-0011_postgresql-desc-nulls-first-por-defecto.md) |
 | ERR-0012 | 2026-04-22 | frontend | bajo | TS2322 MissingDemandByProduct[] no asignable a ProductSuggestion[] en docker build | resuelto | [ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md](resolutions/ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md) |
+| ERR-0013 | 2026-04-23 | backend | alto | AttributeError: CT_TcPr sin metodo get_or_add_shd en python-docx 1.1.2 | resuelto | [ERR-0013_python-docx-ct-tcpr-no-shd.md](resolutions/ERR-0013_python-docx-ct-tcpr-no-shd.md) |
 
 ---
 
@@ -67,8 +68,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 12 |
-| Resueltos | 11 |
+| Total errores registrados | 13 |
+| Resueltos | 13 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
