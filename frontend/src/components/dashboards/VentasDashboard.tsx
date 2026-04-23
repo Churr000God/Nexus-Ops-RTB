@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
+import { ReportModal } from "@/components/common/ReportModal"
 import {
   BarChart3,
   BrainCircuit,
@@ -53,6 +54,7 @@ export function VentasDashboard() {
   const token = useAuthStore((s) => s.accessToken)
   const syncVersion = useSyncStore((s) => s.syncVersion)
   const { datePreset, startDate, endDate, setDatePreset, setDateRange, reset } = useFilters()
+  const [reportModalOpen, setReportModalOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
   const [customerSearch, setCustomerSearch] = useState("")
   const [selectedMonthYoY, setSelectedMonthYoY] = useState<number | null>(null)
@@ -867,7 +869,7 @@ export function VentasDashboard() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => showPendingToast("La generación de reporte")}
+              onClick={() => setReportModalOpen(true)}
             >
               <FileText className="h-4 w-4" aria-hidden="true" />
               Reporte
@@ -2246,6 +2248,13 @@ export function VentasDashboard() {
           </div>
         </div>
       </section>
+
+      <ReportModal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        startDate={startDate}
+        endDate={endDate}
+      />
     </div>
   )
 }

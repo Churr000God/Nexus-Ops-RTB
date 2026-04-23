@@ -1,4 +1,4 @@
-import { requestJson } from "@/lib/http"
+import { requestBlob, requestJson } from "@/lib/http"
 import type {
   ApprovedVsCancelledByMonth,
   AtRiskCustomer,
@@ -402,6 +402,25 @@ export const ventasService = {
     return requestJson<PendingPaymentStat[]>(
       withQuery("/api/ventas/pending-payment-stats", {
         customer_id: params?.customerId,
+      }),
+      { token, signal }
+    )
+  },
+
+  downloadVentasReport(
+    token: string,
+    params: {
+      startDate?: string | null
+      endDate?: string | null
+      sections: string[]
+    },
+    signal?: AbortSignal
+  ) {
+    return requestBlob(
+      withQuery("/api/reportes/ventas", {
+        start_date: params.startDate,
+        end_date: params.endDate,
+        sections: params.sections.join(","),
       }),
       { token, signal }
     )

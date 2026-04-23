@@ -63,6 +63,41 @@ export async function requestJson<T>(
   return (await res.json()) as T
 }
 
+export async function requestBlob(
+  path: string,
+  opts?: {
+    token?: string | null
+    signal?: AbortSignal
+  }
+): Promise<{ blob: Blob; filename: string }> {
+  const url = `${env.apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`
+  const headers: Record<string, string> = {}
+
+  if (opts?.token) {
+    headers.Authorization = `Bearer ${opts.token}`
+  }
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers,
+    credentials: "include",
+    signal: opts?.signal,
+  })
+
+  if (!res.ok) {
+    const details = await safeJson(res)
+    const message = extractApiErrorMessage(details)
+    throw new ApiError(message, res.status, details)
+  }
+
+  const disposition = res.headers.get("content-disposition") ?? ""
+  const match = disposition.match(/filename="?([^";\n]+)"?/)
+  const filename = match?.[1] ?? "descarga"
+
+  const blob = await res.blob()
+  return { blob, filename }
+}
+
 async function safeJson(res: Response): Promise<unknown> {
   try {
     return await res.json()
