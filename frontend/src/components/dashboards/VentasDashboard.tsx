@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
+import { EmailReportModal } from "@/components/common/EmailReportModal"
 import { ReportModal } from "@/components/common/ReportModal"
 import {
   BarChart3,
@@ -55,6 +56,7 @@ export function VentasDashboard() {
   const syncVersion = useSyncStore((s) => s.syncVersion)
   const { datePreset, startDate, endDate, setDatePreset, setDateRange, reset } = useFilters()
   const [reportModalOpen, setReportModalOpen] = useState(false)
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState("all")
   const [customerSearch, setCustomerSearch] = useState("")
   const [selectedMonthYoY, setSelectedMonthYoY] = useState<number | null>(null)
@@ -908,7 +910,7 @@ export function VentasDashboard() {
               <Download className="h-4 w-4" aria-hidden="true" />
               CSV
             </Button>
-            <Button type="button" variant="outline" onClick={() => showPendingToast("El envío por correo")}>
+            <Button type="button" variant="outline" onClick={() => setEmailModalOpen(true)}>
               <Mail className="h-4 w-4" aria-hidden="true" />
               Email
             </Button>
@@ -2252,6 +2254,13 @@ export function VentasDashboard() {
       <ReportModal
         open={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
+        startDate={startDate}
+        endDate={endDate}
+      />
+
+      <EmailReportModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
         startDate={startDate}
         endDate={endDate}
       />

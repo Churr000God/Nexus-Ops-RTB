@@ -153,6 +153,106 @@ class ReportService:
         doc.save(buf)
         return buf.getvalue()
 
+    async def generate_ventas_csv(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+        sections: list[str],
+    ) -> bytes:
+        """Genera un CSV multi-sección con los mismos datos que el DOCX."""
+        svc = VentasService(self._db)
+        selected = {s.lower().strip() for s in sections} & _SECTION_KEYS
+
+        lines: list[str] = []
+
+        if "kpis" in selected:
+            summary = await svc.sales_summary(start_date=start_date, end_date=end_date)
+            lines += [
+                "# RESUMEN KPIs",
+                "indicador,valor",
+                f"Ventas Totales,{summary.total_sales}",
+                f"Cotizaciones Aprobadas,{summary.approved_quotes}",
+                f"Cotizaciones Pendientes,{summary.pending_quotes}",
+                f"Cotizaciones Canceladas,{summary.cancelled_quotes}",
+                f"Tasa de Conversión %,{summary.conversion_rate}",
+                f"Margen Promedio %,{summary.average_margin_percent}",
+                "",
+            ]
+
+        if "clientes" in selected:
+            customers = await svc.top_customers_by_sales(start_date=start_date, end_date=end_date, limit=50)
+            lines += [
+                "# TOP CLIENTES POR VENTAS",
+                "cliente,categoria,num_ventas,total_mxn,ticket_promedio_mxn",
+            ]
+            for c in customers:
+                lines.append(
+                    f"{_csv_esc(c.customer)},{_csv_esc(c.category or '')},"
+                    f"{c.sale_count},{c.total_revenue},{c.average_ticket}"
+                )
+            lines.append("")
+
+        if "productos" in selected:
+            products = await svc.sales_distribution_by_product(start_date=start_date, end_date=end_date, limit=50)
+            lines += [
+                "# DISTRIBUCIÓN POR PRODUCTO",
+                "producto,sku,unidades,revenue_mxn,porcentaje",
+            ]
+            for p in products:
+                lines.append(
+                    f"{_csv_esc(p.product)},{_csv_esc(p.sku or '')},"
+                    f"{p.qty},{p.revenue},{p.percentage}"
+                )
+            lines.append("")
+
+        if "margen" in selected:
+            margins = await svc.gross_margin_by_product(start_date=start_date, end_date=end_date, limit=50)
+            lines += [
+                "# MARGEN BRUTO POR PRODUCTO",
+                "producto,sku,ingresos_mxn,costo_mxn,margen_mxn,margen_pct",
+            ]
+            for m in margins:
+                lines.append(
+                    f"{_csv_esc(m.product)},{_csv_esc(m.sku or '')},"
+                    f"{m.revenue},{m.cost},{m.gross_margin},{m.margin_percent or 0}"
+                )
+            lines.append("")
+
+        if "pagos" in selected:
+            payments = await svc.pending_payment_customers()
+            lines += [
+                "# PAGOS PENDIENTES",
+                "cliente,tipo_cliente,pedidos,total_adeudado_mxn,dias_sin_pagar",
+            ]
+            for p in payments:
+                lines.append(
+                    f"{_csv_esc(p.customer_name)},{_csv_esc(p.tipo_cliente or '')},"
+                    f"{p.num_pedidos},{p.total_adeudado},{p.dias_sin_pagar or ''}"
+                )
+            lines.append("")
+
+        if "riesgo" in selected:
+            at_risk = await svc.at_risk_customers()
+            lines += [
+                "# CLIENTES EN RIESGO DE ABANDONO",
+                "cliente,riesgo,compras_ult_90_mxn,compras_90_previos_mxn,ultima_compra",
+            ]
+            for c in at_risk:
+                ultima = c.ultima_compra.isoformat() if c.ultima_compra else ""
+                lines.append(
+                    f"{_csv_esc(c.customer_name)},{_csv_esc(c.riesgo_abandono)},"
+                    f"{c.compras_ult_90},{c.compras_90_previos},{ultima}"
+                )
+            lines.append("")
+
+        return "\n".join(lines).encode("utf-8-sig")
+
+
+def _csv_esc(value: str) -> str:
+    if "," in value or '"' in value or "\n" in value:
+        return '"' + value.replace('"', '""') + '"'
+    return value
+
 
 def _set_page_margins(doc: Document) -> None:
     from docx.oxml.ns import qn as _qn

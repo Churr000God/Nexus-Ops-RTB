@@ -407,6 +407,30 @@ export const ventasService = {
     )
   },
 
+  sendVentasReportByEmail(
+    token: string,
+    body: {
+      to_email: string
+      start_date?: string | null
+      end_date?: string | null
+      sections: string[]
+    }
+  ) {
+    return requestJson<{ message: string }>(
+      "/api/reportes/ventas/enviar-correo",
+      {
+        method: "POST",
+        body: {
+          to_email: body.to_email,
+          start_date: body.start_date ?? null,
+          end_date: body.end_date ?? null,
+          sections: body.sections,
+        },
+        token,
+      }
+    )
+  },
+
   downloadVentasReport(
     token: string,
     params: {

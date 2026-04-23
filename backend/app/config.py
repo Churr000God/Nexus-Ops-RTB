@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_URL: str | None = None
     SYNC_API_KEY: str | None = None
 
+    MAILERSEND_API_TOKEN: str | None = None
+    MAILERSEND_FROM_EMAIL: str = "noreply@refacrtb.com.mx"
+    MAILERSEND_FROM_NAME: str = "Nexus Ops RTB"
+
     CSV_DIR: str = "/data/csv"
     REPORTS_DIR: str = "/data/reports"
     LOG_LEVEL: str = "INFO"
