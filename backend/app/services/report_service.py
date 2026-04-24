@@ -12,8 +12,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.ventas_service import VentasService
 
+# ── Paleta de colores ──────────────────────────────────────────────────────────
 _BRAND_BLUE = RGBColor(0x1E, 0x40, 0xAF)
+_BRAND_BLUE_LIGHT = RGBColor(0xDB, 0xEA, 0xFE)
+_DARK_TEXT = RGBColor(0x1F, 0x29, 0x37)
 _GRAY = RGBColor(0x6B, 0x72, 0x80)
+_LIGHT_GRAY = RGBColor(0xF3, 0xF4, 0xF6)
+_WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+
+# Colores semánticos
+_RED = RGBColor(0xDC, 0x26, 0x26)
+_RED_BG = "FEE2E2"
+_ORANGE = RGBColor(0xEA, 0x58, 0x0C)
+_ORANGE_BG = "FFEDD5"
+_YELLOW = RGBColor(0xCA, 0x8A, 0x04)
+_YELLOW_BG = "FEF9C3"
+_GREEN = RGBColor(0x16, 0xA3, 0x4A)
+_GREEN_BG = "DCFCE7"
+
 _SECTION_KEYS = {"kpis", "clientes", "productos", "margen", "pagos", "riesgo"}
 
 
@@ -43,30 +59,63 @@ def _set_col_width(cell, width_inches: float) -> None:
     tcW.set(qn("w:type"), "dxa")
 
 
+def _set_cell_shading(cell, hex_color: str) -> None:
+    """Aplica fondo de color a una celda usando lxml."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    for existing in tcPr.findall(qn("w:shd")):
+        tcPr.remove(existing)
+    shd = etree.SubElement(tcPr, qn("w:shd"))
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color.lstrip("#").upper())
+
+
+def _set_cell_border(cell, color: str = "E5E7EB", size: int = 4) -> None:
+    """Aplica bordes sutiles a una celda."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = tcPr.find(qn("w:tcBorders"))
+    if tcBorders is None:
+        tcBorders = etree.SubElement(tcPr, qn("w:tcBorders"))
+    for edge in ("top", "left", "bottom", "right"):
+        edge_el = tcBorders.find(qn(f"w:{edge}"))
+        if edge_el is None:
+            edge_el = etree.SubElement(tcBorders, qn(f"w:{edge}"))
+        edge_el.set(qn("w:val"), "single")
+        edge_el.set(qn("w:sz"), str(size))
+        edge_el.set(qn("w:space"), "0")
+        edge_el.set(qn("w:color"), color)
+
+
+def _add_styled_paragraph(doc: Document, text: str, *, bold: bool = False, size: int = 11, color=None, align=None, space_after=None) -> None:
+    p = doc.add_paragraph()
+    run = p.add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+    run.font.color.rgb = color or _DARK_TEXT
+    if align:
+        p.alignment = align
+    if space_after is not None:
+        p.paragraph_format.space_after = Pt(space_after)
+    p.paragraph_format.space_before = Pt(0)
+
+
 def _add_heading(doc: Document, text: str, level: int = 1) -> None:
     p = doc.add_heading(text, level=level)
     run = p.runs[0] if p.runs else p.add_run(text)
     run.font.color.rgb = _BRAND_BLUE
+    run.font.bold = True
     if level == 1:
-        run.font.size = Pt(16)
+        run.font.size = Pt(18)
     else:
-        run.font.size = Pt(13)
-
-
-def _add_table_header_row(table, headers: list[str]) -> None:
-    hdr = table.rows[0]
-    for i, h in enumerate(headers):
-        cell = hdr.cells[i]
-        cell.text = h
-        run = cell.paragraphs[0].runs[0]
-        run.bold = True
-        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-        cell._tc.get_or_add_tcPr()
-        shd = cell._element.get_or_add_tcPr()
+        run.font.size = Pt(14)
+    p.paragraph_format.space_after = Pt(8)
+    p.paragraph_format.space_before = Pt(12)
 
 
 def _style_header_cell(cell) -> None:
-    """Pinta la celda de encabezado con fondo azul oscuro usando lxml directo."""
+    """Pinta la celda de encabezado con fondo azul oscuro."""
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
     for existing in tcPr.findall(qn("w:shd")):
@@ -78,29 +127,69 @@ def _style_header_cell(cell) -> None:
     p = cell.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if p.runs:
-        p.runs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        p.runs[0].font.color.rgb = _WHITE
         p.runs[0].bold = True
+        p.runs[0].font.size = Pt(10)
+    _set_cell_border(cell, "1E40AF", 6)
+
+
+def _style_data_cell(cell, align_right: bool = False, hex_bg: str | None = None, font_color=None) -> None:
+    p = cell.paragraphs[0]
+    if align_right:
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    if p.runs:
+        p.runs[0].font.size = Pt(10)
+        if font_color:
+            p.runs[0].font.color.rgb = font_color
+    if hex_bg:
+        _set_cell_shading(cell, hex_bg)
+    _set_cell_border(cell, "E5E7EB", 4)
 
 
 def _add_table(
-    doc: Document, headers: list[str], rows: list[list[str]]
+    doc: Document,
+    headers: list[str],
+    rows: list[list[str]],
+    *,
+    zebra: bool = True,
+    row_styles: list[dict | None] | None = None,
 ) -> None:
+    """
+    Crea una tabla con estilo profesional.
+    row_styles: lista opcional de dicts con keys 'bg', 'color', 'align_right' por fila.
+    """
     col_count = len(headers)
     table = doc.add_table(rows=1 + len(rows), cols=col_count)
     table.style = "Table Grid"
+    table.autofit = False
+    table.allow_autofit = False
 
+    # Encabezados
     for i, h in enumerate(headers):
         cell = table.cell(0, i)
         cell.text = h
         _style_header_cell(cell)
 
+    # Filas de datos
     for r_idx, row in enumerate(rows):
+        is_even = r_idx % 2 == 0
+        style_override = (row_styles or [None] * len(rows))[r_idx]
         for c_idx, val in enumerate(row):
             cell = table.cell(r_idx + 1, c_idx)
             cell.text = val
-            p = cell.paragraphs[0]
-            if c_idx > 0:
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+            bg = None
+            color = None
+            align_right = c_idx > 0
+
+            if style_override:
+                bg = style_override.get("bg")
+                color = style_override.get("color")
+                align_right = style_override.get("align_right", align_right)
+            elif zebra and not is_even:
+                bg = "F3F4F6"
+
+            _style_data_cell(cell, align_right=align_right, hex_bg=bg, font_color=color)
 
     doc.add_paragraph()
 
@@ -128,6 +217,7 @@ class ReportService:
         doc = Document()
 
         _set_page_margins(doc)
+        _add_header_footer(doc)
 
         _build_cover(doc, start_date, end_date)
 
@@ -255,42 +345,95 @@ def _csv_esc(value: str) -> str:
 
 
 def _set_page_margins(doc: Document) -> None:
-    from docx.oxml.ns import qn as _qn
-
     for section in doc.sections:
-        section.top_margin = Inches(1)
-        section.bottom_margin = Inches(1)
-        section.left_margin = Inches(1.2)
-        section.right_margin = Inches(1.2)
+        section.top_margin = Inches(0.9)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(1.0)
+        section.right_margin = Inches(1.0)
+
+
+def _add_header_footer(doc: Document) -> None:
+    """Agrega encabezado y pie de página a todas las secciones del documento."""
+    for section in doc.sections:
+        # Header
+        header = section.header
+        header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run = header_para.add_run("Nexus Ops RTB  ·  Reporte de Ventas")
+        run.font.size = Pt(8)
+        run.font.color.rgb = _GRAY
+        run.font.italic = True
+        header_para.paragraph_format.space_after = Pt(2)
+
+        # Línea separadora en header
+        p = header.add_paragraph()
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        run = p.add_run("─" * 60)
+        run.font.size = Pt(6)
+        run.font.color.rgb = RGBColor(0xE5, 0xE7, 0xEB)
+
+        # Footer
+        footer = section.footer
+        footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = footer_para.add_run("Documento confidencial  ·  Nexus Ops RTB")
+        run.font.size = Pt(7)
+        run.font.color.rgb = _GRAY
 
 
 def _build_cover(doc: Document, start_date: date | None, end_date: date | None) -> None:
-    doc.add_paragraph()
+    # Espaciado superior
+    for _ in range(4):
+        doc.add_paragraph()
+
+    # Título principal
     title = doc.add_heading("Reporte de Ventas", level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if title.runs:
         title.runs[0].font.color.rgb = _BRAND_BLUE
-        title.runs[0].font.size = Pt(22)
+        title.runs[0].font.size = Pt(32)
+        title.runs[0].font.bold = True
+    title.paragraph_format.space_after = Pt(6)
 
-    subtitle = doc.add_paragraph("Nexus Ops RTB — Dashboard Operativo")
+    # Línea decorativa
+    line_para = doc.add_paragraph()
+    line_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    line_para.paragraph_format.space_before = Pt(4)
+    line_para.paragraph_format.space_after = Pt(12)
+    line_run = line_para.add_run("━" * 20)
+    line_run.font.color.rgb = _BRAND_BLUE
+    line_run.font.size = Pt(10)
+
+    # Subtítulo
+    subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if subtitle.runs:
-        subtitle.runs[0].font.color.rgb = _GRAY
-        subtitle.runs[0].font.size = Pt(11)
+    sub_run = subtitle.add_run("Nexus Ops RTB — Dashboard Operativo")
+    sub_run.font.color.rgb = _GRAY
+    sub_run.font.size = Pt(13)
+    subtitle.paragraph_format.space_after = Pt(24)
 
+    # Periodo en caja visual
     period_label = _period_label(start_date, end_date)
-    period = doc.add_paragraph(period_label)
-    period.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if period.runs:
-        period.runs[0].font.size = Pt(10)
-        period.runs[0].font.color.rgb = _GRAY
+    period_para = doc.add_paragraph()
+    period_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    period_para.paragraph_format.space_after = Pt(8)
+    period_run = period_para.add_run(period_label)
+    period_run.font.size = Pt(11)
+    period_run.font.color.rgb = _DARK_TEXT
+    period_run.bold = True
 
+    # Fecha de generación
     gen_time = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M UTC")
-    gen = doc.add_paragraph(f"Generado: {gen_time}")
+    gen = doc.add_paragraph()
     gen.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if gen.runs:
-        gen.runs[0].font.size = Pt(9)
-        gen.runs[0].font.color.rgb = _GRAY
+    gen_run = gen.add_run(f"Generado: {gen_time}")
+    gen_run.font.size = Pt(9)
+    gen_run.font.color.rgb = _GRAY
+    gen.paragraph_format.space_after = Pt(32)
+
+    # Secciones incluidas placeholder (se puede expandir)
+    doc.add_paragraph()
 
     doc.add_page_break()
 
@@ -307,7 +450,16 @@ def _period_label(start_date: date | None, end_date: date | None) -> str:
 
 def _build_kpis_section(doc: Document, summary) -> None:
     _add_heading(doc, "1. Resumen de KPIs", level=1)
+    _add_styled_paragraph(
+        doc,
+        "Métricas clave del desempeño comercial en el periodo seleccionado.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
+    )
 
+    # Tabla de KPIs con fondo azul claro para los valores
+    headers = ["Indicador", "Valor"]
     rows = [
         ["Ventas Totales", _fmt_mxn(summary.total_sales)],
         ["Cotizaciones Aprobadas", _fmt_num(summary.approved_quotes, 0)],
@@ -316,13 +468,49 @@ def _build_kpis_section(doc: Document, summary) -> None:
         ["Tasa de Conversión", _fmt_pct(summary.conversion_rate)],
         ["Margen Promedio", _fmt_pct(summary.average_margin_percent)],
     ]
-    _add_table(doc, ["Indicador", "Valor"], rows)
+
+    col_count = len(headers)
+    table = doc.add_table(rows=1 + len(rows), cols=col_count)
+    table.style = "Table Grid"
+    table.autofit = False
+    table.allow_autofit = False
+
+    for i, h in enumerate(headers):
+        cell = table.cell(0, i)
+        cell.text = h
+        _style_header_cell(cell)
+
+    for r_idx, row in enumerate(rows):
+        for c_idx, val in enumerate(row):
+            cell = table.cell(r_idx + 1, c_idx)
+            cell.text = val
+            if c_idx == 1:
+                # Valor: fondo azul muy claro + negrita
+                _set_cell_shading(cell, "DBEAFE")
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                if p.runs:
+                    p.runs[0].font.bold = True
+                    p.runs[0].font.size = Pt(11)
+                    p.runs[0].font.color.rgb = _BRAND_BLUE
+            else:
+                p = cell.paragraphs[0]
+                if p.runs:
+                    p.runs[0].font.size = Pt(10)
+                    p.runs[0].bold = True
+            _set_cell_border(cell, "E5E7EB", 4)
+
+    doc.add_paragraph()
 
 
 def _build_top_customers_section(doc: Document, customers: list) -> None:
     _add_heading(doc, "2. Top Clientes por Ventas", level=1)
-    doc.add_paragraph(
-        "Los siguientes clientes representan el mayor volumen de ventas en el periodo seleccionado."
+    _add_styled_paragraph(
+        doc,
+        "Los siguientes clientes representan el mayor volumen de ventas en el periodo seleccionado.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
     )
 
     rows = [
@@ -340,6 +528,7 @@ def _build_top_customers_section(doc: Document, customers: list) -> None:
         doc,
         ["#", "Cliente", "Categoría", "Ventas", "Total MXN", "Ticket Prom."],
         rows,
+        zebra=True,
     )
 
 
@@ -360,14 +549,30 @@ def _build_product_distribution_section(doc: Document, products: list) -> None:
         doc,
         ["Producto", "SKU", "Unidades", "Revenue MXN", "% del Total"],
         rows,
+        zebra=True,
     )
 
 
 def _build_gross_margin_section(doc: Document, products: list) -> None:
     _add_heading(doc, "4. Margen Bruto por Producto", level=1)
-    doc.add_paragraph(
-        "Comparación entre ingresos y costo de compra para los productos más relevantes."
+    _add_styled_paragraph(
+        doc,
+        "Comparación entre ingresos y costo de compra para los productos más relevantes.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
     )
+
+    row_styles: list[dict | None] = []
+    for p in products:
+        margin_pct = p.margin_percent
+        style: dict | None = None
+        if margin_pct is not None:
+            if margin_pct < 0:
+                style = {"bg": _RED_BG, "color": _RED}
+            elif margin_pct >= 30:
+                style = {"bg": _GREEN_BG, "color": _GREEN}
+        row_styles.append(style)
 
     rows = [
         [
@@ -384,14 +589,31 @@ def _build_gross_margin_section(doc: Document, products: list) -> None:
         doc,
         ["Producto", "SKU", "Ingresos", "Costo", "Margen MXN", "% Margen"],
         rows,
+        zebra=True,
+        row_styles=row_styles,
     )
 
 
 def _build_pending_payments_section(doc: Document, payments: list) -> None:
     _add_heading(doc, "5. Pagos Pendientes por Cliente", level=1)
-    doc.add_paragraph(
-        "Clientes con cotizaciones aprobadas aún sin registrar pago completo."
+    _add_styled_paragraph(
+        doc,
+        "Clientes con cotizaciones aprobadas aún sin registrar pago completo.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
     )
+
+    row_styles: list[dict | None] = []
+    for p in payments:
+        dias = p.dias_sin_pagar
+        style: dict | None = None
+        if dias is not None:
+            if dias >= 60:
+                style = {"bg": _RED_BG, "color": _RED}
+            elif dias >= 30:
+                style = {"bg": _ORANGE_BG, "color": _ORANGE}
+        row_styles.append(style)
 
     rows = [
         [
@@ -407,15 +629,32 @@ def _build_pending_payments_section(doc: Document, payments: list) -> None:
         doc,
         ["Cliente", "Tipo", "Pedidos", "Total Adeudado MXN", "Sin pagar"],
         rows,
+        zebra=True,
+        row_styles=row_styles,
     )
 
 
 def _build_at_risk_section(doc: Document, customers: list) -> None:
     _add_heading(doc, "6. Clientes en Riesgo de Abandono", level=1)
-    doc.add_paragraph(
-        "Clientes con caída significativa en compras comparando los últimos 90 días "
-        "contra los 90 días previos."
+    _add_styled_paragraph(
+        doc,
+        "Clientes con caída significativa en compras comparando los últimos 90 días contra los 90 días previos.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
     )
+
+    row_styles: list[dict | None] = []
+    for c in customers:
+        riesgo = (c.riesgo_abandono or "").lower().strip()
+        style: dict | None = None
+        if riesgo == "crítico":
+            style = {"bg": _RED_BG, "color": _RED}
+        elif riesgo == "alto":
+            style = {"bg": _ORANGE_BG, "color": _ORANGE}
+        elif riesgo == "medio":
+            style = {"bg": _YELLOW_BG, "color": _YELLOW}
+        row_styles.append(style)
 
     rows = [
         [
@@ -431,4 +670,6 @@ def _build_at_risk_section(doc: Document, customers: list) -> None:
         doc,
         ["Cliente", "Riesgo", "Últimos 90 días", "90 días previos", "Última compra"],
         rows,
+        zebra=True,
+        row_styles=row_styles,
     )
