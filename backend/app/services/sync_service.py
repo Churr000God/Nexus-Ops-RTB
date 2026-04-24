@@ -118,6 +118,7 @@ async def _run_db_sync(service: SyncService) -> None:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(script),
+            "--skip-rollups",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=env,

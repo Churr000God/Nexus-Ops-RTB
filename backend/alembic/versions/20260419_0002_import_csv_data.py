@@ -314,16 +314,38 @@ def _bulk_upsert(
     """
     if not rows:
         return (0, 0)
+
+    # Deduplicate rows by conflict columns AND primary key — keep last occurrence.
+    # PostgreSQL raises CardinalityViolation if two rows share the same conflict
+    # key, and UniqueViolation if two rows share the same PK with different
+    # conflict keys.
+    pk_col_names = [col.name for col in table.primary_key.columns]
+    seen_conflict: dict[tuple, dict] = {}
+    for row in rows:
+        key = tuple(row.get(c) for c in conflict_cols)
+        seen_conflict[key] = row
+    seen_pk: dict[tuple, dict] = {}
+    for row in seen_conflict.values():
+        pk_key = tuple(row.get(c) for c in pk_col_names)
+        seen_pk[pk_key] = row
+    rows = list(seen_pk.values())
+
+    # Only use columns that actually exist in the DB at this migration step.
+    # Model.__table__ may include columns added by later migrations.
+    existing_db_cols = {
+        col["name"] for col in sa.inspect(conn).get_columns(table.name)
+    }
+
     pk_cols = {col.name for col in table.primary_key.columns}
     generated_cols = {col.name for col in table.c if col.computed is not None}
     conflict_set = set(conflict_cols)
     exclude_set = pk_cols | conflict_set | generated_cols | set(exclude_from_update or [])
 
-    # Strip generated columns from INSERT values — PostgreSQL rejects explicit
-    # values for GENERATED ALWAYS columns.
+    # Strip generated columns and non-existent columns from INSERT values.
+    strip_cols = generated_cols | (set(table.c.keys()) - existing_db_cols)
     clean_rows = (
-        [{k: v for k, v in row.items() if k not in generated_cols} for row in rows]
-        if generated_cols
+        [{k: v for k, v in row.items() if k not in strip_cols} for row in rows]
+        if strip_cols
         else rows
     )
 
@@ -331,7 +353,7 @@ def _bulk_upsert(
     update_dict = {
         col.name: stmt.excluded[col.name]
         for col in table.c
-        if col.name not in exclude_set
+        if col.name not in exclude_set and col.name in existing_db_cols
     }
     stmt = stmt.on_conflict_do_update(
         index_elements=conflict_cols,
@@ -628,6 +650,17 @@ def _import_quote_items(
             }
         )
 
+    # Deduplicate across the full list before chunking — two rows with the same
+    # id or the same (quote_id, line_external_id) would violate PK / UNIQUE
+    # across batches if not removed here.
+    seen_id: dict = {}
+    for row in payloads:
+        seen_id[row["id"]] = row
+    seen_line: dict = {}
+    for row in seen_id.values():
+        seen_line[(row["quote_id"], row["line_external_id"])] = row
+    payloads = list(seen_line.values())
+
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
@@ -635,7 +668,7 @@ def _import_quote_items(
             conn,
             QuoteItem.__table__,
             batch,
-            conflict_cols=["quote_id", "line_external_id"],
+            conflict_cols=["id"],
         )
         inserted_total += inserted
         skipped_total += skipped

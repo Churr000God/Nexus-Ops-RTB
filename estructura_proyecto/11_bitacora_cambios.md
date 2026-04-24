@@ -1,5 +1,39 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-24 — Despliegue Raspberry Pi, ngrok, fix sincronización CSV, update-safe.sh
+
+### Docker / nginx
+
+- `docker/nginx/default.conf`: corregido `proxy_pass` (sin puerto en upstream); añadidos headers
+  `X-Forwarded-*`; eliminado bloque `/n8n/` no usado.
+- `docker/nginx/default.prod.conf`: vaciado (SSL no aplicable en despliegue actual con ngrok).
+- `docker-compose.yml`: añadido ARG `VITE_API_URL` en build de frontend; nuevo servicio `ngrok`
+  con dominio estático `caress-shortlist-disarm.ngrok-free.dev`.
+
+### Frontend
+
+- `frontend/Dockerfile`: añadido `ARG VITE_API_URL=` + `ENV` antes de `npm run build` para
+  inyectar variables Vite en tiempo de build.
+- `frontend/nginx.conf`: añadido bloque `/api/` para proxy desde puerto 5173 al backend.
+
+### Sincronización CSV (Alembic / sync_service)
+
+- `20260419_0002_import_csv_data.py`:
+  - `_bulk_upsert`: filtra columnas al subconjunto existente en BD en el momento de la migración.
+  - `_bulk_upsert`: deduplicación por `conflict_cols` y PK antes de insertar.
+  - `_import_quote_items`: deduplicación global por `id` y `(quote_id, line_external_id)`;
+    `conflict_cols` cambiado a `["id"]`.
+- `sync_service.py`: añadido `--skip-rollups` al subproceso (función `app.recompute_all_rollups`
+  no existe en BD).
+
+### Scripts
+
+- `scripts/update-safe.sh` (NUEVO): actualización segura de 7 pasos con backup pre-update,
+  restore antes de migraciones, y soporte `--dry-run`. Ver
+  `docs/despliegue_raspberry_pi_2026-04-24.md`.
+
+---
+
 ## 2026-04-21 — Dashboard de Ventas (riesgo + pagos) y hardening de API
 
 ### Backend (FastAPI)

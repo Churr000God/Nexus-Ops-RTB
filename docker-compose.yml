@@ -49,6 +49,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     env_file: .env
     depends_on:
       - backend
@@ -86,6 +88,17 @@ services:
       - backend
       - frontend
       - n8n
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command: http --domain=caress-shortlist-disarm.ngrok-free.dev proxy:80
+    ports:
+      - "4040:4040"
+    depends_on:
+      - proxy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
