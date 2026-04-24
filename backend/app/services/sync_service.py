@@ -82,10 +82,11 @@ class SyncService:
         received = set(_state["csvs_received"])
         return EXPECTED_DATASETS.issubset(received)
 
-    def start_import_if_complete(self) -> bool:
+    def start_import_if_complete(self, is_final: bool = False) -> bool:
         if _state["state"] != "syncing":
             return False
-        if not self.all_csvs_received():
+        # Dispara si n8n marcó este como el último CSV, o si llegaron todos los esperados
+        if not is_final and not self.all_csvs_received():
             return False
         self._launch_import_task()
         return True
@@ -117,8 +118,6 @@ async def _run_db_sync(service: SyncService) -> None:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(script),
-            "--mode",
-            "replace",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=env,

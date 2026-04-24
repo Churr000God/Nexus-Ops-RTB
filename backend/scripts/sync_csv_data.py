@@ -32,7 +32,6 @@ DEFAULT_CSV_DIR = (
 class DatasetSpec:
     dataset: str
     file_name: str
-    tables_to_clear: tuple[str, ...]
     handler: Callable[[sa.Connection, Iterable[dict[str, Any]]], tuple[int, int, int]]
 
 
@@ -68,8 +67,14 @@ def _import_inventory_movements(
         if movement_id is None:
             continue
 
+        # "ID / movimiento" normaliza igual que "id_movimiento"; el lector lo
+        # renombra a "id_movimiento_2" para preservar ambos valores.
         movement_number = _norm_id(
-            row, "movimiento", "numero_de_movimiento", "numero_movimiento"
+            row,
+            "movimiento",
+            "numero_de_movimiento",
+            "numero_movimiento",
+            "id_movimiento_2",   # alias cuando hay colisión de headers en el CSV
         )
         movement_type = _norm_id(row, "tipo_de_movimiento", "tipo", "movimiento")
 
@@ -83,7 +88,13 @@ def _import_inventory_movements(
                 ),
                 "movement_type": movement_type,
                 "qty_in": importer._parse_decimal(
-                    _norm_id(row, "cantidad_entrada", "entrada", "qty_in")
+                    _norm_id(
+                        row,
+                        "cantidad_entrada",
+                        "entrada",
+                        "qty_in",
+                        "cantidad_entrante",   # alias CSV actual
+                    )
                 ),
                 "qty_out": importer._parse_decimal(
                     _norm_id(row, "cantidad_salida", "salida", "qty_out")
@@ -94,6 +105,7 @@ def _import_inventory_movements(
                         "cantidad_no_conforme",
                         "cantidad_nc",
                         "qty_nonconformity",
+                        "cantidad_por_no_conformidad",   # alias CSV actual
                     )
                 ),
                 "moved_on": importer._parse_datetime(
@@ -106,14 +118,24 @@ def _import_inventory_movements(
                     conn,
                     "entradas_mercancia",
                     importer._parse_uuid(
-                        _norm_id(row, "entrada_mercancia", "id_entrada_mercancia")
+                        _norm_id(
+                            row,
+                            "entrada_mercancia",
+                            "id_entrada_mercancia",
+                            "referencia_entrada",   # alias CSV actual
+                        )
                     ),
                 ),
                 "quote_item_id": importer._fk_or_none(
                     conn,
                     "cotizacion_items",
                     importer._parse_uuid(
-                        _norm_id(row, "detalle_cotizacion", "cotizacion_item")
+                        _norm_id(
+                            row,
+                            "detalle_cotizacion",
+                            "cotizacion_item",
+                            "referencia_salida",   # alias CSV actual
+                        )
                     ),
                 ),
                 "nonconformity_id": importer._fk_or_none(
@@ -128,14 +150,14 @@ def _import_inventory_movements(
             }
         )
 
-    inserted_total = 0
-    skipped_total = 0
+    created_total = 0
+    updated_total = 0
     for batch in importer._chunk(payloads, 500):
-        inserted, skipped = importer._bulk_insert_do_nothing(
+        created, updated = importer._bulk_upsert(
             conn, InventoryMovement.__table__, batch, conflict_cols=["id"]
         )
-        inserted_total += inserted
-        skipped_total += skipped
+        created_total += created
+        updated_total += updated
 
     conn.execute(
         text(
@@ -148,12 +170,11 @@ def _import_inventory_movements(
               AND (
                     p.internal_code = m.external_product_id
                  OR p.sku = m.external_product_id
-                 OR p.external_id = m.external_product_id
               )
             """
         )
     )
-    return row_count, inserted_total, skipped_total
+    return row_count, created_total, updated_total
 
 
 def _import_incomplete_orders(
@@ -205,15 +226,15 @@ def _import_incomplete_orders(
             }
         )
 
-    inserted_total = 0
-    skipped_total = 0
+    created_total = 0
+    updated_total = 0
     for batch in importer._chunk(payloads, 500):
-        inserted, skipped = importer._bulk_insert_do_nothing(
+        created, updated = importer._bulk_upsert(
             conn, IncompleteOrder.__table__, batch, conflict_cols=["id"]
         )
-        inserted_total += inserted
-        skipped_total += skipped
-    return row_count, inserted_total, skipped_total
+        created_total += created
+        updated_total += updated
+    return row_count, created_total, updated_total
 
 
 def _build_specs(importer: Any) -> dict[str, DatasetSpec]:
@@ -221,25 +242,21 @@ def _build_specs(importer: Any) -> dict[str, DatasetSpec]:
         "directorio_clientes_proveedores": DatasetSpec(
             dataset="directorio_clientes_proveedores",
             file_name="Directorio_Clientes_Proveedores.csv",
-            tables_to_clear=("clientes", "proveedores"),
             handler=importer._import_directory,
         ),
         "catalogo_productos": DatasetSpec(
             dataset="catalogo_productos",
             file_name="Catalogo_de_Productos.csv",
-            tables_to_clear=("productos",),
             handler=importer._import_products,
         ),
         "inventario": DatasetSpec(
             dataset="inventario",
             file_name="Gestion_de_Inventario.csv",
-            tables_to_clear=("inventario",),
             handler=importer._import_inventory,
         ),
         "bitacora_movimientos": DatasetSpec(
             dataset="bitacora_movimientos",
             file_name="Bitacora_de_Movimientos.csv",
-            tables_to_clear=("movimientos_inventario",),
             handler=lambda conn, rows: _import_inventory_movements(
                 importer, conn, rows
             ),
@@ -247,126 +264,79 @@ def _build_specs(importer: Any) -> dict[str, DatasetSpec]:
         "cotizaciones": DatasetSpec(
             dataset="cotizaciones",
             file_name="Cotizaciones_a_Clientes.csv",
-            tables_to_clear=("cotizaciones",),
             handler=importer._import_quotes,
         ),
         "cotizacion_items": DatasetSpec(
             dataset="cotizacion_items",
             file_name="Detalle_de_Cotizaciones.csv",
-            tables_to_clear=("cotizacion_items",),
             handler=importer._import_quote_items,
         ),
         "cotizaciones_canceladas": DatasetSpec(
             dataset="cotizaciones_canceladas",
             file_name="Cotizaciones_Canceladas.csv",
-            tables_to_clear=("cotizaciones_canceladas",),
             handler=importer._import_cancelled_quotes,
         ),
         "ventas": DatasetSpec(
             dataset="ventas",
             file_name="Reporte_de_Ventas.csv",
-            tables_to_clear=("ventas",),
             handler=importer._import_sales,
         ),
         "crecimiento_inventario": DatasetSpec(
             dataset="crecimiento_inventario",
             file_name="Crecimiento_de_Inventario.csv",
-            tables_to_clear=("crecimiento_inventario",),
             handler=importer._import_inventory_growth,
         ),
         "facturas_compras": DatasetSpec(
             dataset="facturas_compras",
             file_name="Facturas_Compras.csv",
-            tables_to_clear=("facturas_compras",),
             handler=importer._import_purchase_invoices,
         ),
         "pedidos_proveedor": DatasetSpec(
             dataset="pedidos_proveedor",
             file_name="Solicitudes_A_Proveedores.csv",
-            tables_to_clear=("pedidos_proveedor",),
             handler=importer._import_supplier_orders,
         ),
         "entradas_mercancia": DatasetSpec(
             dataset="entradas_mercancia",
             file_name="Entradas_de_Mercancia.csv",
-            tables_to_clear=("entradas_mercancia",),
             handler=importer._import_goods_receipts,
         ),
         "gastos_operativos": DatasetSpec(
             dataset="gastos_operativos",
             file_name="Gastos_Operativos_RTB.csv",
-            tables_to_clear=("gastos_operativos",),
             handler=importer._import_operating_expenses,
         ),
         "pedidos_clientes": DatasetSpec(
             dataset="pedidos_clientes",
             file_name="Pedidos_de_Clientes.csv",
-            tables_to_clear=("pedidos_clientes",),
             handler=importer._import_customer_orders,
         ),
         "pedidos_incompletos": DatasetSpec(
             dataset="pedidos_incompletos",
             file_name="Pedidos_Incompletos.csv",
-            tables_to_clear=("pedidos_incompletos",),
             handler=lambda conn, rows: _import_incomplete_orders(importer, conn, rows),
         ),
         "verificador_fechas_pedidos": DatasetSpec(
             dataset="verificador_fechas_pedidos",
             file_name="Verificador_de_Fechas_Pedidos.csv",
-            tables_to_clear=("verificador_fechas_pedidos",),
             handler=importer._import_order_date_verification,
         ),
         "solicitudes_material": DatasetSpec(
             dataset="solicitudes_material",
             file_name="Solicitudes_de_Material.csv",
-            tables_to_clear=("solicitudes_material",),
             handler=importer._import_material_requests,
         ),
         "proveedor_productos": DatasetSpec(
             dataset="proveedor_productos",
             file_name="Proveedores_y_Productos.csv",
-            tables_to_clear=("proveedor_productos",),
             handler=importer._import_supplier_products,
         ),
         "no_conformes": DatasetSpec(
             dataset="no_conformes",
             file_name="No_Conformes.csv",
-            tables_to_clear=("no_conformes",),
             handler=importer._import_nonconformities,
         ),
     }
-
-
-def _clear_tables(conn: sa.Connection, table_names: list[str]) -> None:
-    for table_name in table_names:
-        conn.execute(text(f"DELETE FROM {table_name}"))
-
-
-def _ordered_tables_to_clear(selected: list[DatasetSpec]) -> list[str]:
-    clear_order = [
-        "movimientos_inventario",
-        "no_conformes",
-        "proveedor_productos",
-        "verificador_fechas_pedidos",
-        "pedidos_incompletos",
-        "pedidos_clientes",
-        "entradas_mercancia",
-        "solicitudes_material",
-        "pedidos_proveedor",
-        "facturas_compras",
-        "gastos_operativos",
-        "ventas",
-        "cotizacion_items",
-        "cotizaciones_canceladas",
-        "cotizaciones",
-        "crecimiento_inventario",
-        "inventario",
-        "productos",
-        "clientes",
-        "proveedores",
-    ]
-    selected_tables = {tbl for spec in selected for tbl in spec.tables_to_clear}
-    return [tbl for tbl in clear_order if tbl in selected_tables]
 
 
 def _sync_dataset(
@@ -374,7 +344,8 @@ def _sync_dataset(
     conn: sa.Connection,
     spec: DatasetSpec,
     csv_dir: Path,
-    append_mode: bool,
+    *,
+    force: bool = False,
 ) -> None:
     csv_path = csv_dir / spec.file_name
     sha = (
@@ -383,7 +354,7 @@ def _sync_dataset(
         else None
     )
 
-    if append_mode and sha and importer._already_imported(conn, spec.dataset, sha):
+    if not force and sha and importer._already_imported(conn, spec.dataset, sha):
         print(f"[SKIP] {spec.dataset}: hash ya importado ({spec.file_name})")
         return
 
@@ -398,21 +369,21 @@ def _sync_dataset(
                 inserted_count=0,
                 skipped_count=0,
             )
-            print(f"[OK] {spec.dataset}: archivo vacío/inexistente, tabla sincronizada")
+            print(f"[OK] {spec.dataset}: archivo vacío/inexistente")
             return
 
         _, rows_iter = importer._read_csv_rows(csv_path)
-        row_count, inserted_count, skipped_count = spec.handler(conn, rows_iter)
+        row_count, created_count, updated_count = spec.handler(conn, rows_iter)
         importer._record_run_finish(
             conn,
             run_id,
             status="success",
             row_count=row_count,
-            inserted_count=inserted_count,
-            skipped_count=skipped_count,
+            inserted_count=created_count,
+            skipped_count=updated_count,
         )
         print(
-            f"[OK] {spec.dataset}: rows={row_count}, inserted={inserted_count}, skipped={skipped_count}"
+            f"[OK] {spec.dataset}: rows={row_count}, created={created_count}, updated={updated_count}"
         )
     except Exception as exc:  # pragma: no cover
         importer._record_run_finish(
@@ -429,18 +400,12 @@ def _sync_dataset(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Sincroniza CSVs hacia Postgres (replace o append)."
+        description="Sincroniza CSVs delta hacia Postgres (upsert por ID)."
     )
     parser.add_argument(
         "--csv-dir",
         default=str(DEFAULT_CSV_DIR),
         help="Directorio donde están los CSV.",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["replace", "append"],
-        default="replace",
-        help="replace: borra y recarga; append: solo inserta nuevos (idempotente por hash/conflict).",
     )
     parser.add_argument(
         "--datasets",
@@ -452,6 +417,14 @@ def parse_args() -> argparse.Namespace:
         "--skip-rollups",
         action="store_true",
         help="Si se define, no ejecuta app.recompute_all_rollups() al final.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Reimporta todos los CSVs aunque el hash ya haya sido procesado. "
+            "Usar solo para reemplazar la BD completa desde los archivos en CSV_DIR."
+        ),
     )
     return parser.parse_args()
 
@@ -478,18 +451,15 @@ def main() -> None:
     with engine.connect() as conn:
         trans = conn.begin()
         try:
-            if args.mode == "replace":
-                tables = _ordered_tables_to_clear(selected_specs)
-                _clear_tables(conn, tables)
-                print(f"[INFO] Tablas limpiadas ({len(tables)}): {', '.join(tables)}")
-
+            if args.force:
+                print("[FORCE] Reimportando todos los datasets sin verificar hash.")
             for spec in selected_specs:
                 _sync_dataset(
                     importer=importer,
                     conn=conn,
                     spec=spec,
                     csv_dir=csv_dir,
-                    append_mode=(args.mode == "append"),
+                    force=args.force,
                 )
 
             if not args.skip_rollups:

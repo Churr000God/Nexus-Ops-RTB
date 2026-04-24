@@ -19,6 +19,7 @@ class UploadCsvPayload(BaseModel):
     dataset: str
     filename: str
     content: str  # base64-encoded CSV
+    is_final: bool = False  # True en el último CSV del batch para disparar la importación
 
 
 def _verify_sync_key(x_sync_key: str = Header(default="", alias="x-sync-key")) -> None:
@@ -83,7 +84,7 @@ async def upload_csv(
         logger.info("CSV guardado: %s (%d bytes)", payload.filename, len(raw))
 
     service.record_csv_received(payload.dataset)
-    auto_started = service.start_import_if_complete()
+    auto_started = service.start_import_if_complete(is_final=payload.is_final)
 
     return {
         "ok": True,

@@ -595,7 +595,7 @@ class VentasService:
         sql = text(
             f"""
             WITH total_ventas AS (
-                SELECT COALESCE(SUM(ci.subtotal), 0) AS total
+                SELECT COALESCE(SUM(ci.accumulated_sales), 0) AS total
                 FROM cotizacion_items ci
                 JOIN cotizaciones c ON ci.quote_id = c.id
                 WHERE {base_where}
@@ -605,7 +605,7 @@ class VentasService:
                     COALESCE(p.name, ci.sku, 'Sin producto') AS product,
                     ci.sku,
                     COALESCE(SUM(ci.qty_packed), 0) AS qty,
-                    COALESCE(SUM(ci.subtotal), 0) AS revenue
+                    COALESCE(SUM(ci.accumulated_sales), 0) AS revenue
                 FROM cotizacion_items ci
                 JOIN cotizaciones c ON ci.quote_id = c.id
                 LEFT JOIN productos p ON ci.product_id = p.id

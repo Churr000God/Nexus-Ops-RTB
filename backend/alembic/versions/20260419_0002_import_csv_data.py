@@ -220,22 +220,56 @@ def _parse_quadrimester(value: str | None) -> str | None:
 
 
 def _read_csv_rows(file_path: Path) -> tuple[list[str], Iterator[dict]]:
+    """Lee un CSV y devuelve (headers_originales, iterador_de_filas).
+
+    Cuando dos columnas normalizan al mismo key (e.g. 'id_movimiento' y
+    'ID / movimiento' → ambas 'id_movimiento'), la segunda recibe un sufijo
+    numérico en el nombre de clave del dict crudo ('ID / movimiento' → se
+    almacena como 'ID / movimiento_2'). Así _normalize_row produce
+    'id_movimiento' (UUID, columna original) e 'id_movimiento_2' (valor
+    duplicado), preservando ambos valores sin perder el primero.
+    """
     encodings = ("utf-8-sig", "utf-8", "utf-16", "latin-1")
     last_exc: Exception | None = None
     for encoding in encodings:
         try:
             handle = file_path.open("r", encoding=encoding, newline="")
-            reader = csv.DictReader(handle)
+            plain = csv.reader(handle)
 
-            def _iter() -> Iterator[dict]:
+            try:
+                raw_headers = next(plain)
+            except StopIteration:
+                handle.close()
+                return ([], iter([]))
+
+            # Construir claves únicas para el dict: sufijo _2, _3... cuando
+            # dos headers normalizan al mismo key.
+            seen_norm: dict[str, int] = {}
+            dict_keys: list[str] = []
+            for h in raw_headers:
+                nk = _normalize_key(str(h)) if h else f"__empty_{len(dict_keys)}"
+                count = seen_norm.get(nk, 0) + 1
+                seen_norm[nk] = count
+                dict_keys.append(h if count == 1 else f"{h}_{count}")
+
+            def _iter(
+                r=plain, keys=dict_keys, fh=handle
+            ) -> Iterator[dict]:
                 try:
-                    for row in reader:
-                        yield row
+                    for values in r:
+                        padded = list(values) + [""] * max(
+                            0, len(keys) - len(values)
+                        )
+                        yield dict(zip(keys, padded[: len(keys)]))
                 finally:
-                    handle.close()
+                    fh.close()
 
-            return (list(reader.fieldnames or []), _iter())
+            return (raw_headers, _iter())
         except Exception as exc:
+            try:
+                handle.close()
+            except Exception:
+                pass
             last_exc = exc
             continue
     raise RuntimeError(f"No se pudo leer CSV: {file_path}") from last_exc
@@ -262,6 +296,52 @@ def _bulk_insert_do_nothing(
     inserted = len(result.fetchall())
     skipped = len(rows) - inserted
     return inserted, skipped
+
+
+def _bulk_upsert(
+    conn: sa.Connection,
+    table: sa.Table,
+    rows: list[dict],
+    *,
+    conflict_cols: list[str],
+    exclude_from_update: list[str] | None = None,
+) -> tuple[int, int]:
+    """INSERT … ON CONFLICT DO UPDATE. Returns (created, updated).
+
+    Automatically excludes PK columns, conflict_cols, and GENERATED ALWAYS
+    columns from both INSERT values and the DO UPDATE SET clause.
+    Pass exclude_from_update to protect additional unique identifiers.
+    """
+    if not rows:
+        return (0, 0)
+    pk_cols = {col.name for col in table.primary_key.columns}
+    generated_cols = {col.name for col in table.c if col.computed is not None}
+    conflict_set = set(conflict_cols)
+    exclude_set = pk_cols | conflict_set | generated_cols | set(exclude_from_update or [])
+
+    # Strip generated columns from INSERT values — PostgreSQL rejects explicit
+    # values for GENERATED ALWAYS columns.
+    clean_rows = (
+        [{k: v for k, v in row.items() if k not in generated_cols} for row in rows]
+        if generated_cols
+        else rows
+    )
+
+    stmt = pg_insert(table).values(clean_rows)
+    update_dict = {
+        col.name: stmt.excluded[col.name]
+        for col in table.c
+        if col.name not in exclude_set
+    }
+    stmt = stmt.on_conflict_do_update(
+        index_elements=conflict_cols,
+        set_=update_dict,
+    ).returning(sa.literal_column("(xmax::text = '0')::int").label("is_insert"))
+    result = conn.execute(stmt)
+    rows_result = result.fetchall()
+    created = sum(1 for r in rows_result if r[0] == 1)
+    updated = len(rows_result) - created
+    return created, updated
 
 
 def _fk_or_none(
@@ -385,13 +465,13 @@ def _import_directory(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(customer_rows, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, Customer.__table__, batch, conflict_cols=["external_id"]
         )
         inserted_total += inserted
         skipped_total += skipped
     for batch in _chunk(supplier_rows, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, Supplier.__table__, batch, conflict_cols=["external_id"]
         )
         inserted_total += inserted
@@ -426,21 +506,28 @@ def _import_products(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, in
             "purchase_cost_ariba": _parse_decimal(row.get("costo_ariba")),
         }
         if sku:
-            by_sku.append(payload)
+            # No incluir internal_code en by_sku: productos con sku se identifican por sku.
+            # Si internal_code se incluyera en el INSERT, colisionaría con otros productos
+            # que ya tienen ese mismo internal_code pero distinto sku (problema de calidad de datos).
+            by_sku.append({**payload, "internal_code": None})
         elif internal_code:
             by_internal_code.append(payload)
 
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(by_sku, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
-            conn, Product.__table__, batch, conflict_cols=["sku"]
+        inserted, skipped = _bulk_upsert(
+            conn, Product.__table__, batch,
+            conflict_cols=["sku"],
+            exclude_from_update=["internal_code"],
         )
         inserted_total += inserted
         skipped_total += skipped
     for batch in _chunk(by_internal_code, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
-            conn, Product.__table__, batch, conflict_cols=["internal_code"]
+        inserted, skipped = _bulk_upsert(
+            conn, Product.__table__, batch,
+            conflict_cols=["internal_code"],
+            exclude_from_update=["sku"],
         )
         inserted_total += inserted
         skipped_total += skipped
@@ -489,7 +576,7 @@ def _import_quotes(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, int,
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, Quote.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -506,7 +593,9 @@ def _import_quote_items(
         row_count += 1
         row = _normalize_row(raw)
         item_id = _parse_uuid(row.get("id_partida"))
-        quote_id = _parse_uuid(row.get("cotizacion_relacionada"))
+        quote_id = _fk_or_none(
+            conn, "cotizaciones", _parse_uuid(row.get("cotizacion_relacionada"))
+        )
         line_external_id = row.get("id_de_detalle_partida")
         if item_id is None or quote_id is None:
             continue
@@ -542,7 +631,7 @@ def _import_quote_items(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn,
             QuoteItem.__table__,
             batch,
@@ -583,7 +672,9 @@ def _import_cancelled_quotes(
                 "quote_number": row.get("numero_de_cotizacion"),
                 "cancelled_on": _parse_date(row.get("fecha_de_cancelacion")),
                 "reason": row.get("motivo_de_cancelacion"),
-                "quote_id": _parse_uuid(row.get("cotizacion_relacionada")),
+                "quote_id": _fk_or_none(
+                    conn, "cotizaciones", _parse_uuid(row.get("cotizacion_relacionada"))
+                ),
                 "external_customer_id": row.get("cliente"),
             }
         )
@@ -591,7 +682,7 @@ def _import_cancelled_quotes(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, CancelledQuote.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -625,14 +716,16 @@ def _import_sales(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, int, 
                 "year_month": row.get("ano_mes"),
                 "quadrimester": _parse_quadrimester(row.get("cuatrimestre")),
                 "status_r": row.get("estado_r"),
-                "quote_id": _parse_uuid(row.get("cotizacion_relacionada")),
+                "quote_id": _fk_or_none(
+                    conn, "cotizaciones", _parse_uuid(row.get("cotizacion_relacionada"))
+                ),
             }
         )
 
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 50):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, Sale.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -690,7 +783,7 @@ def _import_inventory(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, InventoryItem.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -736,7 +829,7 @@ def _import_inventory_growth(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, InventoryGrowth.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -791,7 +884,7 @@ def _import_nonconformities(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, NonConformity.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -838,7 +931,7 @@ def _import_material_requests(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, MaterialRequest.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -890,7 +983,7 @@ def _import_goods_receipts(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, GoodsReceipt.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -953,7 +1046,7 @@ def _import_supplier_orders(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 300):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, SupplierOrder.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -1019,7 +1112,7 @@ def _import_purchase_invoices(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 200):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, PurchaseInvoice.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -1060,7 +1153,7 @@ def _import_operating_expenses(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, OperatingExpense.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -1119,7 +1212,7 @@ def _import_customer_orders(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 300):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, CustomerOrder.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -1158,7 +1251,7 @@ def _import_order_date_verification(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn, OrderDateVerification.__table__, batch, conflict_cols=["id"]
         )
         inserted_total += inserted
@@ -1209,11 +1302,11 @@ def _import_supplier_products(
     inserted_total = 0
     skipped_total = 0
     for batch in _chunk(payloads, 500):
-        inserted, skipped = _bulk_insert_do_nothing(
+        inserted, skipped = _bulk_upsert(
             conn,
             SupplierProduct.__table__,
             batch,
-            conflict_cols=["product_id", "supplier_id", "supplier_type"],
+            conflict_cols=["id"],
         )
         inserted_total += inserted
         skipped_total += skipped

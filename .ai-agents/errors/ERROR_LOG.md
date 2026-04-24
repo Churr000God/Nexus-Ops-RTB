@@ -61,6 +61,10 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0011 | 2026-04-21 | db | medio | PostgreSQL ORDER BY col DESC coloca NULLs primero por defecto | resuelto | [ERR-0011_postgresql-desc-nulls-first-por-defecto.md](resolutions/ERR-0011_postgresql-desc-nulls-first-por-defecto.md) |
 | ERR-0012 | 2026-04-22 | frontend | bajo | TS2322 MissingDemandByProduct[] no asignable a ProductSuggestion[] en docker build | resuelto | [ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md](resolutions/ERR-0012_ts2322-missingdemandbyproduct-no-asignable-productsugestion.md) |
 | ERR-0013 | 2026-04-23 | backend | alto | AttributeError: CT_TcPr sin metodo get_or_add_shd en python-docx 1.1.2 | resuelto | [ERR-0013_python-docx-ct-tcpr-no-shd.md](resolutions/ERR-0013_python-docx-ct-tcpr-no-shd.md) |
+| ERR-0014 | 2026-04-24 | backend+db | alto | Columnas GENERATED ALWAYS no declaradas con Computed() en GoodsReceipt rompen upsert | resuelto | [ERR-0014_generated-always-computed-goodsreceipt.md](resolutions/ERR-0014_generated-always-computed-goodsreceipt.md) |
+| ERR-0015 | 2026-04-24 | backend+scripts | alto | ForeignKeyViolation quote_id en sync delta: cotizacion padre ausente del batch | resuelto | [ERR-0015_fk-violation-quote-id-sync-delta.md](resolutions/ERR-0015_fk-violation-quote-id-sync-delta.md) |
+| ERR-0016 | 2026-04-24 | backend+db | alto | UniqueViolation proveedor_productos_pkey: conflict_cols sin constraint UNIQUE real | resuelto | [ERR-0016_unique-violation-proveedor-productos-conflict-cols.md](resolutions/ERR-0016_unique-violation-proveedor-productos-conflict-cols.md) |
+| ERR-0017 | 2026-04-24 | backend+scripts | alto | Headers CSV duplicados en Bitacora: DictReader last-wins borra UUID de la primera columna | resuelto | [ERR-0017_csv-headers-duplicados-bitacora-uuid-perdido.md](resolutions/ERR-0017_csv-headers-duplicados-bitacora-uuid-perdido.md) |
 
 ---
 
@@ -68,8 +72,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 13 |
-| Resueltos | 13 |
+| Total errores registrados | 17 |
+| Resueltos | 17 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 

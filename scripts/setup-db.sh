@@ -138,7 +138,7 @@ log "Paso 6/8 — Sincronizando datos CSV (modo replace)..."
 MSYS_NO_PATHCONV=1 compose_cmd "$MODE" run --rm -T --no-deps \
   -e PYTHONPATH=/app \
   backend \
-  python /app/scripts/sync_csv_data.py --mode replace
+  python /app/scripts/sync_csv_data.py --force
 ok "Datos CSV sincronizados."
 
 # ---------------------------------------------------------------------------

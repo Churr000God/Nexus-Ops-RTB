@@ -1136,7 +1136,16 @@ class GoodsReceipt(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     qty_requested: Mapped[float | None] = mapped_column(Numeric(14, 4))
     qty_arrived: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    qty_requested_converted: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    qty_requested_converted: Mapped[float | None] = mapped_column(
+        Numeric(14, 4),
+        Computed(
+            "CASE "
+            "WHEN is_packaged THEN qty_requested * COALESCE(package_size, 1) "
+            "ELSE qty_requested "
+            "END",
+            persisted=True,
+        ),
+    )
     is_packaged: Mapped[bool | None] = mapped_column(Boolean)  # Paquete Solicitado
     physical_validation: Mapped[bool | None] = mapped_column(
         Boolean
@@ -1156,11 +1165,29 @@ class GoodsReceipt(Base):
     )
     external_product_id: Mapped[str | None] = mapped_column(String(80), index=True)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    total_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))  # computed
+    total_cost: Mapped[float | None] = mapped_column(
+        Numeric(14, 4),
+        Computed(
+            "CASE "
+            "WHEN unit_cost IS NULL OR qty_requested IS NULL THEN NULL "
+            "ELSE unit_cost * qty_requested "
+            "END",
+            persisted=True,
+        ),
+    )
     received_on: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
-    delivery_percent: Mapped[float | None] = mapped_column(Numeric(6, 4))  # computed
+    delivery_percent: Mapped[float | None] = mapped_column(
+        Numeric(6, 4),
+        Computed(
+            "CASE "
+            "WHEN qty_arrived IS NULL OR qty_requested IS NULL THEN NULL "
+            "ELSE qty_arrived / NULLIF(qty_requested, 0) "
+            "END",
+            persisted=True,
+        ),
+    )
     paid_on: Mapped[date | None] = mapped_column(Date)
     payment_status: Mapped[str | None] = mapped_column(String(40))
     payment_type: Mapped[str | None] = mapped_column(String(80))

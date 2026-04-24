@@ -71,6 +71,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-22 | Clientes con Pagos Pendientes y Tendencia de Pagos — búsqueda y tabla enriquecida | backend + frontend | 2 | [2026-04-22_pagos-pendientes-tendencia-pagos-busqueda.md](sessions/2026-04-22_pagos-pendientes-tendencia-pagos-busqueda.md) |
 | 2026-04-23 | Reporte de ventas DOCX + email con MailerSend | backend | 2 | [2026-04-23_reporte-ventas-docx-email-mailersend.md](sessions/2026-04-23_reporte-ventas-docx-email-mailersend.md) |
 | 2026-04-24 | Mejora de diseño visual del reporte DOCX de ventas | backend | 2 | [2026-04-24_mejora-diseno-reporte-docx-ventas.md](sessions/2026-04-24_mejora-diseno-reporte-docx-ventas.md) |
+| 2026-04-24 | Sync fixes: GENERATED ALWAYS, FK delta, conflict_cols, headers duplicados, distribucion ventas | backend+scripts+db | 3 | [2026-04-24_sync-fixes-distribucion-ventas.md](sessions/2026-04-24_sync-fixes-distribucion-ventas.md) |
 
 ---
 
@@ -78,6 +79,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 15 |
-| Errores registrados | 15 |
+| Total sesiones | 16 |
+| Errores registrados | 17 |
 | Lecciones documentadas | 17 |
