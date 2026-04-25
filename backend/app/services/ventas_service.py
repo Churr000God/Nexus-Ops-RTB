@@ -1725,32 +1725,32 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
     ) -> list[ApprovalTimeTrendResponse]:
-        """Días entre creación de cotización y fecha de la venta (sold_on), por mes."""
-        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
-
+        """approved_on − created_on de cotizaciones aprobadas, agrupado por mes."""
         days_expr = (
-            func.extract("epoch", Sale.sold_on - Quote.created_on) / 86400.0
+            func.extract("epoch", Quote.approved_on - Quote.created_on) / 86400.0
         )
-        month_key = func.to_char(Sale.sold_on, "YYYY-MM")
+        month_key = func.to_char(Quote.approved_on, "YYYY-MM")
 
         stmt = (
             select(
                 month_key.label("year_month"),
                 func.avg(days_expr).label("avg_days"),
                 func.stddev_pop(days_expr).label("stddev_days"),
-                func.count(Sale.id).label("count"),
+                func.count(Quote.id).label("count"),
             )
-            .join(Quote, Quote.id == Sale.quote_id)
+            .where(Quote.approved_on.is_not(None))
             .where(Quote.created_on.is_not(None))
-            .where(Sale.sold_on.is_not(None))
-            .where(Sale.quote_id.is_not(None))
             .group_by(month_key)
             .order_by(month_key.asc())
         )
-        if start_dt is not None:
-            stmt = stmt.where(Sale.sold_on >= start_dt)
-        if end_dt is not None:
-            stmt = stmt.where(Sale.sold_on < end_dt)
+        if start_date is not None:
+            stmt = stmt.where(
+                Quote.approved_on >= datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+            )
+        if end_date is not None:
+            stmt = stmt.where(
+                Quote.approved_on < datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+            )
 
         rows = (await self.db.execute(stmt)).all()
         if not rows:
