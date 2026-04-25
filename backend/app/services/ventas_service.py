@@ -1725,13 +1725,13 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
     ) -> list[ApprovalTimeTrendResponse]:
-        """Tiempo entre creación de cotización y creación de la venta, por mes."""
+        """Días entre creación de cotización y fecha de la venta (sold_on), por mes."""
         start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
 
         days_expr = (
-            func.extract("epoch", Sale.created_at - Quote.created_on) / 86400.0
+            func.extract("epoch", Sale.sold_on - Quote.created_on) / 86400.0
         )
-        month_key = func.to_char(Sale.created_at, "YYYY-MM")
+        month_key = func.to_char(Sale.sold_on, "YYYY-MM")
 
         stmt = (
             select(
@@ -1742,15 +1742,15 @@ class VentasService:
             )
             .join(Quote, Quote.id == Sale.quote_id)
             .where(Quote.created_on.is_not(None))
-            .where(Sale.created_at.is_not(None))
+            .where(Sale.sold_on.is_not(None))
             .where(Sale.quote_id.is_not(None))
             .group_by(month_key)
             .order_by(month_key.asc())
         )
         if start_dt is not None:
-            stmt = stmt.where(Sale.created_at >= start_dt)
+            stmt = stmt.where(Sale.sold_on >= start_dt)
         if end_dt is not None:
-            stmt = stmt.where(Sale.created_at < end_dt)
+            stmt = stmt.where(Sale.sold_on < end_dt)
 
         rows = (await self.db.execute(stmt)).all()
         if not rows:
