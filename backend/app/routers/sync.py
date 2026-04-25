@@ -19,7 +19,9 @@ class UploadCsvPayload(BaseModel):
     dataset: str
     filename: str
     content: str  # base64-encoded CSV
-    is_final: bool = False  # True en el último CSV del batch para disparar la importación
+    is_final: bool = (
+        False  # True en el último CSV del batch para disparar la importación
+    )
 
 
 def _verify_sync_key(x_sync_key: str = Header(default="", alias="x-sync-key")) -> None:
@@ -56,7 +58,9 @@ async def trigger_sync(
             resp.raise_for_status()
     except httpx.HTTPError as exc:
         service.set_state("error", error=str(exc))
-        raise HTTPException(status_code=502, detail=f"Error al contactar n8n: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"Error al contactar n8n: {exc}"
+        ) from exc
 
     return {"ok": True, "message": "Sincronización iniciada"}
 
@@ -76,7 +80,9 @@ async def upload_csv(
     try:
         raw = base64.b64decode(payload.content)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"content no es base64 válido: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"content no es base64 válido: {exc}"
+        ) from exc
 
     if raw:
         dest = service.csv_dir / payload.filename

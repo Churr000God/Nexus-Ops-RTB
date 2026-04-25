@@ -10,7 +10,7 @@ type SidebarProps = {
 const items = [
   { to: "/", label: "Inicio", icon: Home },
   { to: "/ventas", label: "Ventas", icon: BarChart3 },
-  { to: "/inventarios", label: "Inventarios", icon: Package, disabled: true },
+  { to: "/inventarios", label: "Almacén", icon: Package },
   { to: "/proveedores", label: "Proveedores", icon: Truck, disabled: true },
   { to: "/gastos", label: "Gastos", icon: Receipt, disabled: true },
 ]
@@ -65,7 +65,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       </div>
       <div className="mt-auto rounded-[var(--radius-lg)] border border-white/10 bg-white/5 px-3 py-4 text-xs text-white/55">
         <div className="font-medium text-white/80">Navegación base</div>
-        <div className="mt-1">Ventas activa · resto en construcción</div>
+        <div className="mt-1">Ventas y Almacén activos · resto en construcción</div>
       </div>
     </nav>
   )

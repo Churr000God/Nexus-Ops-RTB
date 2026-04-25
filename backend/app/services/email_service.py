@@ -17,8 +17,9 @@ class EmailError(Exception):
     pass
 
 
-async def send_ventas_report(
+async def _send_report(
     *,
+    report_title: str,
     to_email: str,
     start_date: date | None,
     end_date: date | None,
@@ -27,14 +28,15 @@ async def send_ventas_report(
     docx_filename: str,
     csv_filename: str,
 ) -> None:
-    """Envía el reporte de ventas (DOCX + CSV) por correo via MailerSend."""
     if not settings.MAILERSEND_API_TOKEN:
-        raise EmailError("MAILERSEND_API_TOKEN no configurado en las variables de entorno.")
+        raise EmailError(
+            "MAILERSEND_API_TOKEN no configurado en las variables de entorno."
+        )
 
     period = _period_label(start_date, end_date)
-    subject = f"Reporte de Ventas — {period}"
-    html_body = _build_html(period)
-    text_body = _build_text(period)
+    subject = f"{report_title} — {period}"
+    html_body = _build_html(report_title, period)
+    text_body = _build_text(report_title, period)
 
     payload = {
         "from": {
@@ -77,7 +79,53 @@ async def send_ventas_report(
             detail = resp.text
         raise EmailError(f"MailerSend respondió {resp.status_code}: {detail}")
 
-    logger.info("Reporte enviado a %s via MailerSend (status %s)", to_email, resp.status_code)
+    logger.info(
+        "Reporte enviado a %s via MailerSend (status %s)", to_email, resp.status_code
+    )
+
+
+async def send_ventas_report(
+    *,
+    to_email: str,
+    start_date: date | None,
+    end_date: date | None,
+    docx_bytes: bytes,
+    csv_bytes: bytes,
+    docx_filename: str,
+    csv_filename: str,
+) -> None:
+    await _send_report(
+        report_title="Reporte de Ventas",
+        to_email=to_email,
+        start_date=start_date,
+        end_date=end_date,
+        docx_bytes=docx_bytes,
+        csv_bytes=csv_bytes,
+        docx_filename=docx_filename,
+        csv_filename=csv_filename,
+    )
+
+
+async def send_almacen_report(
+    *,
+    to_email: str,
+    start_date: date | None,
+    end_date: date | None,
+    docx_bytes: bytes,
+    csv_bytes: bytes,
+    docx_filename: str,
+    csv_filename: str,
+) -> None:
+    await _send_report(
+        report_title="Reporte de Almacén",
+        to_email=to_email,
+        start_date=start_date,
+        end_date=end_date,
+        docx_bytes=docx_bytes,
+        csv_bytes=csv_bytes,
+        docx_filename=docx_filename,
+        csv_filename=csv_filename,
+    )
 
 
 def _period_label(start_date: date | None, end_date: date | None) -> str:
@@ -90,20 +138,20 @@ def _period_label(start_date: date | None, end_date: date | None) -> str:
     return "Histórico completo"
 
 
-def _build_html(period: str) -> str:
+def _build_html(report_title: str, period: str) -> str:
     return f"""
 <!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px">
   <div style="background:#1e40af;padding:24px 32px;border-radius:8px 8px 0 0">
-    <h1 style="color:#fff;margin:0;font-size:22px">Reporte de Ventas</h1>
+    <h1 style="color:#fff;margin:0;font-size:22px">{report_title}</h1>
     <p style="color:#bfdbfe;margin:8px 0 0">Nexus Ops RTB</p>
   </div>
   <div style="background:#f9fafb;padding:24px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
     <p style="margin:0 0 12px"><strong>Periodo:</strong> {period}</p>
     <p style="margin:0 0 20px;color:#6b7280">
-      Adjunto encontrarás el reporte de ventas en formato <strong>DOCX</strong>
+      Adjunto encontrarás el reporte en formato <strong>DOCX</strong>
       y los datos en formato <strong>CSV</strong>.
     </p>
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
@@ -129,9 +177,9 @@ def _build_html(period: str) -> str:
 """.strip()
 
 
-def _build_text(period: str) -> str:
+def _build_text(report_title: str, period: str) -> str:
     return (
-        f"Reporte de Ventas — Nexus Ops RTB\n"
+        f"{report_title} — Nexus Ops RTB\n"
         f"Periodo: {period}\n\n"
         "Adjunto encontrarás el reporte en formato DOCX y los datos en CSV.\n\n"
         "Este correo fue generado automáticamente por Nexus Ops RTB."

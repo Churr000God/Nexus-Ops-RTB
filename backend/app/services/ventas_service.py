@@ -8,7 +8,6 @@ from sqlalchemy import (
     Integer,
     Select,
     String,
-    and_,
     bindparam,
     case,
     cast,
@@ -24,9 +23,7 @@ from app.models.ops_models import (
     CancelledQuote,
     Customer,
     CustomerOrder,
-    Product,
     Quote,
-    QuoteItem,
     Sale,
 )
 from app.schemas.venta_schema import (
@@ -400,7 +397,9 @@ class VentasService:
                 revenue=_to_float(row.revenue),
                 cost=_to_float(row.cost),
                 gross_margin=_to_float(row.gross_margin),
-                margin_percent=float(row.margin_percent) if row.margin_percent is not None else None,
+                margin_percent=float(row.margin_percent)
+                if row.margin_percent is not None
+                else None,
             )
             for row in rows
         ]
@@ -668,9 +667,7 @@ class VentasService:
         start_date: date | None,
         end_date: date | None,
     ) -> list[SalesProjectionByMonthResponse]:
-        month_key_sold = func.to_char(
-            func.date_trunc("month", Sale.sold_on), "YYYY-MM"
-        )
+        month_key_sold = func.to_char(func.date_trunc("month", Sale.sold_on), "YYYY-MM")
 
         actual_stmt = (
             select(
@@ -1059,7 +1056,9 @@ class VentasService:
                     "end_date": end_date,
                     "months_window": months_window,
                     "limit": limit,
-                    "search": f"%{product_search}%" if product_search and product_search.strip() else None,
+                    "search": f"%{product_search}%"
+                    if product_search and product_search.strip()
+                    else None,
                 },
             )
         ).all()
@@ -1253,7 +1252,11 @@ class VentasService:
         )
         rows = (await self.db.execute(sql, params)).all()
 
-        label_map = {"foraneo": "Foráneo", "local": "Local", "sin categoría": "Sin categoría"}
+        label_map = {
+            "foraneo": "Foráneo",
+            "local": "Local",
+            "sin categoría": "Sin categoría",
+        }
         return [
             AvgSalesByCustomerTypeResponse(
                 tipo_cliente=label_map.get(row.tipo_cliente.lower(), row.tipo_cliente),
@@ -1274,7 +1277,9 @@ class VentasService:
         month_start = date(year, month, 1)
         month_end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
         last_year_start = date(year - 1, month, 1)
-        last_year_end = date(year, 1, 1) if month == 12 else date(year - 1, month + 1, 1)
+        last_year_end = (
+            date(year, 1, 1) if month == 12 else date(year - 1, month + 1, 1)
+        )
 
         sql = text(
             """
@@ -1305,8 +1310,12 @@ class VentasService:
         params = {
             "mes_inicio": datetime.combine(month_start, time.min, tzinfo=timezone.utc),
             "mes_fin": datetime.combine(month_end, time.min, tzinfo=timezone.utc),
-            "anio_ant_inicio": datetime.combine(last_year_start, time.min, tzinfo=timezone.utc),
-            "anio_ant_fin": datetime.combine(last_year_end, time.min, tzinfo=timezone.utc),
+            "anio_ant_inicio": datetime.combine(
+                last_year_start, time.min, tzinfo=timezone.utc
+            ),
+            "anio_ant_fin": datetime.combine(
+                last_year_end, time.min, tzinfo=timezone.utc
+            ),
         }
 
         _label_map = {
@@ -1327,7 +1336,9 @@ class VentasService:
             )
             results.append(
                 MonthlyGrowthYoYByCustomerTypeResponse(
-                    tipo_cliente=_label_map.get(row.tipo_cliente.lower(), row.tipo_cliente),
+                    tipo_cliente=_label_map.get(
+                        row.tipo_cliente.lower(), row.tipo_cliente
+                    ),
                     ventas_mes_actual=current_value,
                     ventas_mismo_mes_anio_pasado=last_value,
                     tasa_crecimiento_pct=growth,
@@ -1348,9 +1359,13 @@ class VentasService:
 
         year = today.year
         quarter_start = date(year, q_start_month, 1)
-        quarter_end = date(year + 1, 1, 1) if q_end_month > 12 else date(year, q_end_month, 1)
+        quarter_end = (
+            date(year + 1, 1, 1) if q_end_month > 12 else date(year, q_end_month, 1)
+        )
         last_year_start = date(year - 1, q_start_month, 1)
-        last_year_end = date(year, 1, 1) if q_end_month > 12 else date(year - 1, q_end_month, 1)
+        last_year_end = (
+            date(year, 1, 1) if q_end_month > 12 else date(year - 1, q_end_month, 1)
+        )
 
         sql = text(
             """
@@ -1379,7 +1394,11 @@ class VentasService:
             "anio_ant_inicio": last_year_start,
             "anio_ant_fin": last_year_end,
         }
-        _label_map = {"foraneo": "Foráneo", "local": "Local", "sin categoria": "Sin categoría"}
+        _label_map = {
+            "foraneo": "Foráneo",
+            "local": "Local",
+            "sin categoria": "Sin categoría",
+        }
         rows = (await self.db.execute(sql, params)).all()
         results = []
         for row in rows:
@@ -1719,7 +1738,9 @@ class VentasService:
             for row in rows
         ]
 
-    async def search_customers_payment(self, q: str) -> list[CustomerSearchItemResponse]:
+    async def search_customers_payment(
+        self, q: str
+    ) -> list[CustomerSearchItemResponse]:
         """Búsqueda de clientes por nombre o external_id (ILIKE, límite 10)."""
         like = f"%{q}%"
         sql = text(
@@ -1766,11 +1787,15 @@ class VentasService:
         )
         if start_date is not None:
             stmt = stmt.where(
-                Quote.approved_on >= datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+                Quote.approved_on
+                >= datetime.combine(start_date, time.min, tzinfo=timezone.utc)
             )
         if end_date is not None:
             stmt = stmt.where(
-                Quote.approved_on < datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+                Quote.approved_on
+                < datetime.combine(
+                    end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+                )
             )
 
         rows = (await self.db.execute(stmt)).all()

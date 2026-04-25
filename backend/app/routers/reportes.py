@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
-from app.services.email_service import EmailError, send_ventas_report
+from app.services.email_service import (
+    EmailError,
+    send_almacen_report,
+    send_ventas_report,
+)
 from app.services.report_service import ReportService
 
 logger = logging.getLogger(__name__)
@@ -19,6 +23,7 @@ router = APIRouter(prefix="/api/reportes", tags=["reportes"])
 
 # ── Modelos de request ─────────────────────────────────────────────────────────
 
+
 class EnviarReporteRequest(BaseModel):
     to_email: EmailStr
     start_date: date | None = None
@@ -26,7 +31,15 @@ class EnviarReporteRequest(BaseModel):
     sections: list[str] = ["kpis", "clientes", "productos", "margen", "pagos", "riesgo"]
 
 
+class EnviarReporteAlmacenRequest(BaseModel):
+    to_email: EmailStr
+    start_date: date | None = None
+    end_date: date | None = None
+    sections: list[str] = ["kpis", "valor", "alertas", "dormidos"]
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
 
 @router.get("/ventas")
 async def generar_reporte_ventas(
@@ -50,7 +63,9 @@ async def generar_reporte_ventas(
         )
     except Exception as exc:
         logger.exception("Error generando reporte de ventas: %s", exc)
-        raise HTTPException(status_code=500, detail="Error al generar el reporte") from exc
+        raise HTTPException(
+            status_code=500, detail="Error al generar el reporte"
+        ) from exc
 
     filename = _build_docx_filename(start_date, end_date)
     return Response(
@@ -71,12 +86,14 @@ async def enviar_reporte_por_correo(
 
     try:
         service = ReportService(db)
-        docx_bytes, csv_bytes = await _generate_both(
+        docx_bytes, csv_bytes = await _generate_ventas_both(
             service, body.start_date, body.end_date, section_list
         )
     except Exception as exc:
         logger.exception("Error generando archivos para envío: %s", exc)
-        raise HTTPException(status_code=500, detail="Error al generar el reporte") from exc
+        raise HTTPException(
+            status_code=500, detail="Error al generar el reporte"
+        ) from exc
 
     docx_filename = _build_docx_filename(body.start_date, body.end_date)
     csv_filename = docx_filename.replace(".docx", ".csv")
@@ -96,14 +113,127 @@ async def enviar_reporte_por_correo(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Error inesperado enviando correo: %s", exc)
-        raise HTTPException(status_code=500, detail="Error al enviar el correo") from exc
+        raise HTTPException(
+            status_code=500, detail="Error al enviar el correo"
+        ) from exc
+
+    return {"message": f"Reporte enviado a {body.to_email}"}
+
+
+@router.get("/almacen")
+async def generar_reporte_almacen(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    sections: str = Query(
+        default="kpis,valor,alertas,dormidos",
+        description="Secciones separadas por coma: kpis, valor, alertas, dormidos",
+    ),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> Response:
+    section_list = [s.strip() for s in sections.split(",") if s.strip()]
+    try:
+        service = ReportService(db)
+        content = await service.generate_almacen_docx(
+            start_date=start_date,
+            end_date=end_date,
+            sections=section_list,
+        )
+    except Exception as exc:
+        logger.exception("Error generando reporte de almacén: %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Error al generar el reporte"
+        ) from exc
+
+    filename = _build_almacen_docx_filename(start_date, end_date)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/almacen/csv")
+async def generar_reporte_almacen_csv(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    sections: str = Query(
+        default="kpis,valor,alertas,dormidos",
+        description="Secciones separadas por coma: kpis, valor, alertas, dormidos",
+    ),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> Response:
+    section_list = [s.strip() for s in sections.split(",") if s.strip()]
+    try:
+        service = ReportService(db)
+        content = await service.generate_almacen_csv(
+            start_date=start_date,
+            end_date=end_date,
+            sections=section_list,
+        )
+    except Exception as exc:
+        logger.exception("Error generando CSV de almacén: %s", exc)
+        raise HTTPException(status_code=500, detail="Error al generar el CSV") from exc
+
+    filename = _build_almacen_docx_filename(start_date, end_date).replace(
+        ".docx", ".csv"
+    )
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/almacen/enviar-correo", status_code=200)
+async def enviar_reporte_almacen_por_correo(
+    body: EnviarReporteAlmacenRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict[str, str]:
+    section_list = [s.strip().lower() for s in body.sections if s.strip()]
+
+    try:
+        service = ReportService(db)
+        docx_bytes, csv_bytes = await _generate_almacen_both(
+            service, body.start_date, body.end_date, section_list
+        )
+    except Exception as exc:
+        logger.exception("Error generando archivos para envío (almacén): %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Error al generar el reporte"
+        ) from exc
+
+    docx_filename = _build_almacen_docx_filename(body.start_date, body.end_date)
+    csv_filename = docx_filename.replace(".docx", ".csv")
+
+    try:
+        await send_almacen_report(
+            to_email=str(body.to_email),
+            start_date=body.start_date,
+            end_date=body.end_date,
+            docx_bytes=docx_bytes,
+            csv_bytes=csv_bytes,
+            docx_filename=docx_filename,
+            csv_filename=csv_filename,
+        )
+    except EmailError as exc:
+        logger.error("Error enviando correo (almacén): %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Error inesperado enviando correo (almacén): %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Error al enviar el correo"
+        ) from exc
 
     return {"message": f"Reporte enviado a {body.to_email}"}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-async def _generate_both(
+
+async def _generate_ventas_both(
     service: ReportService,
     start_date: date | None,
     end_date: date | None,
@@ -118,6 +248,21 @@ async def _generate_both(
     return docx_bytes, csv_bytes
 
 
+async def _generate_almacen_both(
+    service: ReportService,
+    start_date: date | None,
+    end_date: date | None,
+    sections: list[str],
+) -> tuple[bytes, bytes]:
+    docx_bytes = await service.generate_almacen_docx(
+        start_date=start_date, end_date=end_date, sections=sections
+    )
+    csv_bytes = await service.generate_almacen_csv(
+        start_date=start_date, end_date=end_date, sections=sections
+    )
+    return docx_bytes, csv_bytes
+
+
 def _build_docx_filename(start_date: date | None, end_date: date | None) -> str:
     if start_date and end_date:
         return f"reporte_ventas_{start_date}_{end_date}.docx"
@@ -126,3 +271,13 @@ def _build_docx_filename(start_date: date | None, end_date: date | None) -> str:
     if end_date:
         return f"reporte_ventas_hasta_{end_date}.docx"
     return "reporte_ventas.docx"
+
+
+def _build_almacen_docx_filename(start_date: date | None, end_date: date | None) -> str:
+    if start_date and end_date:
+        return f"reporte_almacen_{start_date}_{end_date}.docx"
+    if start_date:
+        return f"reporte_almacen_desde_{start_date}.docx"
+    if end_date:
+        return f"reporte_almacen_hasta_{end_date}.docx"
+    return "reporte_almacen.docx"

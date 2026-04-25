@@ -14,7 +14,7 @@ type AppShellProps = {
 const titlesByPath: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Nexus Ops RTB · Dashboard General", subtitle: "Vista ejecutiva consolidada" },
   "/ventas": { title: "Análisis de Ventas", subtitle: "Clientes · productos · márgenes" },
-  "/inventarios": { title: "Inventarios" },
+  "/inventarios": { title: "Almacén", subtitle: "Stock · movimientos · rotación" },
   "/proveedores": { title: "Proveedores" },
   "/gastos": { title: "Gastos" },
 }

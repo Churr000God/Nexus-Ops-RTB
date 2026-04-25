@@ -32,7 +32,10 @@ export function QuoteSearchInput({
 
   useEffect(() => {
     if (selectedQuoteId === null) {
-      setInputValue("")
+      const timeoutId = window.setTimeout(() => {
+        setInputValue("")
+      }, 0)
+      return () => window.clearTimeout(timeoutId)
     }
   }, [selectedQuoteId])
 

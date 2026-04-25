@@ -146,7 +146,10 @@ async def gross_margin_by_product(
 ) -> list[GrossMarginByProductResponse]:
     service = VentasService(db)
     return await service.gross_margin_by_product(
-        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        product_search=product_search,
     )
 
 
@@ -164,7 +167,10 @@ async def product_distribution(
 ) -> list[SalesByProductDistributionResponse]:
     service = VentasService(db)
     return await service.sales_distribution_by_product(
-        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        product_search=product_search,
     )
 
 
@@ -206,7 +212,11 @@ async def recent_quotes(
 ) -> list[RecentQuoteResponse]:
     service = VentasService(db)
     return await service.recent_quotes(
-        start_date=start_date, end_date=end_date, status=status, limit=limit, search=search
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+        limit=limit,
+        search=search,
     )
 
 
@@ -221,7 +231,10 @@ async def missing_demand(
 ) -> list[MissingDemandResponse]:
     service = VentasService(db)
     return await service.missing_demand_by_product(
-        start_date=start_date, end_date=end_date, limit=limit, product_search=product_search
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        product_search=product_search,
     )
 
 
@@ -317,7 +330,9 @@ async def quarterly_growth_by_customer_type(
     _: User = Depends(get_current_user),
 ) -> list[QuarterlyGrowthByCustomerTypeResponse]:
     service = VentasService(db)
-    return await service.quarterly_growth_by_customer_type(selected_quarter=selected_quarter)
+    return await service.quarterly_growth_by_customer_type(
+        selected_quarter=selected_quarter
+    )
 
 
 @router.get(

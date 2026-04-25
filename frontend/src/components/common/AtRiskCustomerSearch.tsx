@@ -21,8 +21,11 @@ export function AtRiskCustomerSearch({ customers, selected, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (selected === null) setInputValue("")
-    else setInputValue(selected.customer_name)
+    const timeoutId = window.setTimeout(() => {
+      if (selected === null) setInputValue("")
+      else setInputValue(selected.customer_name)
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [selected])
 
   const suggestions = useMemo(() => {

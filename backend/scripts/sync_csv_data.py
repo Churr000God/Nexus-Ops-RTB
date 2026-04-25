@@ -74,7 +74,7 @@ def _import_inventory_movements(
             "movimiento",
             "numero_de_movimiento",
             "numero_movimiento",
-            "id_movimiento_2",   # alias cuando hay colisión de headers en el CSV
+            "id_movimiento_2",  # alias cuando hay colisión de headers en el CSV
         )
         movement_type = _norm_id(row, "tipo_de_movimiento", "tipo", "movimiento")
 
@@ -93,7 +93,7 @@ def _import_inventory_movements(
                         "cantidad_entrada",
                         "entrada",
                         "qty_in",
-                        "cantidad_entrante",   # alias CSV actual
+                        "cantidad_entrante",  # alias CSV actual
                     )
                 ),
                 "qty_out": importer._parse_decimal(
@@ -105,7 +105,7 @@ def _import_inventory_movements(
                         "cantidad_no_conforme",
                         "cantidad_nc",
                         "qty_nonconformity",
-                        "cantidad_por_no_conformidad",   # alias CSV actual
+                        "cantidad_por_no_conformidad",  # alias CSV actual
                     )
                 ),
                 "moved_on": importer._parse_datetime(
@@ -122,7 +122,7 @@ def _import_inventory_movements(
                             row,
                             "entrada_mercancia",
                             "id_entrada_mercancia",
-                            "referencia_entrada",   # alias CSV actual
+                            "referencia_entrada",  # alias CSV actual
                         )
                     ),
                 ),
@@ -134,7 +134,7 @@ def _import_inventory_movements(
                             row,
                             "detalle_cotizacion",
                             "cotizacion_item",
-                            "referencia_salida",   # alias CSV actual
+                            "referencia_salida",  # alias CSV actual
                         )
                     ),
                 ),
@@ -171,6 +171,18 @@ def _import_inventory_movements(
                     p.internal_code = m.external_product_id
                  OR p.sku = m.external_product_id
               )
+            """
+        )
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE movimientos_inventario m
+            SET product_id = ci.product_id
+            FROM cotizacion_items ci
+            WHERE m.quote_item_id = ci.id
+              AND m.product_id IS NULL
+              AND ci.product_id IS NOT NULL
             """
         )
     )
@@ -398,6 +410,99 @@ def _sync_dataset(
         raise
 
 
+_RECALC_INVENTARIO_SQL = text(
+    """
+    WITH
+    entradas AS (
+      SELECT product_id,
+             SUM(qty_arrived)   AS total_real,
+             SUM(qty_requested) AS total_req
+      FROM entradas_mercancia
+      WHERE product_id IS NOT NULL
+      GROUP BY product_id
+    ),
+    solicitudes AS (
+      SELECT product_id, SUM(qty_requested) AS total
+      FROM solicitudes_material
+      WHERE qty_requested IS NOT NULL AND product_id IS NOT NULL
+      GROUP BY product_id
+    ),
+    salidas_reales AS (
+      SELECT ci.product_id, SUM(ci.qty_packed) AS total
+      FROM cotizacion_items ci
+      JOIN cotizaciones c ON c.id = ci.quote_id
+      WHERE c.status = 'Aprobada'
+        AND ci.qty_packed  IS NOT NULL
+        AND ci.product_id  IS NOT NULL
+      GROUP BY ci.product_id
+    ),
+    salidas_teoricas AS (
+      SELECT ci.product_id, SUM(ci.qty_requested) AS total
+      FROM cotizacion_items ci
+      JOIN cotizaciones c ON c.id = ci.quote_id
+      WHERE c.status = 'Aprobada'
+        AND ci.qty_requested IS NOT NULL
+        AND ci.product_id    IS NOT NULL
+      GROUP BY ci.product_id
+    ),
+    ajustes AS (
+      SELECT product_id, SUM(inventory_adjustment) AS total
+      FROM no_conformes
+      WHERE inventory_adjustment IS NOT NULL AND product_id IS NOT NULL
+      GROUP BY product_id
+    ),
+    costo AS (
+      SELECT product_id, AVG(price) AS costo_unitario
+      FROM proveedor_productos
+      WHERE price IS NOT NULL AND price > 0
+      GROUP BY product_id
+    ),
+    calc AS (
+      SELECT
+        p.id AS product_id,
+        COALESCE(e.total_real, 0) - COALESCE(sr.total, 0) + COALESCE(a.total, 0)
+          AS stock_real,
+        COALESCE(e.total_req, 0)
+          + (COALESCE(e.total_req, 0) - COALESCE(sol.total, 0))
+          - COALESCE(st.total, 0)
+          + COALESCE(a.total, 0)
+          AS stock_teorico,
+        cu.costo_unitario
+      FROM productos p
+      LEFT JOIN entradas         e   ON e.product_id   = p.id
+      LEFT JOIN solicitudes      sol ON sol.product_id = p.id
+      LEFT JOIN salidas_reales   sr  ON sr.product_id  = p.id
+      LEFT JOIN salidas_teoricas st  ON st.product_id  = p.id
+      LEFT JOIN ajustes          a   ON a.product_id   = p.id
+      LEFT JOIN costo            cu  ON cu.product_id  = p.id
+    )
+    UPDATE inventario inv
+    SET
+      real_qty         = c.stock_real,
+      theoretical_qty  = c.stock_teorico,
+      stock_diff       = c.stock_teorico - c.stock_real,
+      unit_cost        = c.costo_unitario,
+      stock_total_cost = CASE
+                           WHEN c.costo_unitario IS NOT NULL
+                           THEN GREATEST(c.stock_real, 0) * c.costo_unitario
+                           ELSE NULL
+                         END,
+      status_real      = CASE
+                           WHEN c.stock_real > 0 THEN 'En stock'
+                           WHEN c.stock_real = 0 THEN '0'
+                           ELSE 'Sin stock'
+                         END
+    FROM calc c
+    WHERE inv.product_id = c.product_id
+    """
+)
+
+
+def _recalc_inventario(conn: sa.Connection) -> None:
+    result = conn.execute(_RECALC_INVENTARIO_SQL)
+    print(f"[OK] inventario recalculado: {result.rowcount} filas actualizadas")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Sincroniza CSVs delta hacia Postgres (upsert por ID)."
@@ -463,6 +568,7 @@ def main() -> None:
                 )
 
             if not args.skip_rollups:
+                _recalc_inventario(conn)
                 conn.execute(text("SELECT app.recompute_all_rollups()"))
                 print("[OK] Rollups recalculados")
             trans.commit()

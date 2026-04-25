@@ -54,7 +54,10 @@ export function useSyncStatus() {
 
   // Fetch once on mount
   useEffect(() => {
-    fetchStatus()
+    const timeoutId = window.setTimeout(() => {
+      void fetchStatus()
+    }, 0)
+    return () => window.clearTimeout(timeoutId)
   }, [fetchStatus])
 
   // Auto-start polling if syncing state is detected

@@ -252,14 +252,10 @@ def _read_csv_rows(file_path: Path) -> tuple[list[str], Iterator[dict]]:
                 seen_norm[nk] = count
                 dict_keys.append(h if count == 1 else f"{h}_{count}")
 
-            def _iter(
-                r=plain, keys=dict_keys, fh=handle
-            ) -> Iterator[dict]:
+            def _iter(r=plain, keys=dict_keys, fh=handle) -> Iterator[dict]:
                 try:
                     for values in r:
-                        padded = list(values) + [""] * max(
-                            0, len(keys) - len(values)
-                        )
+                        padded = list(values) + [""] * max(0, len(keys) - len(values))
                         yield dict(zip(keys, padded[: len(keys)]))
                 finally:
                     fh.close()
@@ -332,14 +328,14 @@ def _bulk_upsert(
 
     # Only use columns that actually exist in the DB at this migration step.
     # Model.__table__ may include columns added by later migrations.
-    existing_db_cols = {
-        col["name"] for col in sa.inspect(conn).get_columns(table.name)
-    }
+    existing_db_cols = {col["name"] for col in sa.inspect(conn).get_columns(table.name)}
 
     pk_cols = {col.name for col in table.primary_key.columns}
     generated_cols = {col.name for col in table.c if col.computed is not None}
     conflict_set = set(conflict_cols)
-    exclude_set = pk_cols | conflict_set | generated_cols | set(exclude_from_update or [])
+    exclude_set = (
+        pk_cols | conflict_set | generated_cols | set(exclude_from_update or [])
+    )
 
     # Strip generated columns and non-existent columns from INSERT values.
     strip_cols = generated_cols | (set(table.c.keys()) - existing_db_cols)
@@ -539,7 +535,9 @@ def _import_products(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, in
     skipped_total = 0
     for batch in _chunk(by_sku, 500):
         inserted, skipped = _bulk_upsert(
-            conn, Product.__table__, batch,
+            conn,
+            Product.__table__,
+            batch,
             conflict_cols=["sku"],
             exclude_from_update=["internal_code"],
         )
@@ -547,7 +545,9 @@ def _import_products(conn: sa.Connection, rows: Iterable[dict]) -> tuple[int, in
         skipped_total += skipped
     for batch in _chunk(by_internal_code, 500):
         inserted, skipped = _bulk_upsert(
-            conn, Product.__table__, batch,
+            conn,
+            Product.__table__,
+            batch,
             conflict_cols=["internal_code"],
             exclude_from_update=["sku"],
         )
@@ -922,6 +922,18 @@ def _import_nonconformities(
         )
         inserted_total += inserted
         skipped_total += skipped
+    conn.execute(
+        text(
+            """
+            update no_conformes nc
+            set product_id = i.product_id
+            from inventario i
+            where nc.inventory_item_id = i.id
+              and nc.product_id is null
+              and i.product_id is not null
+            """
+        )
+    )
     return row_count, inserted_total, skipped_total
 
 
@@ -969,6 +981,18 @@ def _import_material_requests(
         )
         inserted_total += inserted
         skipped_total += skipped
+    conn.execute(
+        text(
+            """
+            update solicitudes_material sm
+            set product_id = p.id
+            from productos p
+            where sm.product_sku = p.sku
+              and sm.product_id is null
+              and sm.product_sku is not null
+            """
+        )
+    )
     return row_count, inserted_total, skipped_total
 
 
@@ -1021,6 +1045,20 @@ def _import_goods_receipts(
         )
         inserted_total += inserted
         skipped_total += skipped
+    conn.execute(
+        text(
+            """
+            update entradas_mercancia em
+            set product_id = i.product_id
+            from inventario i
+            where lower(em.internal_code)::uuid = i.id
+              and em.product_id is null
+              and em.internal_code is not null
+              and lower(em.internal_code) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              and i.product_id is not null
+            """
+        )
+    )
     return row_count, inserted_total, skipped_total
 
 

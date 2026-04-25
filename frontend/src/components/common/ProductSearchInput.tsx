@@ -31,7 +31,10 @@ export function ProductSearchInput({
 
   useEffect(() => {
     if (selectedProduct === null) {
-      setInputValue("")
+      const timeoutId = window.setTimeout(() => {
+        setInputValue("")
+      }, 0)
+      return () => window.clearTimeout(timeoutId)
     }
   }, [selectedProduct])
 

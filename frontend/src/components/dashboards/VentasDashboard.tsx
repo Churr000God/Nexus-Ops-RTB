@@ -10,7 +10,6 @@ import {
   FileText,
   Mail,
   Percent,
-  RefreshCw,
   TrendingUp,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -43,7 +42,6 @@ import type {
   AtRiskCustomer,
   CustomerPaymentStat,
   CustomerSearchItem,
-  PendingPaymentCustomer,
   PendingPaymentStat,
   AvgSalesByCustomerType,
   MonthlyGrowthYoYByCustomerType,
@@ -456,7 +454,7 @@ export function VentasDashboard() {
     }
   }, [])
 
-  const handleProductSelect = useCallback((sku: string | null, _name: string) => {
+  const handleProductSelect = useCallback((sku: string | null) => {
     setSelectedProductSku(sku)
   }, [])
 
@@ -467,7 +465,7 @@ export function VentasDashboard() {
     }
   }, [])
 
-  const handleMarginProductSelect = useCallback((sku: string | null, _name: string) => {
+  const handleMarginProductSelect = useCallback((sku: string | null) => {
     setSelectedMarginProductSku(sku)
   }, [])
 
@@ -478,7 +476,7 @@ export function VentasDashboard() {
     }
   }, [])
 
-  const handleMissingDemandSelect = useCallback((sku: string | null, _name: string) => {
+  const handleMissingDemandSelect = useCallback((sku: string | null) => {
     setSelectedMissingDemandSku(sku)
   }, [])
 
@@ -489,7 +487,7 @@ export function VentasDashboard() {
     }
   }, [])
 
-  const handleForecastProductSelect = useCallback((sku: string | null, _name: string) => {
+  const handleForecastProductSelect = useCallback((sku: string | null) => {
     setSelectedForecastProductSku(sku)
   }, [])
 
@@ -897,10 +895,6 @@ export function VentasDashboard() {
     paymentTrend.status === "loading" ||
     approvalTimeTrend.status === "loading"
 
-  const showPendingToast = (feature: string) => {
-    toast.info(`${feature} queda listo para enlazar cuando definamos el flujo de datos.`)
-  }
-
   return (
     <div className="space-y-6">
       <section className="surface-card border-white/70 bg-white p-5 md:p-6">
@@ -949,7 +943,7 @@ export function VentasDashboard() {
                     missingDemand: missingDemand.data,
                     productForecast: productForecast.data,
                     atRiskCustomers: atRiskCustomers.data,
-                    paymentTrend: paymentTrend.data,
+                    paymentTrend: paymentTrendChart,
                     recentQuotes: recentQuotes.data,
                     pendingPayments: pendingPayments.data,
                     productsByCustomerType: productsByCustomerType.data,

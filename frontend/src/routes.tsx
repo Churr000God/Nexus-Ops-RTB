@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/hooks/useAuth"
 import { HomePage } from "@/pages/Home"
+import { AlmacenPage } from "@/pages/Inventarios"
 import { LoginPage } from "@/pages/Login"
 import { NotFoundPage } from "@/pages/NotFound"
 import { VentasPage } from "@/pages/Ventas"
@@ -53,6 +54,7 @@ export function AppRoutes() {
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />
           <Route path="ventas" element={<VentasPage />} />
+          <Route path="inventarios" element={<AlmacenPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

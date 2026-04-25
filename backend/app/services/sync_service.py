@@ -111,7 +111,9 @@ async def _run_db_sync(service: SyncService) -> None:
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = (
-        f"{app_root}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else str(app_root)
+        f"{app_root}{os.pathsep}{existing_pythonpath}"
+        if existing_pythonpath
+        else str(app_root)
     )
 
     try:
@@ -127,10 +129,17 @@ async def _run_db_sync(service: SyncService) -> None:
         output = stdout.decode() if stdout else ""
 
         if proc.returncode != 0:
-            logger.error("sync_csv_data.py falló (código %d):\n%s", proc.returncode, output)
-            service.set_state("error", error=f"Importación falló (código {proc.returncode})")
+            logger.error(
+                "sync_csv_data.py falló (código %d):\n%s", proc.returncode, output
+            )
+            service.set_state(
+                "error", error=f"Importación falló (código {proc.returncode})"
+            )
         else:
-            logger.info("sync_csv_data.py OK. Datasets: %d filas procesadas", len(output.splitlines()))
+            logger.info(
+                "sync_csv_data.py OK. Datasets: %d filas procesadas",
+                len(output.splitlines()),
+            )
             service.set_state("done")
     except Exception as exc:
         logger.exception("Error inesperado en importación de BD")

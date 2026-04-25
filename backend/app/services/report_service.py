@@ -8,8 +8,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from lxml import etree
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.ops_models import InventoryItem, Product
 from app.services.ventas_service import VentasService
 
 # ── Paleta de colores ──────────────────────────────────────────────────────────
@@ -31,6 +33,7 @@ _GREEN = RGBColor(0x16, 0xA3, 0x4A)
 _GREEN_BG = "DCFCE7"
 
 _SECTION_KEYS = {"kpis", "clientes", "productos", "margen", "pagos", "riesgo"}
+_ALMACEN_SECTION_KEYS = {"kpis", "valor", "alertas", "dormidos"}
 
 
 def _fmt_mxn(value: float | None) -> str:
@@ -88,7 +91,16 @@ def _set_cell_border(cell, color: str = "E5E7EB", size: int = 4) -> None:
         edge_el.set(qn("w:color"), color)
 
 
-def _add_styled_paragraph(doc: Document, text: str, *, bold: bool = False, size: int = 11, color=None, align=None, space_after=None) -> None:
+def _add_styled_paragraph(
+    doc: Document,
+    text: str,
+    *,
+    bold: bool = False,
+    size: int = 11,
+    color=None,
+    align=None,
+    space_after=None,
+) -> None:
     p = doc.add_paragraph()
     run = p.add_run(text)
     run.bold = bold
@@ -133,7 +145,9 @@ def _style_header_cell(cell) -> None:
     _set_cell_border(cell, "1E40AF", 6)
 
 
-def _style_data_cell(cell, align_right: bool = False, hex_bg: str | None = None, font_color=None) -> None:
+def _style_data_cell(
+    cell, align_right: bool = False, hex_bg: str | None = None, font_color=None
+) -> None:
     p = cell.paragraphs[0]
     if align_right:
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -207,19 +221,43 @@ class ReportService:
         svc = VentasService(self._db)
         selected = {s.lower().strip() for s in sections} & _SECTION_KEYS
 
-        summary = await svc.sales_summary(start_date=start_date, end_date=end_date) if "kpis" in selected else None
-        top_customers = await svc.top_customers_by_sales(start_date=start_date, end_date=end_date, limit=15) if "clientes" in selected else []
-        gross_margin = await svc.gross_margin_by_product(start_date=start_date, end_date=end_date, limit=15) if "margen" in selected else []
-        product_dist = await svc.sales_distribution_by_product(start_date=start_date, end_date=end_date, limit=15) if "productos" in selected else []
-        pending_payments = await svc.pending_payment_customers() if "pagos" in selected else []
+        summary = (
+            await svc.sales_summary(start_date=start_date, end_date=end_date)
+            if "kpis" in selected
+            else None
+        )
+        top_customers = (
+            await svc.top_customers_by_sales(
+                start_date=start_date, end_date=end_date, limit=15
+            )
+            if "clientes" in selected
+            else []
+        )
+        gross_margin = (
+            await svc.gross_margin_by_product(
+                start_date=start_date, end_date=end_date, limit=15
+            )
+            if "margen" in selected
+            else []
+        )
+        product_dist = (
+            await svc.sales_distribution_by_product(
+                start_date=start_date, end_date=end_date, limit=15
+            )
+            if "productos" in selected
+            else []
+        )
+        pending_payments = (
+            await svc.pending_payment_customers() if "pagos" in selected else []
+        )
         at_risk = await svc.at_risk_customers() if "riesgo" in selected else []
 
         doc = Document()
 
         _set_page_margins(doc)
-        _add_header_footer(doc)
+        _add_header_footer(doc, report_title="Reporte de Ventas")
 
-        _build_cover(doc, start_date, end_date)
+        _build_cover(doc, start_date, end_date, report_title="Reporte de Ventas")
 
         if summary and "kpis" in selected:
             _build_kpis_section(doc, summary)
@@ -270,7 +308,9 @@ class ReportService:
             ]
 
         if "clientes" in selected:
-            customers = await svc.top_customers_by_sales(start_date=start_date, end_date=end_date, limit=50)
+            customers = await svc.top_customers_by_sales(
+                start_date=start_date, end_date=end_date, limit=50
+            )
             lines += [
                 "# TOP CLIENTES POR VENTAS",
                 "cliente,categoria,num_ventas,total_mxn,ticket_promedio_mxn",
@@ -283,7 +323,9 @@ class ReportService:
             lines.append("")
 
         if "productos" in selected:
-            products = await svc.sales_distribution_by_product(start_date=start_date, end_date=end_date, limit=50)
+            products = await svc.sales_distribution_by_product(
+                start_date=start_date, end_date=end_date, limit=50
+            )
             lines += [
                 "# DISTRIBUCIÓN POR PRODUCTO",
                 "producto,sku,unidades,revenue_mxn,porcentaje",
@@ -296,7 +338,9 @@ class ReportService:
             lines.append("")
 
         if "margen" in selected:
-            margins = await svc.gross_margin_by_product(start_date=start_date, end_date=end_date, limit=50)
+            margins = await svc.gross_margin_by_product(
+                start_date=start_date, end_date=end_date, limit=50
+            )
             lines += [
                 "# MARGEN BRUTO POR PRODUCTO",
                 "producto,sku,ingresos_mxn,costo_mxn,margen_mxn,margen_pct",
@@ -337,6 +381,219 @@ class ReportService:
 
         return "\n".join(lines).encode("utf-8-sig")
 
+    async def generate_almacen_docx(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+        sections: list[str],
+    ) -> bytes:
+        selected = {s.lower().strip() for s in sections} & _ALMACEN_SECTION_KEYS
+
+        doc = Document()
+        _set_page_margins(doc)
+        _add_header_footer(doc, report_title="Reporte de Almacén")
+        _build_cover(doc, start_date, end_date, report_title="Reporte de Almacén")
+
+        kpis = await self._almacen_kpis() if "kpis" in selected else None
+        top_value = (
+            await self._almacen_top_value(limit=20) if "valor" in selected else []
+        )
+        low_stock = (
+            await self._almacen_low_stock(limit=30) if "alertas" in selected else []
+        )
+        dormant = (
+            await self._almacen_dormant(limit=30) if "dormidos" in selected else []
+        )
+
+        if kpis and "kpis" in selected:
+            _build_almacen_kpis_section(doc, kpis)
+
+        if top_value and "valor" in selected:
+            _build_almacen_valor_section(doc, top_value)
+
+        if low_stock and "alertas" in selected:
+            _build_almacen_alertas_section(doc, low_stock)
+
+        if dormant and "dormidos" in selected:
+            _build_almacen_dormidos_section(doc, dormant)
+
+        buf = io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    async def generate_almacen_csv(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+        sections: list[str],
+    ) -> bytes:
+        selected = {s.lower().strip() for s in sections} & _ALMACEN_SECTION_KEYS
+
+        lines: list[str] = []
+
+        if "kpis" in selected:
+            k = await self._almacen_kpis()
+            lines += [
+                "# RESUMEN KPIs (ALMACÉN)",
+                "indicador,valor",
+                f"SKUs totales,{k['total_skus']}",
+                f"Valor total inventario MXN,{k['total_value_mxn']}",
+                f"SKUs bajo mínimo,{k['low_stock_skus']}",
+                f"SKUs sin stock,{k['no_stock_skus']}",
+                f"SKUs sin movimiento >= 180 días,{k['dormant_skus']}",
+                "",
+            ]
+
+        if "valor" in selected:
+            items = await self._almacen_top_value(limit=200)
+            lines += [
+                "# TOP SKUs POR VALOR DE INVENTARIO",
+                "producto,sku,qty_real,costo_unitario_mxn,valor_stock_mxn,dias_sin_mov,alerta",
+            ]
+            for it in items:
+                lines.append(
+                    f"{_csv_esc(it['product_name'])},{_csv_esc(it['sku'])},{it['real_qty']},"
+                    f"{it['unit_cost_mxn']},{it['stock_total_cost_mxn']},{it['days_without_movement']},"
+                    f"{_csv_esc(it['stock_alert'])}"
+                )
+            lines.append("")
+
+        if "alertas" in selected:
+            items = await self._almacen_low_stock(limit=200)
+            lines += [
+                "# ALERTAS DE STOCK (BAJO MÍNIMO / SIN STOCK)",
+                "producto,sku,qty_real,costo_unitario_mxn,valor_stock_mxn,dias_sin_mov,alerta",
+            ]
+            for it in items:
+                lines.append(
+                    f"{_csv_esc(it['product_name'])},{_csv_esc(it['sku'])},{it['real_qty']},"
+                    f"{it['unit_cost_mxn']},{it['stock_total_cost_mxn']},{it['days_without_movement']},"
+                    f"{_csv_esc(it['stock_alert'])}"
+                )
+            lines.append("")
+
+        if "dormidos" in selected:
+            items = await self._almacen_dormant(limit=200)
+            lines += [
+                "# SKUs DORMIDOS (SIN MOVIMIENTO)",
+                "producto,sku,dias_sin_mov,qty_real,valor_stock_mxn,alerta",
+            ]
+            for it in items:
+                lines.append(
+                    f"{_csv_esc(it['product_name'])},{_csv_esc(it['sku'])},{it['days_without_movement']},"
+                    f"{it['real_qty']},{it['stock_total_cost_mxn']},{_csv_esc(it['stock_alert'])}"
+                )
+            lines.append("")
+
+        header = [
+            f"# Reporte de Almacén — {_period_label(start_date, end_date)}",
+            f"# Generado: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            "",
+        ]
+        return "\n".join(header + lines).encode("utf-8-sig")
+
+    async def _almacen_kpis(self) -> dict[str, float | int]:
+        total_skus = await self._db.scalar(select(func.count(InventoryItem.id)))
+        total_value = await self._db.scalar(
+            select(func.coalesce(func.sum(InventoryItem.stock_total_cost), 0))
+        )
+
+        low_stock = await self._db.scalar(
+            select(func.count(InventoryItem.id)).where(
+                InventoryItem.stock_alert.is_not(None),
+                InventoryItem.stock_alert.ilike("%bajo%"),
+            )
+        )
+        no_stock = await self._db.scalar(
+            select(func.count(InventoryItem.id)).where(
+                func.coalesce(InventoryItem.real_qty, 0) <= 0
+            )
+        )
+        dormant = await self._db.scalar(
+            select(func.count(InventoryItem.id)).where(
+                InventoryItem.days_without_movement.is_not(None),
+                InventoryItem.days_without_movement >= 180,
+            )
+        )
+
+        return {
+            "total_skus": int(total_skus or 0),
+            "total_value_mxn": float(total_value or 0),
+            "low_stock_skus": int(low_stock or 0),
+            "no_stock_skus": int(no_stock or 0),
+            "dormant_skus": int(dormant or 0),
+        }
+
+    async def _almacen_top_value(self, *, limit: int) -> list[dict[str, object]]:
+        stmt = (
+            select(
+                Product.name,
+                InventoryItem.internal_code,
+                InventoryItem.external_product_id,
+                InventoryItem.real_qty,
+                InventoryItem.unit_cost,
+                InventoryItem.stock_total_cost,
+                InventoryItem.days_without_movement,
+                InventoryItem.stock_alert,
+            )
+            .select_from(InventoryItem)
+            .outerjoin(Product, InventoryItem.product_id == Product.id)
+            .order_by(func.coalesce(InventoryItem.stock_total_cost, 0).desc())
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).all()
+        return [_normalize_inventory_row(r) for r in rows]
+
+    async def _almacen_low_stock(self, *, limit: int) -> list[dict[str, object]]:
+        stmt = (
+            select(
+                Product.name,
+                InventoryItem.internal_code,
+                InventoryItem.external_product_id,
+                InventoryItem.real_qty,
+                InventoryItem.unit_cost,
+                InventoryItem.stock_total_cost,
+                InventoryItem.days_without_movement,
+                InventoryItem.stock_alert,
+            )
+            .select_from(InventoryItem)
+            .outerjoin(Product, InventoryItem.product_id == Product.id)
+            .where(
+                or_(
+                    InventoryItem.stock_alert.ilike("%bajo%"),
+                    func.coalesce(InventoryItem.real_qty, 0) <= 0,
+                )
+            )
+            .order_by(func.coalesce(InventoryItem.real_qty, 0).asc())
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).all()
+        return [_normalize_inventory_row(r) for r in rows]
+
+    async def _almacen_dormant(self, *, limit: int) -> list[dict[str, object]]:
+        stmt = (
+            select(
+                Product.name,
+                InventoryItem.internal_code,
+                InventoryItem.external_product_id,
+                InventoryItem.real_qty,
+                InventoryItem.unit_cost,
+                InventoryItem.stock_total_cost,
+                InventoryItem.days_without_movement,
+                InventoryItem.stock_alert,
+            )
+            .select_from(InventoryItem)
+            .outerjoin(Product, InventoryItem.product_id == Product.id)
+            .where(
+                InventoryItem.days_without_movement.is_not(None),
+                InventoryItem.days_without_movement >= 180,
+            )
+            .order_by(InventoryItem.days_without_movement.desc())
+            .limit(limit)
+        )
+        rows = (await self._db.execute(stmt)).all()
+        return [_normalize_inventory_row(r) for r in rows]
+
 
 def _csv_esc(value: str) -> str:
     if "," in value or '"' in value or "\n" in value:
@@ -352,14 +609,16 @@ def _set_page_margins(doc: Document) -> None:
         section.right_margin = Inches(1.0)
 
 
-def _add_header_footer(doc: Document) -> None:
+def _add_header_footer(doc: Document, *, report_title: str) -> None:
     """Agrega encabezado y pie de página a todas las secciones del documento."""
     for section in doc.sections:
         # Header
         header = section.header
-        header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        header_para = (
+            header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        )
         header_para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        run = header_para.add_run("Nexus Ops RTB  ·  Reporte de Ventas")
+        run = header_para.add_run(f"Nexus Ops RTB  ·  {report_title}")
         run.font.size = Pt(8)
         run.font.color.rgb = _GRAY
         run.font.italic = True
@@ -375,20 +634,24 @@ def _add_header_footer(doc: Document) -> None:
 
         # Footer
         footer = section.footer
-        footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        footer_para = (
+            footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+        )
         footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = footer_para.add_run("Documento confidencial  ·  Nexus Ops RTB")
         run.font.size = Pt(7)
         run.font.color.rgb = _GRAY
 
 
-def _build_cover(doc: Document, start_date: date | None, end_date: date | None) -> None:
+def _build_cover(
+    doc: Document, start_date: date | None, end_date: date | None, *, report_title: str
+) -> None:
     # Espaciado superior
     for _ in range(4):
         doc.add_paragraph()
 
     # Título principal
-    title = doc.add_heading("Reporte de Ventas", level=0)
+    title = doc.add_heading(report_title, level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     if title.runs:
         title.runs[0].font.color.rgb = _BRAND_BLUE
@@ -672,4 +935,145 @@ def _build_at_risk_section(doc: Document, customers: list) -> None:
         rows,
         zebra=True,
         row_styles=row_styles,
+    )
+
+
+def _normalize_inventory_row(row: tuple) -> dict[str, object]:
+    (
+        product_name,
+        internal_code,
+        external_id,
+        real_qty,
+        unit_cost,
+        total_cost,
+        days_wo,
+        stock_alert,
+    ) = row
+    sku = internal_code or external_id or "—"
+    return {
+        "product_name": product_name or "—",
+        "sku": sku,
+        "real_qty": float(real_qty or 0),
+        "unit_cost_mxn": float(unit_cost or 0),
+        "stock_total_cost_mxn": float(total_cost or 0),
+        "days_without_movement": int(days_wo or 0),
+        "stock_alert": str(stock_alert or ""),
+    }
+
+
+def _build_almacen_kpis_section(doc: Document, kpis: dict[str, float | int]) -> None:
+    _add_heading(doc, "1. Resumen de KPIs (Almacén)", level=1)
+    _add_styled_paragraph(
+        doc,
+        "Indicadores operativos del inventario actual.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
+    )
+
+    rows = [
+        ["SKUs totales", _fmt_num(kpis["total_skus"], 0)],
+        ["Valor total inventario", _fmt_mxn(float(kpis["total_value_mxn"]))],
+        ["SKUs bajo mínimo", _fmt_num(kpis["low_stock_skus"], 0)],
+        ["SKUs sin stock", _fmt_num(kpis["no_stock_skus"], 0)],
+        ["SKUs sin movimiento ≥ 180 días", _fmt_num(kpis["dormant_skus"], 0)],
+    ]
+    _add_table(doc, ["Indicador", "Valor"], rows, zebra=True)
+
+
+def _build_almacen_valor_section(doc: Document, items: list[dict[str, object]]) -> None:
+    _add_heading(doc, "2. Top SKUs por Valor de Inventario", level=1)
+    _add_styled_paragraph(
+        doc,
+        "Productos con mayor valor de inventario (costo total en stock).",
+        color=_GRAY,
+        size=10,
+        space_after=12,
+    )
+
+    rows = [
+        [
+            str(it["product_name"]),
+            str(it["sku"]),
+            _fmt_num(float(it["real_qty"]), 0),
+            _fmt_mxn(float(it["unit_cost_mxn"])),
+            _fmt_mxn(float(it["stock_total_cost_mxn"])),
+            _fmt_num(int(it["days_without_movement"]), 0),
+        ]
+        for it in items
+    ]
+    _add_table(
+        doc,
+        ["Producto", "SKU", "Qty real", "Costo unit.", "Valor stock", "Días sin mov"],
+        rows,
+        zebra=True,
+    )
+
+
+def _build_almacen_alertas_section(
+    doc: Document, items: list[dict[str, object]]
+) -> None:
+    _add_heading(doc, "3. Alertas de Stock", level=1)
+    _add_styled_paragraph(
+        doc,
+        "SKUs con bajo mínimo o sin stock para priorizar reposición.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
+    )
+
+    row_styles: list[dict | None] = []
+    for it in items:
+        style: dict | None = None
+        alert = str(it["stock_alert"]).lower()
+        if "bajo" in alert or float(it["real_qty"]) <= 0:
+            style = {"bg": _RED_BG, "color": _RED}
+        row_styles.append(style)
+
+    rows = [
+        [
+            str(it["product_name"]),
+            str(it["sku"]),
+            _fmt_num(float(it["real_qty"]), 0),
+            _fmt_mxn(float(it["stock_total_cost_mxn"])),
+            str(it["stock_alert"]) or "—",
+        ]
+        for it in items
+    ]
+    _add_table(
+        doc,
+        ["Producto", "SKU", "Qty real", "Valor stock", "Alerta"],
+        rows,
+        zebra=True,
+        row_styles=row_styles,
+    )
+
+
+def _build_almacen_dormidos_section(
+    doc: Document, items: list[dict[str, object]]
+) -> None:
+    _add_heading(doc, "4. SKUs Dormidos (Sin Movimiento)", level=1)
+    _add_styled_paragraph(
+        doc,
+        "Productos con más días sin movimiento para análisis de obsolescencia/rotación.",
+        color=_GRAY,
+        size=10,
+        space_after=12,
+    )
+
+    rows = [
+        [
+            str(it["product_name"]),
+            str(it["sku"]),
+            _fmt_num(int(it["days_without_movement"]), 0),
+            _fmt_num(float(it["real_qty"]), 0),
+            _fmt_mxn(float(it["stock_total_cost_mxn"])),
+        ]
+        for it in items
+    ]
+    _add_table(
+        doc,
+        ["Producto", "SKU", "Días sin mov", "Qty real", "Valor stock"],
+        rows,
+        zebra=True,
     )
