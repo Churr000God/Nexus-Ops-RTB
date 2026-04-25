@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
 from app.schemas.venta_schema import (
+    ApprovalTimeTrendResponse,
     ApprovedVsCancelledByMonthResponse,
     AtRiskCustomerResponse,
     AvgSalesByCustomerTypeResponse,
@@ -380,3 +381,17 @@ async def pending_payment_stats(
 ) -> list[PendingPaymentStatResponse]:
     service = VentasService(db)
     return await service.pending_payment_stats(customer_id=customer_id)
+
+
+@router.get(
+    "/approval-time-trend",
+    response_model=list[ApprovalTimeTrendResponse],
+)
+async def approval_time_trend(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[ApprovalTimeTrendResponse]:
+    service = VentasService(db)
+    return await service.approval_time_trend(start_date=start_date, end_date=end_date)

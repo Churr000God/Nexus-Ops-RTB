@@ -223,3 +223,12 @@ class PendingPaymentStatResponse(BaseModel):
     monto_pendiente: float
     fecha_mas_antigua: date | None = None
     dias_sin_pagar: int | None = None
+
+
+class ApprovalTimeTrendResponse(BaseModel):
+    year_month: str = Field(min_length=7, max_length=7)
+    avg_days: float | None = None
+    upper_days: float | None = None
+    lower_days: float | None = None
+    count: int = 0
+    projected_days: float | None = None

@@ -1,5 +1,6 @@
 import { requestBlob, requestJson } from "@/lib/http"
 import type {
+  ApprovalTimeTrend,
   ApprovedVsCancelledByMonth,
   AtRiskCustomer,
   AvgSalesByCustomerType,
@@ -402,6 +403,20 @@ export const ventasService = {
     return requestJson<PendingPaymentStat[]>(
       withQuery("/api/ventas/pending-payment-stats", {
         customer_id: params?.customerId,
+      }),
+      { token, signal }
+    )
+  },
+
+  approvalTimeTrend(
+    token: string,
+    params?: { startDate?: string | null; endDate?: string | null },
+    signal?: AbortSignal
+  ) {
+    return requestJson<ApprovalTimeTrend[]>(
+      withQuery("/api/ventas/approval-time-trend", {
+        start_date: params?.startDate,
+        end_date: params?.endDate,
       }),
       { token, signal }
     )

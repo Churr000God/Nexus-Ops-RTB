@@ -4,6 +4,7 @@ import { ReportModal } from "@/components/common/ReportModal"
 import {
   BarChart3,
   BrainCircuit,
+  Clock,
   Download,
   FileText,
   Mail,
@@ -37,6 +38,7 @@ import { useSyncStore } from "@/stores/syncStore"
 import { exportVentasDashboardToZip } from "@/lib/dashboardExport"
 import { formatCurrencyMXN, formatIsoDate, formatNumber } from "@/lib/utils"
 import type {
+  ApprovalTimeTrend,
   AtRiskCustomer,
   CustomerPaymentStat,
   CustomerSearchItem,
@@ -371,8 +373,29 @@ export function VentasDashboard() {
     token, syncVersion, selectedMonthYoY
   )
 
+  const fetchApprovalTimeTrend = useCallback(
+    (signal: AbortSignal) =>
+      ventasService.approvalTimeTrend(token ?? "", { startDate, endDate }, signal),
+    [token, startDate, endDate, syncVersion]
+  )
+  const approvalTimeTrend = useApi(
+    fetchApprovalTimeTrend,
+    { enabled: Boolean(token) },
+    token, startDate, endDate, syncVersion
+  )
+
   const kpis = useMemo(() => {
     const data = summary.data
+    const trendRows = (approvalTimeTrend.data ?? []).filter(
+      (r: ApprovalTimeTrend) => r.count > 0 && r.avg_days !== null
+    )
+    const avgApprovalDays =
+      trendRows.length > 0
+        ? trendRows.reduce((acc: number, r: ApprovalTimeTrend) => acc + (r.avg_days ?? 0), 0) / trendRows.length
+        : null
+    const approvalDaysLabel =
+      avgApprovalDays !== null ? `${formatNumber(avgApprovalDays)} días` : "—"
+
     if (!data) {
       return {
         totalSales: "—",
@@ -381,6 +404,7 @@ export function VentasDashboard() {
         conversionRate: "—",
         approvedQuotes: "—",
         reviewQuotes: "—",
+        avgApprovalDays: approvalDaysLabel,
       }
     }
 
@@ -391,8 +415,9 @@ export function VentasDashboard() {
       conversionRate: `${formatNumber(data.conversion_rate)}%`,
       approvedQuotes: formatNumber(data.approved_quotes),
       reviewQuotes: formatNumber(data.review_quotes),
+      avgApprovalDays: approvalDaysLabel,
     }
-  }, [summary.data])
+  }, [summary.data, approvalTimeTrend.data])
 
   const pendingQuotesBadge = useMemo(() => {
     const target = endDate ? new Date(`${endDate}T12:00:00`) : new Date()
@@ -624,6 +649,16 @@ export function VentasDashboard() {
     }))
   }, [paymentTrend.data])
 
+  const approvalTimeChart = useMemo(() => {
+    return (approvalTimeTrend.data ?? []).map((row: ApprovalTimeTrend) => ({
+      month: row.year_month,
+      promedio: row.avg_days ?? undefined,
+      superior: row.upper_days ?? undefined,
+      inferior: row.lower_days ?? undefined,
+      proyeccion: row.projected_days ?? undefined,
+    }))
+  }, [approvalTimeTrend.data])
+
   const salesByCustomerTypeChart = useMemo(() => {
     const labelFor = (tipo: string) => {
       const normalized = (tipo ?? "").trim().toLowerCase()
@@ -807,7 +842,8 @@ export function VentasDashboard() {
     recentQuotes.status === "error" ||
     missingDemand.status === "error" ||
     atRiskCustomers.status === "error" ||
-    paymentTrend.status === "error"
+    paymentTrend.status === "error" ||
+    approvalTimeTrend.status === "error"
 
   const firstError =
     summary.error ??
@@ -823,7 +859,8 @@ export function VentasDashboard() {
     recentQuotes.error ??
     missingDemand.error ??
     atRiskCustomers.error ??
-    paymentTrend.error
+    paymentTrend.error ??
+    approvalTimeTrend.error
 
   const isLoading =
     summary.status === "loading" ||
@@ -839,7 +876,8 @@ export function VentasDashboard() {
     recentQuotes.status === "loading" ||
     missingDemand.status === "loading" ||
     atRiskCustomers.status === "loading" ||
-    paymentTrend.status === "loading"
+    paymentTrend.status === "loading" ||
+    approvalTimeTrend.status === "loading"
 
   const showPendingToast = (feature: string) => {
     toast.info(`${feature} queda listo para enlazar cuando definamos el flujo de datos.`)
@@ -934,7 +972,7 @@ export function VentasDashboard() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           title="Ventas Totales del Mes"
           value={kpis.totalSales}
@@ -964,6 +1002,13 @@ export function VentasDashboard() {
           icon={FileText}
           tone="purple"
           badge={{ label: `${kpis.approvedQuotes} aprobadas`, variant: "success" }}
+        />
+        <KpiCard
+          title="Tiempo Promedio de Aprobación"
+          value={kpis.avgApprovalDays}
+          description="Desde creación de cotización hasta venta registrada"
+          icon={Clock}
+          tone="neutral"
         />
       </div>
 
@@ -1674,6 +1719,67 @@ export function VentasDashboard() {
           valueFormatter={(v) => formatNumber(v)}
           height={320}
         />
+      </ChartPanel>
+
+      <ChartPanel
+        title="Tiempos de Aprobación de Cotizaciones"
+        subtitle="Días entre creación de cotización y registro de venta — promedio mensual, variación (±σ) y proyección"
+        infoLabel="Eficiencia del proceso"
+      >
+        {approvalTimeTrend.status === "loading" ? (
+          <div
+            className="flex items-center justify-center rounded-lg border bg-card text-sm text-muted-foreground"
+            style={{ height: 340 }}
+          >
+            Cargando tiempos de aprobación...
+          </div>
+        ) : approvalTimeChart.length === 0 ? (
+          <div className="flex items-center justify-center rounded-lg border bg-card py-10 text-sm text-muted-foreground">
+            Sin datos de aprobación en el periodo seleccionado
+          </div>
+        ) : (
+          <LineChart
+            data={approvalTimeChart}
+            xKey="month"
+            lines={[
+              { dataKey: "promedio", name: "Promedio (días)", color: "#0051FF" },
+              { dataKey: "superior", name: "+1σ variación", color: "#0051FF", dashed: true },
+              { dataKey: "inferior", name: "−1σ variación", color: "#0051FF", dashed: true },
+              { dataKey: "proyeccion", name: "Proyección", color: "#AF52DE", dashed: true },
+            ]}
+            tooltipContent={(props) => {
+              const { active, label, payload } = props as {
+                active?: boolean
+                label?: string
+                payload?: Array<{ name?: string; value?: number; color?: string }>
+              }
+              if (!active || !payload?.length) return null
+              return (
+                <div className="min-w-[200px] rounded-[var(--radius-md)] border bg-card p-3 shadow-soft-sm">
+                  <div className="mb-2 text-xs font-semibold text-foreground">{label ?? "—"}</div>
+                  {payload.map((entry) =>
+                    entry.value !== undefined && entry.value !== null ? (
+                      <div key={entry.name} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block h-2 w-2 rounded-full"
+                            style={{ background: entry.color }}
+                          />
+                          <span className="text-muted-foreground">{entry.name}</span>
+                        </div>
+                        <span className="font-medium tabular-nums text-foreground">
+                          {formatNumber(entry.value)} días
+                        </span>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )
+            }}
+            valueFormatter={(v) => `${formatNumber(v)} d`}
+            height={340}
+          />
+        )}
       </ChartPanel>
 
       <ChartPanel

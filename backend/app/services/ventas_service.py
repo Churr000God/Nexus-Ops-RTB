@@ -40,6 +40,7 @@ from app.schemas.venta_schema import (
     CustomerPaymentStatResponse,
     CustomerSearchItemResponse,
     PaymentTrendResponse,
+    ApprovalTimeTrendResponse,
     PendingPaymentStatResponse,
     PendingPaymentCustomerResponse,
     ProductsByCustomerTypeResponse,
@@ -1718,3 +1719,98 @@ class VentasService:
             )
             for row in rows
         ]
+
+    async def approval_time_trend(
+        self,
+        start_date: date | None,
+        end_date: date | None,
+    ) -> list[ApprovalTimeTrendResponse]:
+        """Tiempo entre creación de cotización y creación de la venta, por mes."""
+        start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
+
+        days_expr = (
+            func.extract("epoch", Sale.created_at - Quote.created_on) / 86400.0
+        )
+        month_key = func.to_char(Sale.created_at, "YYYY-MM")
+
+        stmt = (
+            select(
+                month_key.label("year_month"),
+                func.avg(days_expr).label("avg_days"),
+                func.stddev_pop(days_expr).label("stddev_days"),
+                func.count(Sale.id).label("count"),
+            )
+            .join(Quote, Quote.id == Sale.quote_id)
+            .where(Quote.created_on.is_not(None))
+            .where(Sale.created_at.is_not(None))
+            .where(Sale.quote_id.is_not(None))
+            .group_by(month_key)
+            .order_by(month_key.asc())
+        )
+        if start_dt is not None:
+            stmt = stmt.where(Sale.created_at >= start_dt)
+        if end_dt is not None:
+            stmt = stmt.where(Sale.created_at < end_dt)
+
+        rows = (await self.db.execute(stmt)).all()
+        if not rows:
+            return []
+
+        result: list[ApprovalTimeTrendResponse] = []
+        for row in rows:
+            if row.year_month is None:
+                continue
+            avg = round(_to_float(row.avg_days), 1)
+            std = round(_to_float(row.stddev_days), 1)
+            result.append(
+                ApprovalTimeTrendResponse(
+                    year_month=row.year_month,
+                    avg_days=avg,
+                    upper_days=round(avg + std, 1),
+                    lower_days=round(max(avg - std, 0.0), 1),
+                    count=int(row.count),
+                )
+            )
+
+        if len(result) >= 1:
+            n = len(result)
+            if n >= 2:
+                xs = list(range(n))
+                ys = [r.avg_days for r in result if r.avg_days is not None]
+                x_mean = sum(xs) / n
+                y_mean = sum(ys) / n
+                num = sum((xi - x_mean) * (yi - y_mean) for xi, yi in zip(xs, ys))
+                den = sum((xi - x_mean) ** 2 for xi in xs)
+                slope = num / den if den != 0 else 0.0
+                intercept = y_mean - slope * x_mean
+            else:
+                slope = 0.0
+                intercept = result[0].avg_days or 0.0
+
+            # Anchor projection line at last actual point
+            last = result[-1]
+            result[-1] = ApprovalTimeTrendResponse(
+                year_month=last.year_month,
+                avg_days=last.avg_days,
+                upper_days=last.upper_days,
+                lower_days=last.lower_days,
+                count=last.count,
+                projected_days=last.avg_days,
+            )
+
+            last_ym = result[-1].year_month
+            last_year, last_month = int(last_ym[:4]), int(last_ym[5:7])
+            for i in range(1, 4):
+                m = last_month + i
+                y = last_year + (m - 1) // 12
+                m = ((m - 1) % 12) + 1
+                proj = round(max(slope * (n + i - 1) + intercept, 0.0), 1)
+                result.append(
+                    ApprovalTimeTrendResponse(
+                        year_month=f"{y:04d}-{m:02d}",
+                        count=0,
+                        projected_days=proj,
+                    )
+                )
+
+        return result

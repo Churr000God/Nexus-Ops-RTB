@@ -212,3 +212,12 @@ export type PendingPaymentStat = {
   fecha_mas_antigua: string | null
   dias_sin_pagar: number | null
 }
+
+export type ApprovalTimeTrend = {
+  year_month: string
+  avg_days: number | null
+  upper_days: number | null
+  lower_days: number | null
+  count: number
+  projected_days: number | null
+}
