@@ -461,21 +461,23 @@ class VentasService:
         sales_stmt = select(
             func.coalesce(func.sum(Sale.subtotal), 0).label("total_sales"),
             func.avg(Sale.margin_percent).label("average_margin_percent"),
-            func.coalesce(
-                func.sum(Sale.subtotal_in_po).filter(
-                    Sale.subtotal_in_po.is_not(None), Sale.subtotal.is_not(None)
-                ),
-                0,
-            ).label("total_po"),
-            func.coalesce(
-                func.sum(Sale.subtotal).filter(
-                    Sale.subtotal_in_po.is_not(None), Sale.subtotal.is_not(None)
-                ),
-                0,
-            ).label("total_subtotal_matched"),
         )
         sales_stmt = _apply_sold_on_filter(sales_stmt, start_date, end_date)
         sales_row = (await self.db.execute(sales_stmt)).one()
+
+        # diff_vs_po: JOIN ventas → cotizaciones, PO = cotizacion.subtotal
+        diff_stmt = (
+            select(
+                func.coalesce(func.sum(Quote.subtotal), 0).label("total_po"),
+                func.coalesce(func.sum(Sale.subtotal), 0).label("total_venta"),
+            )
+            .join(Quote, Quote.id == Sale.quote_id)
+            .where(Sale.quote_id.is_not(None))
+            .where(Quote.subtotal.is_not(None))
+            .where(Sale.subtotal.is_not(None))
+        )
+        diff_stmt = _apply_sold_on_filter(diff_stmt, start_date, end_date)
+        diff_row = (await self.db.execute(diff_stmt)).one()
 
         status_bucket = _quote_status_bucket_expr()
         quote_counts_stmt = (
@@ -507,8 +509,8 @@ class VentasService:
         )
         average_margin_percent = _to_float(sales_row.average_margin_percent) * 100.0
 
-        total_po = _to_float(sales_row.total_po)
-        total_sub = _to_float(sales_row.total_subtotal_matched)
+        total_po = _to_float(diff_row.total_po)
+        total_sub = _to_float(diff_row.total_venta)
         diff_monto = total_po - total_sub
         diff_pct = (diff_monto / total_po * 100.0) if total_po > 0 else None
 
