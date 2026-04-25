@@ -81,6 +81,8 @@ class SalesSummaryResponse(BaseModel):
     cancelled_quotes: int
     expired_quotes: int
     review_quotes: int
+    diff_vs_po_monto: float = 0.0
+    diff_vs_po_pct: float | None = None
 
 
 class SalesProjectionByMonthResponse(BaseModel):

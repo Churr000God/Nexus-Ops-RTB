@@ -52,6 +52,8 @@ export type SalesSummary = {
   cancelled_quotes: number
   expired_quotes: number
   review_quotes: number
+  diff_vs_po_monto: number
+  diff_vs_po_pct: number | null
 }
 
 export type SalesProjectionByMonth = {

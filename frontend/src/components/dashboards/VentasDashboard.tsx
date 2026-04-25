@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { EmailReportModal } from "@/components/common/EmailReportModal"
 import { ReportModal } from "@/components/common/ReportModal"
 import {
+  ArrowLeftRight,
   BarChart3,
   BrainCircuit,
   Clock,
@@ -396,6 +397,17 @@ export function VentasDashboard() {
     const approvalDaysLabel =
       avgApprovalDays !== null ? `${formatNumber(avgApprovalDays)} días` : "—"
 
+    const diffMonto = data?.diff_vs_po_monto ?? 0
+    const diffPct = data?.diff_vs_po_pct ?? null
+    const diffLabel = diffMonto !== 0
+      ? `${diffMonto > 0 ? "+" : ""}${formatCurrencyMXN(diffMonto)}`
+      : "—"
+    const diffPctLabel = diffPct !== null
+      ? `${diffPct > 0 ? "+" : ""}${formatNumber(diffPct)}%`
+      : null
+    const diffDirection: "up" | "down" | "flat" =
+      diffMonto > 0 ? "up" : diffMonto < 0 ? "down" : "flat"
+
     if (!data) {
       return {
         totalSales: "—",
@@ -405,6 +417,9 @@ export function VentasDashboard() {
         approvedQuotes: "—",
         reviewQuotes: "—",
         avgApprovalDays: approvalDaysLabel,
+        diffVsPo: "—",
+        diffVsPoPct: null as string | null,
+        diffVsPoDirection: "flat" as "up" | "down" | "flat",
       }
     }
 
@@ -416,6 +431,9 @@ export function VentasDashboard() {
       approvedQuotes: formatNumber(data.approved_quotes),
       reviewQuotes: formatNumber(data.review_quotes),
       avgApprovalDays: approvalDaysLabel,
+      diffVsPo: diffLabel,
+      diffVsPoPct: diffPctLabel,
+      diffVsPoDirection: diffDirection,
     }
   }, [summary.data, approvalTimeTrend.data])
 
@@ -972,7 +990,7 @@ export function VentasDashboard() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <KpiCard
           title="Ventas Totales del Mes"
           value={kpis.totalSales}
@@ -1009,6 +1027,18 @@ export function VentasDashboard() {
           description="Desde creación de cotización hasta venta registrada"
           icon={Clock}
           tone="neutral"
+        />
+        <KpiCard
+          title="Diferencia Venta vs PO"
+          value={kpis.diffVsPo}
+          description="PO − Subtotal real (solo ventas con ambos campos)"
+          icon={ArrowLeftRight}
+          tone={kpis.diffVsPoDirection === "up" ? "orange" : kpis.diffVsPoDirection === "down" ? "green" : "neutral"}
+          trend={
+            kpis.diffVsPoPct
+              ? { direction: kpis.diffVsPoDirection, label: kpis.diffVsPoPct }
+              : undefined
+          }
         />
       </div>
 

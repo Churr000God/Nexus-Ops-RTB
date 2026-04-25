@@ -461,6 +461,18 @@ class VentasService:
         sales_stmt = select(
             func.coalesce(func.sum(Sale.subtotal), 0).label("total_sales"),
             func.avg(Sale.margin_percent).label("average_margin_percent"),
+            func.coalesce(
+                func.sum(Sale.subtotal_in_po).filter(
+                    Sale.subtotal_in_po.is_not(None), Sale.subtotal.is_not(None)
+                ),
+                0,
+            ).label("total_po"),
+            func.coalesce(
+                func.sum(Sale.subtotal).filter(
+                    Sale.subtotal_in_po.is_not(None), Sale.subtotal.is_not(None)
+                ),
+                0,
+            ).label("total_subtotal_matched"),
         )
         sales_stmt = _apply_sold_on_filter(sales_stmt, start_date, end_date)
         sales_row = (await self.db.execute(sales_stmt)).one()
@@ -495,6 +507,11 @@ class VentasService:
         )
         average_margin_percent = _to_float(sales_row.average_margin_percent) * 100.0
 
+        total_po = _to_float(sales_row.total_po)
+        total_sub = _to_float(sales_row.total_subtotal_matched)
+        diff_monto = total_po - total_sub
+        diff_pct = (diff_monto / total_po * 100.0) if total_po > 0 else None
+
         return SalesSummaryResponse(
             start_date=start_date,
             end_date=end_date,
@@ -507,6 +524,8 @@ class VentasService:
             cancelled_quotes=counts["cancelled"],
             expired_quotes=counts["expired"],
             review_quotes=counts["review"],
+            diff_vs_po_monto=round(diff_monto, 2),
+            diff_vs_po_pct=round(diff_pct, 1) if diff_pct is not None else None,
         )
 
     async def top_customers_by_sales(
