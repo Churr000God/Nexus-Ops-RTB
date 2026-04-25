@@ -1,5 +1,47 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-24 — Tiempos de aprobación y diferencia Venta vs PO en Dashboard de Ventas
+
+### Backend (FastAPI)
+
+- `venta_schema.py`: nuevo schema `ApprovalTimeTrendResponse` (year_month, avg_days, upper_days,
+  lower_days, count, projected_days); campos `diff_vs_po_monto` y `diff_vs_po_pct` añadidos a
+  `SalesSummaryResponse`.
+- `ventas_service.py`:
+  - Nuevo método `approval_time_trend`: calcula `approved_on − created_on` de cotizaciones
+    aprobadas agrupado por mes; incluye banda de variación ±σ (`stddev_pop`) y proyección lineal
+    simple a 3 meses (funciona con ≥1 mes de datos, pendiente plana con 1 solo punto).
+  - `sales_summary`: añade query de diff_vs_po via JOIN `ventas → cotizaciones` usando
+    `cotizacion.subtotal` como PO; calcula diferencia en monto y porcentaje.
+- `ventas.py` (router): nuevo endpoint `GET /api/ventas/approval-time-trend`.
+
+### Frontend (React)
+
+- `ventas.ts`: nuevo tipo `ApprovalTimeTrend`; campos `diff_vs_po_monto` y `diff_vs_po_pct` en
+  `SalesSummary`.
+- `ventasService.ts`: nuevo método `approvalTimeTrend`.
+- `VentasDashboard.tsx`:
+  - Grid de KPIs cambiado de 4 → 6 columnas; añadidas 2 tarjetas nuevas:
+    - **Tiempo Promedio de Aprobación**: promedio de días del período seleccionado.
+    - **Diferencia Venta vs PO**: monto y % de desviación PO vs venta real.
+  - Nuevo `ChartPanel` "Tiempos de Aprobación de Cotizaciones": `LineChart` con 4 líneas
+    (promedio sólida, +σ punteada, −σ punteada, proyección púrpura punteada); tooltip
+    personalizado en días.
+
+### Base de datos
+
+- `UPDATE ventas SET subtotal_in_po = cotizaciones.subtotal WHERE quote_id = cotizaciones.id`:
+  pobló 466 filas con el subtotal de la cotización relacionada (dato histórico).
+
+### Diagnóstico de datos identificado
+
+- `cotizaciones.approval_days`: 0 registros poblados — se calcula en tiempo real con
+  `approved_on − created_on`.
+- `cotizaciones.approved_on`: 125 de 646 registros tienen fecha; marzo tiene 89 aprobadas sin
+  `approved_on` (71% sin cobertura). Se documenta como deuda de datos.
+
+---
+
 ## 2026-04-24 — Despliegue Raspberry Pi, ngrok, fix sincronización CSV, update-safe.sh
 
 ### Docker / nginx
