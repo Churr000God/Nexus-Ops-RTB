@@ -93,7 +93,8 @@ services:
     image: ngrok/ngrok:latest
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    command: http --url=pouncing-shoplift-politely.ngrok-free.dev --pooling-enabled proxy:80
+    # Dominio de PRODUCCION (cuenta dhguilleng). Dev usa pouncing-shoplift-politely (otra cuenta).
+    command: http --domain=caress-shortlist-disarm.ngrok-free.dev proxy:80
     ports:
       - "4040:4040"
     depends_on:
