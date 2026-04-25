@@ -410,90 +410,31 @@ def _sync_dataset(
         raise
 
 
+# real_qty / theoretical_qty are Notion-pre-computed formulas; only update derived/cost fields.
 _RECALC_INVENTARIO_SQL = text(
     """
-    WITH
-    entradas AS (
-      SELECT product_id,
-             SUM(qty_arrived)   AS total_real,
-             SUM(qty_requested) AS total_req
-      FROM entradas_mercancia
-      WHERE product_id IS NOT NULL
-      GROUP BY product_id
-    ),
-    solicitudes AS (
-      SELECT product_id, SUM(qty_requested) AS total
-      FROM solicitudes_material
-      WHERE qty_requested IS NOT NULL AND product_id IS NOT NULL
-      GROUP BY product_id
-    ),
-    salidas_reales AS (
-      SELECT ci.product_id, SUM(ci.qty_packed) AS total
-      FROM cotizacion_items ci
-      JOIN cotizaciones c ON c.id = ci.quote_id
-      WHERE c.status = 'Aprobada'
-        AND ci.qty_packed  IS NOT NULL
-        AND ci.product_id  IS NOT NULL
-      GROUP BY ci.product_id
-    ),
-    salidas_teoricas AS (
-      SELECT ci.product_id, SUM(ci.qty_requested) AS total
-      FROM cotizacion_items ci
-      JOIN cotizaciones c ON c.id = ci.quote_id
-      WHERE c.status = 'Aprobada'
-        AND ci.qty_requested IS NOT NULL
-        AND ci.product_id    IS NOT NULL
-      GROUP BY ci.product_id
-    ),
-    ajustes AS (
-      SELECT product_id, SUM(inventory_adjustment) AS total
-      FROM no_conformes
-      WHERE inventory_adjustment IS NOT NULL AND product_id IS NOT NULL
-      GROUP BY product_id
-    ),
-    costo AS (
+    WITH costo AS (
       SELECT product_id, AVG(price) AS costo_unitario
       FROM proveedor_productos
       WHERE price IS NOT NULL AND price > 0
       GROUP BY product_id
-    ),
-    calc AS (
-      SELECT
-        p.id AS product_id,
-        COALESCE(e.total_real, 0) - COALESCE(sr.total, 0) + COALESCE(a.total, 0)
-          AS stock_real,
-        COALESCE(e.total_req, 0)
-          + (COALESCE(e.total_req, 0) - COALESCE(sol.total, 0))
-          - COALESCE(st.total, 0)
-          + COALESCE(a.total, 0)
-          AS stock_teorico,
-        cu.costo_unitario
-      FROM productos p
-      LEFT JOIN entradas         e   ON e.product_id   = p.id
-      LEFT JOIN solicitudes      sol ON sol.product_id = p.id
-      LEFT JOIN salidas_reales   sr  ON sr.product_id  = p.id
-      LEFT JOIN salidas_teoricas st  ON st.product_id  = p.id
-      LEFT JOIN ajustes          a   ON a.product_id   = p.id
-      LEFT JOIN costo            cu  ON cu.product_id  = p.id
     )
     UPDATE inventario inv
     SET
-      real_qty         = c.stock_real,
-      theoretical_qty  = c.stock_teorico,
-      stock_diff       = c.stock_teorico - c.stock_real,
-      unit_cost        = c.costo_unitario,
+      stock_diff       = inv.theoretical_qty - inv.real_qty,
+      unit_cost        = cu.costo_unitario,
       stock_total_cost = CASE
-                           WHEN c.costo_unitario IS NOT NULL
-                           THEN GREATEST(c.stock_real, 0) * c.costo_unitario
+                           WHEN cu.costo_unitario IS NOT NULL
+                           THEN GREATEST(inv.real_qty, 0) * cu.costo_unitario
                            ELSE NULL
                          END,
       status_real      = CASE
-                           WHEN c.stock_real > 0 THEN 'En stock'
-                           WHEN c.stock_real = 0 THEN '0'
+                           WHEN inv.real_qty > 0 THEN 'En stock'
+                           WHEN inv.real_qty = 0 THEN '0'
                            ELSE 'Sin stock'
                          END
-    FROM calc c
-    WHERE inv.product_id = c.product_id
+    FROM costo cu
+    WHERE inv.product_id = cu.product_id
     """
 )
 

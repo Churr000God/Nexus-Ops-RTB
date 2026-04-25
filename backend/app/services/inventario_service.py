@@ -5,45 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse
 
-_STOCK_CTE = """
-WITH
-entradas AS (
-  SELECT product_id, SUM(qty_arrived) AS total_real, SUM(qty_requested) AS total_req
-  FROM entradas_mercancia
-  WHERE product_id IS NOT NULL
-  GROUP BY product_id
-),
-solicitudes AS (
-  SELECT product_id, SUM(qty_requested) AS total
-  FROM solicitudes_material
-  WHERE qty_requested IS NOT NULL AND product_id IS NOT NULL
-  GROUP BY product_id
-),
-salidas_reales AS (
-  SELECT ci.product_id, SUM(ci.qty_packed) AS total
-  FROM cotizacion_items ci
-  JOIN cotizaciones c ON c.id = ci.quote_id
-  WHERE c.status = 'Aprobada'
-    AND ci.qty_packed IS NOT NULL
-    AND ci.product_id IS NOT NULL
-  GROUP BY ci.product_id
-),
-salidas_teoricas AS (
-  SELECT ci.product_id, SUM(ci.qty_requested) AS total
-  FROM cotizacion_items ci
-  JOIN cotizaciones c ON c.id = ci.quote_id
-  WHERE c.status = 'Aprobada'
-    AND ci.qty_requested IS NOT NULL
-    AND ci.product_id IS NOT NULL
-  GROUP BY ci.product_id
-),
-ajustes AS (
-  SELECT product_id, SUM(inventory_adjustment) AS total
-  FROM no_conformes
-  WHERE inventory_adjustment IS NOT NULL AND product_id IS NOT NULL
-  GROUP BY product_id
-),
-costo AS (
+# inventario.real_qty / theoretical_qty are Notion-pre-computed formulas — source of truth.
+# Cost comes from proveedor_productos since inventario.unit_cost is populated by sync.
+_BASE_STOCK = """
+WITH costo AS (
   SELECT product_id, AVG(price) AS costo_unitario
   FROM proveedor_productos
   WHERE price IS NOT NULL AND price > 0
@@ -57,19 +22,11 @@ stock AS (
     p.name,
     i.abc_classification,
     cu.costo_unitario,
-    COALESCE(e.total_real, 0) - COALESCE(sr.total, 0) + COALESCE(a.total, 0)  AS stock_real,
-    COALESCE(e.total_req, 0)
-      + (COALESCE(e.total_req, 0) - COALESCE(sol.total, 0))
-      - COALESCE(st.total, 0)
-      + COALESCE(a.total, 0)                                                   AS stock_teorico
-  FROM productos p
-  LEFT JOIN inventario       i   ON i.product_id   = p.id
-  LEFT JOIN entradas         e   ON e.product_id   = p.id
-  LEFT JOIN solicitudes      sol ON sol.product_id = p.id
-  LEFT JOIN salidas_reales   sr  ON sr.product_id  = p.id
-  LEFT JOIN salidas_teoricas st  ON st.product_id  = p.id
-  LEFT JOIN ajustes          a   ON a.product_id   = p.id
-  LEFT JOIN costo            cu  ON cu.product_id  = p.id
+    i.real_qty        AS stock_real,
+    i.theoretical_qty AS stock_teorico
+  FROM inventario i
+  JOIN  productos p  ON p.id  = i.product_id
+  JOIN  costo     cu ON cu.product_id = p.id
 )
 """
 
@@ -80,7 +37,7 @@ class InventarioService:
 
     async def get_kpis(self) -> InventarioKpiResponse:
         sql = text(
-            _STOCK_CTE
+            _BASE_STOCK
             + """
             SELECT
               COUNT(*)                                                       AS total_productos,
@@ -90,7 +47,6 @@ class InventarioService:
               COALESCE(SUM(GREATEST(stock_real,  0) * costo_unitario), 0)   AS monto_total_real,
               COALESCE(SUM(GREATEST(stock_teorico, 0) * costo_unitario), 0) AS monto_total_teorico
             FROM stock
-            WHERE costo_unitario IS NOT NULL
             """
         )
         row = (await self.db.execute(sql)).mappings().one()
@@ -109,9 +65,9 @@ class InventarioService:
         offset: int = 0,
         solo_con_stock: bool = False,
     ) -> list[InventarioProductoResponse]:
-        filtro = "WHERE costo_unitario IS NOT NULL AND stock_real > 0" if solo_con_stock else "WHERE costo_unitario IS NOT NULL"
+        filtro = "WHERE stock_real > 0" if solo_con_stock else ""
         sql = text(
-            _STOCK_CTE
+            _BASE_STOCK
             + f"""
             SELECT
               internal_code,

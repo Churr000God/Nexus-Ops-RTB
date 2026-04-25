@@ -817,7 +817,8 @@ def _import_inventory(
     skipped_total = 0
     for batch in _chunk(payloads, 500):
         inserted, skipped = _bulk_upsert(
-            conn, InventoryItem.__table__, batch, conflict_cols=["id"]
+            conn, InventoryItem.__table__, batch, conflict_cols=["id"],
+            exclude_from_update=["product_id"],
         )
         inserted_total += inserted
         skipped_total += skipped
@@ -829,8 +830,10 @@ def _import_inventory(
             set product_id = p.id
             from productos p
             where i.product_id is null
-              and i.internal_code is not null
-              and p.internal_code = i.internal_code
+              and i.raw_payload is not null
+              and i.raw_payload::json->>'sku' is not null
+              and i.raw_payload::json->>'sku' not in ('', '[]')
+              and p.sku = trim(both '[]"' from (i.raw_payload::json->>'sku'))
             """
         )
     )
@@ -918,7 +921,8 @@ def _import_nonconformities(
     skipped_total = 0
     for batch in _chunk(payloads, 500):
         inserted, skipped = _bulk_upsert(
-            conn, NonConformity.__table__, batch, conflict_cols=["id"]
+            conn, NonConformity.__table__, batch, conflict_cols=["id"],
+            exclude_from_update=["product_id"],
         )
         inserted_total += inserted
         skipped_total += skipped
@@ -977,7 +981,8 @@ def _import_material_requests(
     skipped_total = 0
     for batch in _chunk(payloads, 500):
         inserted, skipped = _bulk_upsert(
-            conn, MaterialRequest.__table__, batch, conflict_cols=["id"]
+            conn, MaterialRequest.__table__, batch, conflict_cols=["id"],
+            exclude_from_update=["product_id"],
         )
         inserted_total += inserted
         skipped_total += skipped
@@ -1041,7 +1046,8 @@ def _import_goods_receipts(
     skipped_total = 0
     for batch in _chunk(payloads, 500):
         inserted, skipped = _bulk_upsert(
-            conn, GoodsReceipt.__table__, batch, conflict_cols=["id"]
+            conn, GoodsReceipt.__table__, batch, conflict_cols=["id"],
+            exclude_from_update=["product_id"],
         )
         inserted_total += inserted
         skipped_total += skipped
