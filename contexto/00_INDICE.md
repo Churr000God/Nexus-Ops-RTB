@@ -22,6 +22,7 @@ Crear una página web interactiva que muestre dashboards de diferentes áreas, a
 | 03 | [03_finanzas.md](03_finanzas.md) | Métricas históricas y futuras del **Área de Finanzas** |
 | 04 | [04_administracion.md](04_administracion.md) | Métricas históricas y futuras del **Área de Administración** |
 | 05 | [05_bases_de_datos.md](05_bases_de_datos.md) | Catálogo unificado de bases de datos referenciadas |
+| 06 | [06_logica_negocio_notion_n8n.md](06_logica_negocio_notion_n8n.md) | Lógica de negocio completa: relaciones entre tablas, cálculos, reglas y mapeo de normalización Notion → n8n |
 
 ---
 
