@@ -510,7 +510,7 @@ class VentasService:
 
         total_po = _to_float(diff_row.total_po)
         total_sub = _to_float(diff_row.total_venta)
-        diff_monto = total_po - total_sub
+        diff_monto = total_sub - total_po
         diff_pct = (diff_monto / total_po * 100.0) if total_po > 0 else None
 
         return SalesSummaryResponse(
@@ -538,7 +538,9 @@ class VentasService:
     ) -> list[SalesByCustomerResponse]:
         start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
 
-        filters = ["LOWER(co.status) = 'aprobada'"]
+        filters = [
+            "(co.approved_on IS NOT NULL OR LOWER(COALESCE(co.status, '')) LIKE '%aprob%')"
+        ]
         params: dict = {}
         if start_dt is not None:
             filters.append("co.created_on >= :start_dt")
@@ -1098,7 +1100,7 @@ class VentasService:
                 FROM clientes c
                 JOIN cotizaciones q
                     ON q.customer_id = c.id
-                    AND q.status = 'Aprobada'
+                    AND (q.approved_on IS NOT NULL OR LOWER(COALESCE(q.status, '')) LIKE '%aprob%')
                 JOIN ventas v
                     ON v.quote_id = q.id
                 WHERE v.subtotal IS NOT NULL
@@ -1427,7 +1429,9 @@ class VentasService:
         Solo incluye cotizaciones con status Aprobada.
         """
         start_dt, end_dt = _date_range_to_datetimes(start_date, end_date)
-        filters = ["LOWER(c.status) = 'aprobada'"]
+        filters = [
+            "(c.approved_on IS NOT NULL OR LOWER(COALESCE(c.status, '')) LIKE '%aprob%')"
+        ]
         params: dict = {}
         if start_dt is not None:
             filters.append("c.created_on >= :start_dt")
@@ -1621,7 +1625,7 @@ class VentasService:
                 FROM clientes c
                 JOIN cotizaciones cot
                     ON cot.customer_id = c.id
-                    AND cot.status = 'Aprobada'
+                    AND (cot.approved_on IS NOT NULL OR LOWER(COALESCE(cot.status, '')) LIKE '%aprob%')
                 JOIN pedidos_clientes pc
                     ON pc.quote_id = cot.id
                 WHERE (
@@ -1635,6 +1639,7 @@ class VentasService:
                         ) IS NOT NULL
                     )
                 )
+                AND (cot.approved_on IS NOT NULL OR LOWER(COALESCE(cot.status, '')) LIKE '%aprob%')
                 {customer_filter}
             ),
             agregado AS (
@@ -1709,7 +1714,7 @@ class VentasService:
             FROM clientes c
             JOIN cotizaciones cot
                 ON cot.customer_id = c.id
-                AND cot.status = 'Aprobada'
+                AND (cot.approved_on IS NOT NULL OR LOWER(COALESCE(cot.status, '')) LIKE '%aprob%')
             JOIN pedidos_clientes pc
                 ON pc.quote_id = cot.id
                 AND pc.payment_status IN ('No pagada', 'Pagada Parcial')

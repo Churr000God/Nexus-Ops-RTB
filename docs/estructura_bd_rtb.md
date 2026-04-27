@@ -154,7 +154,7 @@ Todas las fórmulas originales de Notion se migraron siguiendo una de estas tres
 | `ventas` | `gross_margin` | `subtotal - purchase_cost` |
 | `ventas` | `margin_percent` | `gross_margin / NULLIF(subtotal, 0)` |
 | `ventas` | `diff_vs_po` | `subtotal - subtotal_in_po` |
-| `ventas` | `year_month` | `to_char(sold_on, 'TMMonth YYYY')` |
+| `ventas` | `year_month` | `to_char(sold_on, 'YYYY-MM')` |
 | `ventas` | `quadrimester` | `CASE …` (Ene-Abr / May-Ago / Sep-Dic) |
 | `cotizaciones` | `subtotal_with_shipping` | `(subtotal + shipping_cost) * (1 - discount)` |
 | `cotizaciones` | `monthly_interest` | `CASE WHEN credit THEN 0.0175 ELSE 0 END` |

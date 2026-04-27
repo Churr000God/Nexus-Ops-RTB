@@ -77,7 +77,7 @@ BEGIN
             ) AS committed_demand,
             MAX(
                 CASE
-                    WHEN COALESCE(qi.qty_packed, 0) > 0 THEN COALESCE(qi.last_updated_on, q.created_on)::date
+                    WHEN COALESCE(qi.qty_packed, 0) > 0 THEN qi.last_updated_on::date
                     ELSE NULL
                 END
             ) AS last_outbound_date
@@ -131,22 +131,39 @@ BEGIN
 
     UPDATE inventario i
     SET
-        inbound_real = mv.inbound_real,
-        outbound_real = mv.outbound_real,
-        inbound_theoretical = mv.inbound_real,
-        outbound_theoretical = mv.outbound_real,
+        inbound_real         = mv.inbound_real,
+        outbound_real        = mv.outbound_real,
+        inbound_theoretical  = th_in.inbound_theoretical,
+        outbound_theoretical = th_out.outbound_theoretical,
         nonconformity_adjustment = nc.nonconformity_adjustment,
-        real_qty = mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment,
-        theoretical_qty = mv.inbound_real - mv.outbound_real,
-        stock_diff = (mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment) - (mv.inbound_real - mv.outbound_real),
-        stock_total_cost = (mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment) * i.unit_cost
+        real_qty       = mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment,
+        theoretical_qty = th_in.inbound_theoretical - th_out.outbound_theoretical,
+        stock_diff     = (mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment)
+                         - (th_in.inbound_theoretical - th_out.outbound_theoretical),
+        stock_total_cost = (mv.inbound_real - mv.outbound_real + nc.nonconformity_adjustment)
+                           * i.unit_cost
     FROM (
+        -- real: movimientos físicos confirmados
         SELECT
-            COALESCE(SUM(CASE WHEN movement_type IN ('Entrada', 'Devolución') THEN qty_in ELSE 0 END), 0) AS inbound_real,
-            COALESCE(SUM(CASE WHEN movement_type IN ('Salida') THEN qty_out ELSE 0 END), 0) AS outbound_real
+            COALESCE(SUM(CASE WHEN movement_type IN ('Entrada', 'Devolución') THEN qty_in  ELSE 0 END), 0) AS inbound_real,
+            COALESCE(SUM(CASE WHEN movement_type = 'Salida'                   THEN qty_out ELSE 0 END), 0) AS outbound_real
         FROM movimientos_inventario
         WHERE product_id = v_product_id
     ) AS mv,
+    (
+        -- theoretical inbound: lo que se solicitó recibir (entradas_mercancia.qty_requested_converted)
+        SELECT COALESCE(SUM(em.qty_requested_converted), 0) AS inbound_theoretical
+        FROM entradas_mercancia em
+        WHERE em.product_id = v_product_id
+    ) AS th_in,
+    (
+        -- theoretical outbound: demanda cotizada activa (excluye canceladas/rechazadas/expiradas)
+        SELECT COALESCE(SUM(ci.qty_requested), 0) AS outbound_theoretical
+        FROM cotizacion_items ci
+        JOIN cotizaciones q ON q.id = ci.quote_id
+        WHERE ci.product_id = v_product_id
+          AND LOWER(COALESCE(q.status, '')) NOT IN ('cancelada', 'rechazada', 'expirada')
+    ) AS th_out,
     (
         SELECT COALESCE(SUM(inventory_adjustment), 0) AS nonconformity_adjustment
         FROM no_conformes
@@ -547,3 +564,25 @@ DROP TRIGGER IF EXISTS trg_pedidos_incompletos ON pedidos_incompletos;
 CREATE TRIGGER trg_pedidos_incompletos
 BEFORE INSERT OR UPDATE ON pedidos_incompletos
 FOR EACH ROW EXECUTE FUNCTION app.trg_pedidos_incompletos_aging();
+
+CREATE OR REPLACE FUNCTION app.trg_ventas_period_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.sold_on IS NOT NULL THEN
+        NEW.year_month := to_char(NEW.sold_on, 'YYYY-MM');
+        NEW.quadrimester := CASE
+            WHEN EXTRACT(MONTH FROM NEW.sold_on) BETWEEN 1 AND 4 THEN 'Ene-Abr'
+            WHEN EXTRACT(MONTH FROM NEW.sold_on) BETWEEN 5 AND 8 THEN 'May-Ago'
+            ELSE 'Sep-Dic'
+        END;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ventas_period_fields ON ventas;
+CREATE TRIGGER trg_ventas_period_fields
+BEFORE INSERT OR UPDATE ON ventas
+FOR EACH ROW EXECUTE FUNCTION app.trg_ventas_period_fields();

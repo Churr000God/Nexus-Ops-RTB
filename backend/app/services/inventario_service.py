@@ -5,11 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse
 
-# inventario.real_qty / theoretical_qty are Notion-pre-computed formulas — source of truth.
-# Cost comes from proveedor_productos since inventario.unit_cost is populated by sync.
+# inventario.unit_cost is the primary cost source (populated by sync or trigger).
+# proveedor_productos.avg_price is used as fallback when inventario.unit_cost is NULL.
 _BASE_STOCK = """
-WITH costo AS (
-  SELECT product_id, AVG(price) AS costo_unitario
+WITH prov_costo AS (
+  SELECT product_id, AVG(price) AS avg_price_prov
   FROM proveedor_productos
   WHERE price IS NOT NULL AND price > 0
   GROUP BY product_id
@@ -21,12 +21,12 @@ stock AS (
     p.sku,
     p.name,
     i.abc_classification,
-    cu.costo_unitario,
+    COALESCE(i.unit_cost, pc.avg_price_prov) AS costo_unitario,
     i.real_qty        AS stock_real,
     i.theoretical_qty AS stock_teorico
   FROM inventario i
-  JOIN  productos p  ON p.id  = i.product_id
-  JOIN  costo     cu ON cu.product_id = p.id
+  JOIN      productos  p  ON p.id  = i.product_id
+  LEFT JOIN prov_costo pc ON pc.product_id = p.id
 )
 """
 

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import case, update
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.ops_models import InventoryItem
 
 
 class AbcRollupService:
@@ -11,18 +9,20 @@ class AbcRollupService:
         self.db = db
 
     async def recompute(self) -> int:
-        stmt = (
-            update(InventoryItem)
-            .values(
-                abc_classification=case(
-                    (InventoryItem.total_accumulated_sales.is_(None), None),
-                    (InventoryItem.total_accumulated_sales >= 50000, "A"),
-                    (InventoryItem.total_accumulated_sales >= 10000, "B"),
-                    else_="C",
-                )
+        result = await self.db.execute(
+            text(
+                """
+                UPDATE inventario i
+                SET abc_classification = CASE
+                    WHEN p.total_accumulated_sales IS NULL THEN NULL
+                    WHEN p.total_accumulated_sales >= 50000 THEN 'A'
+                    WHEN p.total_accumulated_sales >= 10000 THEN 'B'
+                    ELSE 'C'
+                END
+                FROM productos p
+                WHERE i.product_id = p.id
+                """
             )
-            .execution_options(synchronize_session=False)
         )
-        result = await self.db.execute(stmt)
         await self.db.commit()
         return int(result.rowcount or 0)
