@@ -25,9 +25,18 @@ from app.models.ops_models import (  # noqa: F401
     SupplierProduct,
 )
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
-from app.models.user_model import RefreshToken, User
+from app.models.user_model import (  # noqa: F401
+    AuditLog,
+    Permission,
+    RefreshToken,
+    Role,
+    RolePermission,
+    User,
+    UserRole,
+)
 
 __all__ = [
+    "AuditLog",
     "Base",
     "Brand",
     "CancelledQuote",
@@ -47,14 +56,18 @@ __all__ = [
     "NonConformity",
     "OperatingExpense",
     "OrderDateVerification",
+    "Permission",
     "Product",
     "PurchaseInvoice",
     "Quote",
     "QuoteItem",
     "RefreshToken",
+    "Role",
+    "RolePermission",
     "Sale",
     "Supplier",
     "SupplierOrder",
     "SupplierProduct",
     "User",
+    "UserRole",
 ]

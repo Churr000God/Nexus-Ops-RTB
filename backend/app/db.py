@@ -19,6 +19,7 @@ if settings.DATABASE_URL is None:
 engine = create_async_engine(
     _normalize_database_url(settings.DATABASE_URL),
     pool_pre_ping=True,
+    connect_args={"prepare_threshold": 0},  # PgBouncer: deshabilita prepared statements
 )
 AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False

@@ -72,7 +72,7 @@ def main() -> None:
         sys.exit(1)
 
     listener.listen(20)
-    print(f"[OK] Supabase relay activo: localhost:{args.port} → {REMOTE_HOST}:{REMOTE_PORT}")
+    print(f"[OK] Supabase relay activo: localhost:{args.port} -> {REMOTE_HOST}:{REMOTE_PORT}")
     print(f"     Docker usa: host.docker.internal:{args.port}")
     print(f"     Ctrl+C para detener.\n")
 

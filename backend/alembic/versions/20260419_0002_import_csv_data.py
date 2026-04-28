@@ -1520,7 +1520,12 @@ def upgrade() -> None:
             existing_type=sa.String(length=80),
         )
 
-    Base.metadata.create_all(bind=conn, checkfirst=True)
+    # Crea tablas de ops/staging que no están en DDL explícito de migraciones anteriores.
+    # Excluye las tablas RBAC que migration 0010 crea — si se incluyeran aquí
+    # causarían DuplicateTable al correr 0010 dentro de la misma transacción Alembic.
+    _rbac_tables = {"roles", "permissions", "role_permissions", "user_roles", "audit_log"}
+    _ops_tables = [t for t in Base.metadata.sorted_tables if t.name not in _rbac_tables]
+    Base.metadata.create_all(bind=conn, tables=_ops_tables, checkfirst=True)
 
     base_dir = Path("/data/csv")
     if not base_dir.exists():

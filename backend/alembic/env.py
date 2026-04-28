@@ -40,7 +40,9 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
-        connection=connection, target_metadata=target_metadata, compare_type=True
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -51,6 +53,7 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"prepare_threshold": 0},  # PgBouncer: int requerido, no string
     )
 
     async with connectable.connect() as connection:
