@@ -13,6 +13,4 @@ require docker
 require_env_file
 
 compose_cmd dev up -d --build
-wait_for_postgres dev 90
 ok "Stack DEV levantado. Proxy: http://localhost"
-

@@ -69,12 +69,25 @@ up_stack() {
   compose_cmd "$MODE" up ${up_args[@]}
 }
 
+check_supabase() {
+  local db_host db_user db_pass db_name
+  db_host="$(env_get SUPABASE_HOST '')"
+  db_user="$(env_get POSTGRES_USER postgres)"
+  db_pass="$(env_get POSTGRES_PASSWORD '')"
+  db_name="$(env_get POSTGRES_DB postgres)"
+  if [[ -n "$db_host" ]]; then
+    wait_for_supabase "$db_host" "$db_user" "$db_pass" "$db_name" 30
+  else
+    warn "SUPABASE_HOST no configurado — omitiendo verificación de BD."
+  fi
+}
+
 deploy_dev() {
   log "Desplegando en modo DESARROLLO..."
   build_images_if_needed
   up_stack
-  log "Esperando que los servicios estén saludables..."
-  wait_for_postgres dev 90
+  log "Verificando conexión a Supabase..."
+  check_supabase
   bash ./scripts/health-check.sh dev || warn "Algunos servicios no responden aún."
   ok "Deploy DEV completado — $TIMESTAMP"
   ok "Proxy: http://localhost"
@@ -93,8 +106,8 @@ deploy_prod() {
 
   build_images_if_needed
   up_stack
-  log "Esperando que los servicios estén saludables..."
-  wait_for_postgres prod 120
+  log "Verificando conexión a Supabase..."
+  check_supabase
   bash ./scripts/health-check.sh prod || warn "Algunos servicios no responden aún."
   ok "Deploy PROD completado — $TIMESTAMP"
 }

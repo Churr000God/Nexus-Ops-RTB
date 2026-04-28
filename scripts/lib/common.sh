@@ -44,28 +44,27 @@ compose_cmd() {
   docker compose $files "$@"
 }
 
-postgres_service_name() {
-  echo "postgres"
-}
-
-wait_for_postgres() {
-  local mode="${1:-dev}"
-  local timeout="${2:-60}"
+# Espera a que Supabase (o cualquier PostgreSQL externo) acepte conexiones.
+# Uso: wait_for_supabase HOST USER PASS DB [TIMEOUT_SECS]
+wait_for_supabase() {
+  local host="$1"
+  local user="$2"
+  local pass="$3"
+  local db="${4:-postgres}"
+  local timeout="${5:-60}"
   local elapsed=0
-  local db_name db_user
-  db_name="$(env_get POSTGRES_DB nexus_ops)"
-  db_user="$(env_get POSTGRES_USER nexus)"
-  local service
-  service="$(postgres_service_name)"
+
+  local port
+  port="$(grep -E "^SUPABASE_PORT=" .env 2>/dev/null | tail -n1 | cut -d= -f2- || echo 6543)"
 
   while (( elapsed < timeout )); do
-    if compose_cmd "$mode" exec -T "$service" pg_isready -U "$db_user" -d "$db_name" >/dev/null 2>&1; then
-      ok "PostgreSQL disponible."
+    if PGPASSWORD="$pass" psql -h "$host" -p "$port" -U "$user" -d "$db" \
+        -c "SELECT 1" >/dev/null 2>&1; then
+      ok "Supabase disponible ($host)."
       return 0
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
-  err "PostgreSQL no estuvo disponible en ${timeout}s."
+  err "No se pudo conectar a Supabase ($host) en ${timeout}s."
 }
-

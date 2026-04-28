@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# restore-db.sh — Restaurar backup de PostgreSQL
-# Uso:  ./scripts/restore-db.sh data/backups/nexus_ops_backup_20260418.sql.gz
+# restore-db.sh — Restaurar backup de PostgreSQL en Supabase
+# Uso:  ./scripts/restore-db.sh [archivo.sql.gz]
+# Requiere: psql instalado localmente
 # =============================================================================
 set -euo pipefail
 
@@ -14,13 +15,21 @@ cd "$ROOT"
 
 source ./scripts/lib/common.sh
 
-require docker
+require psql
 require_env_file
 
 BACKUP_FILE="${1:-}"
-MODE="${2:-dev}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-false}"
-SERVICE="$(postgres_service_name)"
+
+DB_HOST="$(env_get SUPABASE_HOST '')"
+DB_PORT="$(env_get SUPABASE_PORT 6543)"
+DB_NAME="$(env_get POSTGRES_DB postgres)"
+DB_USER="$(env_get POSTGRES_USER postgres)"
+DB_PASS="$(env_get POSTGRES_PASSWORD '')"
+
+if [[ -z "$DB_HOST" ]]; then
+  err "SUPABASE_HOST no está configurado en .env"
+fi
 
 if [[ -z "$BACKUP_FILE" ]]; then
   LATEST="$(ls -1t data/backups/*.sql.gz 2>/dev/null | head -n 1 || true)"
@@ -40,10 +49,9 @@ if [[ ! -f "$BACKUP_FILE" ]]; then
   err "Archivo no encontrado: $BACKUP_FILE"
 fi
 
-DB_NAME="$(env_get POSTGRES_DB nexus_ops)"
-DB_USER="$(env_get POSTGRES_USER nexus)"
-
-warn "Esto reemplazará TODOS los datos de la base de datos '$DB_NAME'."
+warn "Esto limpiará el schema 'public' y restaurará todos los datos."
+warn "  Backup: $BACKUP_FILE"
+warn "  BD: $DB_NAME @ $DB_HOST"
 if [[ "$AUTO_CONFIRM" != "true" ]]; then
   read -r -p "Continuar? (y/N): " CONFIRM
   if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
@@ -55,9 +63,15 @@ else
 fi
 
 log "Creando backup de seguridad antes de restaurar..."
-bash ./scripts/backup-db.sh "pre_restore_$(date -u +%Y%m%d_%H%M%S)" "$MODE"
+bash ./scripts/backup-db.sh "pre_restore_$(date -u +%Y%m%d_%H%M%S)"
+
+log "Limpiando schema público en Supabase..."
+PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null
 
 log "Restaurando desde: $BACKUP_FILE"
-gunzip -c "$BACKUP_FILE" | compose_cmd "$MODE" exec -T "$SERVICE" psql -U "$DB_USER" -d "$DB_NAME" --single-transaction
+gunzip -c "$BACKUP_FILE" | PGPASSWORD="$DB_PASS" psql \
+  -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+  --single-transaction >/dev/null
 
 ok "Base de datos restaurada exitosamente."

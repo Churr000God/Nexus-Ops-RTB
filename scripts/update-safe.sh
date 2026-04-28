@@ -4,9 +4,9 @@
 #
 # Flujo:
 #   1. Descarga actualizaciones del repositorio (git pull)
-#   2. Genera copia de seguridad de la base de datos
+#   2. Genera copia de seguridad de la base de datos (Supabase → local)
 #   3. Construye las nuevas imágenes (sin reiniciar aún)
-#   4. Restaura el backup en postgres (esquema + datos a estado conocido)
+#   4. Restaura el backup en Supabase (schema público limpio + restore)
 #   5. Aplica migraciones nuevas encima del backup restaurado
 #   6. Levanta / reinicia los servicios de app (backend, frontend, proxy, ngrok)
 #   7. Verifica salud del stack
@@ -20,6 +20,8 @@
 # Uso:
 #   ./scripts/update-safe.sh          # Modo producción (default)
 #   ./scripts/update-safe.sh --dry-run  # Muestra qué haría sin ejecutar
+#
+# Requiere: psql y pg_dump instalados localmente
 # =============================================================================
 set -euo pipefail
 
@@ -34,6 +36,7 @@ source ./scripts/lib/common.sh
 
 require docker
 require git
+require psql
 require_env_file
 
 # ---------------------------------------------------------------------------
@@ -53,6 +56,15 @@ BRANCH="${UPDATE_BRANCH:-main}"
 BACKUP_TAG="pre_update_${TIMESTAMP}"
 LOG_FILE="data/logs/update-safe.log"
 mkdir -p data/logs
+
+DB_HOST="$(env_get SUPABASE_HOST '')"
+DB_NAME="$(env_get POSTGRES_DB postgres)"
+DB_USER="$(env_get POSTGRES_USER postgres)"
+DB_PASS="$(env_get POSTGRES_PASSWORD '')"
+
+if [[ -z "$DB_HOST" ]]; then
+  err "SUPABASE_HOST no está configurado en .env"
+fi
 
 run() {
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -110,77 +122,48 @@ ok "Repositorio actualizado. Commit actual: $COMMIT"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Paso 2 — Generar copia de seguridad de la base de datos
+# Paso 2 — Generar copia de seguridad de la base de datos (Supabase → local)
 # ---------------------------------------------------------------------------
-log "Paso 2/7 — Generando backup de la base de datos..."
+log "Paso 2/7 — Generando backup desde Supabase..."
 
-if compose_cmd "$MODE" ps postgres 2>/dev/null | grep -q "Up"; then
-  run bash ./scripts/backup-db.sh "$BACKUP_TAG" "$MODE"
-  BACKUP_FILE="$(ls -1t data/backups/${BACKUP_TAG}*.sql.gz 2>/dev/null | head -1 || true)"
-  if [[ -z "$BACKUP_FILE" && "$DRY_RUN" == "false" ]]; then
-    err "No se encontró el backup recién creado. Abortando por seguridad."
-  fi
-  ok "Backup guardado: ${BACKUP_FILE:-[dry-run]}"
-else
-  warn "PostgreSQL no está corriendo. Se omite el backup."
-  warn "Se intentará restaurar el backup más reciente existente."
-  BACKUP_FILE="$(ls -1t data/backups/*.sql.gz 2>/dev/null | head -1 || true)"
-  if [[ -z "$BACKUP_FILE" ]]; then
-    err "No hay backups disponibles y postgres no está activo. Abortando."
-  fi
-  warn "Se usará backup existente: $BACKUP_FILE"
+run bash ./scripts/backup-db.sh "$BACKUP_TAG"
+BACKUP_FILE="$(ls -1t data/backups/${BACKUP_TAG}*.sql.gz 2>/dev/null | head -1 || true)"
+if [[ -z "$BACKUP_FILE" && "$DRY_RUN" == "false" ]]; then
+  err "No se encontró el backup recién creado. Abortando por seguridad."
 fi
+ok "Backup guardado: ${BACKUP_FILE:-[dry-run]}"
 echo ""
 
 # ---------------------------------------------------------------------------
 # Paso 3 — Construir nuevas imágenes de la aplicación
-# (postgres y redis no se reconstruyen — sus datos están en volúmenes)
 # ---------------------------------------------------------------------------
 log "Paso 3/7 — Construyendo nuevas imágenes (backend + frontend)..."
-log "  PostgreSQL y Redis NO se tocan — sus datos están seguros en volúmenes."
+log "  Supabase no se toca — BD externa, siempre disponible."
 
 run docker compose build backend frontend
 ok "Imágenes construidas."
 echo ""
 
 # ---------------------------------------------------------------------------
-# Paso 4 — Restaurar el backup en la base de datos
+# Paso 4 — Restaurar el backup en Supabase
 #
 # Se restaura ANTES de las migraciones para tener un estado conocido.
 # El usuario administrador viene incluido en el backup — no se crea de nuevo.
 # ---------------------------------------------------------------------------
-log "Paso 4/7 — Restaurando backup en la base de datos..."
-log "  Backup: $BACKUP_FILE"
+log "Paso 4/7 — Restaurando backup en Supabase..."
+log "  Backup: ${BACKUP_FILE:-[dry-run]}"
 log "  NOTA: El usuario admin viaja con el backup — no se creará de nuevo."
 
-if compose_cmd "$MODE" ps postgres 2>/dev/null | grep -q "Up"; then
-  : # postgres ya corre
-else
-  log "  Levantando postgres y redis..."
-  run compose_cmd "$MODE" up -d postgres redis
-  run wait_for_postgres "$MODE" 90
-fi
-
-SERVICE="$(postgres_service_name)"
-DB_NAME="$(env_get POSTGRES_DB nexus_ops)"
-DB_USER="$(env_get POSTGRES_USER nexus)"
-
 if [[ "$DRY_RUN" == "false" ]]; then
-  # Terminar conexiones activas antes de drop/create
-  compose_cmd "$MODE" exec -T "$SERVICE" psql -U "$DB_USER" -d postgres -c \
-    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$DB_NAME' AND pid <> pg_backend_pid();" \
-    >/dev/null 2>&1 || true
+  # Limpiar schema público y restaurar
+  PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p 5432 -U "$DB_USER" -d "$DB_NAME" \
+    -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null
 
-  compose_cmd "$MODE" exec -T "$SERVICE" psql -U "$DB_USER" -d postgres -c \
-    "DROP DATABASE IF EXISTS \"$DB_NAME\";" >/dev/null
-
-  compose_cmd "$MODE" exec -T "$SERVICE" psql -U "$DB_USER" -d postgres -c \
-    "CREATE DATABASE \"$DB_NAME\";" >/dev/null
-
-  gunzip -c "$BACKUP_FILE" | compose_cmd "$MODE" exec -T "$SERVICE" \
-    psql -U "$DB_USER" -d "$DB_NAME" --single-transaction >/dev/null
+  gunzip -c "$BACKUP_FILE" | PGPASSWORD="$DB_PASS" psql \
+    -h "$DB_HOST" -p 5432 -U "$DB_USER" -d "$DB_NAME" \
+    --single-transaction >/dev/null
 else
-  echo "  [DRY-RUN] DROP/CREATE DATABASE + restaurar $BACKUP_FILE"
+  echo "  [DRY-RUN] DROP/CREATE SCHEMA public + restaurar $BACKUP_FILE"
 fi
 
 ok "Backup restaurado. Datos y usuario admin disponibles."
@@ -188,18 +171,12 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # Paso 5 — Aplicar migraciones Alembic
-#
-# Las migraciones corren DESPUÉS del restore para agregar solo los cambios
-# nuevos (columnas, tablas) que no existían en el backup.
-# Alembic detecta qué migraciones ya están aplicadas via alembic_version.
 # ---------------------------------------------------------------------------
 log "Paso 5/7 — Aplicando migraciones Alembic..."
 log "  Solo se aplican las migraciones nuevas — los datos existentes no se tocan."
 
 if [[ "$DRY_RUN" == "false" ]]; then
-  # Levantar backend temporalmente solo para correr alembic
   compose_cmd "$MODE" up -d backend
-  # Esperar a que esté healthy
   ELAPSED=0
   while (( ELAPSED < 60 )); do
     STATUS=$(compose_cmd "$MODE" ps --format json backend 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0].get('Health','') if isinstance(d,list) else d.get('Health',''))" 2>/dev/null || echo "")
@@ -216,18 +193,15 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # Paso 6 — Levantar / reiniciar todos los servicios de aplicación
-# (backend, frontend, proxy, ngrok — NO postgres ni redis)
 # ---------------------------------------------------------------------------
 log "Paso 6/7 — Levantando servicios de aplicación..."
 
 run compose_cmd "$MODE" up -d --force-recreate backend frontend
 
-# El proxy necesita reiniciarse para refrescar el DNS interno de Docker
 log "  Reiniciando proxy para refrescar DNS..."
 sleep 5
 run compose_cmd "$MODE" restart proxy
 
-# ngrok si está configurado
 if grep -q "NGROK_AUTHTOKEN" .env 2>/dev/null && \
    grep -qE "NGROK_AUTHTOKEN=.+" .env 2>/dev/null; then
   run compose_cmd "$MODE" up -d ngrok
@@ -257,7 +231,7 @@ check_service() {
   fi
 }
 
-for svc in postgres redis backend frontend proxy; do
+for svc in redis backend frontend proxy; do
   check_service "$svc"
 done
 
@@ -293,5 +267,5 @@ fi
 # ---------------------------------------------------------------------------
 # Log de auditoría
 # ---------------------------------------------------------------------------
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | commit=$COMMIT | backup=$BACKUP_FILE | health=$HEALTH_OK | dry_run=$DRY_RUN" \
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | commit=$COMMIT | backup=${BACKUP_FILE:-n/a} | health=$HEALTH_OK | dry_run=$DRY_RUN" \
   >> "$LOG_FILE" 2>/dev/null || true

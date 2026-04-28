@@ -19,7 +19,7 @@ fi
 
 mkdir -p automations/n8n_data automations/n8n_flows data/csv data/reports docker/nginx/certs
 
-docker compose up -d postgres redis
+docker compose up -d redis
 docker compose build
 docker compose up -d
 

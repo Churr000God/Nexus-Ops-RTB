@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # rebuild-safe.sh — Rebuild seguro sin perder datos
+# La BD está en Supabase (externa), no se ve afectada por el rebuild.
 # Uso:
 #   ./scripts/rebuild-safe.sh              # dev
 #   ./scripts/rebuild-safe.sh prod         # prod
@@ -31,7 +32,7 @@ if [[ "$MODE" == "production" ]]; then
 fi
 
 log "Backup de seguridad previo a rebuild..."
-bash ./scripts/backup-db.sh "pre_rebuild_$(date -u +%Y%m%d_%H%M%S)" "$MODE" || warn "No se pudo crear backup previo."
+bash ./scripts/backup-db.sh "pre_rebuild_$(date -u +%Y%m%d_%H%M%S)" || warn "No se pudo crear backup previo."
 
 log "Rebuild de imágenes..."
 if [[ "$FORCE" == "--force" ]]; then
@@ -42,7 +43,6 @@ fi
 
 log "Recreando contenedores sin eliminar volúmenes..."
 compose_cmd "$MODE" up -d --force-recreate --remove-orphans
-wait_for_postgres "$MODE" 120
 
 bash ./scripts/health-check.sh "$MODE" || warn "Servicios levantados con advertencias de health-check."
 ok "Rebuild seguro completado en modo $MODE."
