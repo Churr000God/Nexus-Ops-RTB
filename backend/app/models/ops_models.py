@@ -34,11 +34,12 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -50,9 +51,10 @@ from app.models.base import Base
 
 
 class Category(Base):
-    """Catálogo de categorías de producto.
+    """Catálogo de categorías de producto (jerárquico).
 
-    Fuente del rollup ``PORCENTAJE DE GANANCIA`` del Catálogo de Productos.
+    profit_margin_percent: markup sobre costo para calcular precio de venta.
+    precio_venta = current_avg_cost * (1 + profit_margin_percent / 100)
     """
 
     __tablename__ = "categorias"
@@ -60,9 +62,15 @@ class Category(Base):
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    parent_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("categorias.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     name: Mapped[str] = mapped_column(
         String(120), nullable=False, unique=True, index=True
     )
+    slug: Mapped[str | None] = mapped_column(Text, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
     profit_margin_percent: Mapped[float | None] = mapped_column(Numeric(6, 4))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -78,6 +86,17 @@ class Category(Base):
         nullable=False,
     )
 
+    parent: Mapped["Category | None"] = relationship(
+        "Category",
+        foreign_keys="[Category.parent_id]",
+        back_populates="children",
+        remote_side="[Category.id]",
+    )
+    children: Mapped[list["Category"]] = relationship(
+        "Category",
+        foreign_keys="[Category.parent_id]",
+        back_populates="parent",
+    )
     products: Mapped[list[Product]] = relationship(back_populates="category_ref")
 
 
@@ -258,15 +277,25 @@ class Product(Base):
     # Activo / Dado de Baja / Agotado / Próximamente / Descontinuado / Pendiente
     sale_type: Mapped[str | None] = mapped_column(String(40))
     # Por Pieza / Por Caja / Ambos / Blister / Por Paquete / Por Juego / Por Bolsa …
-    package_size: Mapped[float | None] = mapped_column(
-        Numeric(10, 2)
-    )  # Tamaño del Paquete
+    package_size: Mapped[str | None] = mapped_column(
+        String(80)
+    )  # Tamaño del Paquete (varchar en DB)
     brand_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("marcas.id", ondelete="SET NULL"), index=True
     )
     category_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("categorias.id", ondelete="SET NULL"),
+        index=True,
+    )
+    sat_product_key_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("sat_product_keys.id", ondelete="SET NULL"),
+        index=True,
+    )
+    sat_unit_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("sat_unit_keys.id", ondelete="SET NULL"),
         index=True,
     )
     brand: Mapped[str | None] = mapped_column(String(80))  # denormalizado (cache)
@@ -279,7 +308,9 @@ class Product(Base):
     image_url: Mapped[str | None] = mapped_column(String(500))  # Imagen
     datasheet_url: Mapped[str | None] = mapped_column(String(500))  # Ficha Técnica
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # --- Precios y costos ---
+    is_configurable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_assembled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # --- Precios y costos (legado Notion) ---
     unit_price: Mapped[float | None] = mapped_column(Numeric(14, 4))
     # Precio Unitario = (1 + Porcentaje de subida) * Precio Unitario R  (rollup)
     unit_price_base: Mapped[float | None] = mapped_column(Numeric(14, 4))
@@ -287,7 +318,21 @@ class Product(Base):
     purchase_cost_parts: Mapped[float | None] = mapped_column(Numeric(14, 4))
     # COSTO REFACCIONES
     purchase_cost_ariba: Mapped[float | None] = mapped_column(Numeric(14, 4))
-    # COSTO ARIBA
+    # COSTO ARIBA (legado — reemplazado por customer_contract_prices)
+    # --- Pricing nuevo (costo promedio móvil) ---
+    pricing_strategy: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="MOVING_AVG"
+    )
+    moving_avg_months: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=6
+    )
+    current_avg_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    current_avg_cost_currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="MXN"
+    )
+    current_avg_cost_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # --- Rollups de demanda (calculados desde QuoteItem) ---
     theoretical_outflow: Mapped[float | None] = mapped_column(Numeric(14, 4))
     # Salida Teorica
@@ -316,6 +361,12 @@ class Product(Base):
 
     brand_ref: Mapped[Brand | None] = relationship(back_populates="products")
     category_ref: Mapped[Category | None] = relationship(back_populates="products")
+    sat_product_key: Mapped["SATProductKey | None"] = relationship(
+        "SATProductKey", foreign_keys=[sat_product_key_id]
+    )
+    sat_unit: Mapped["SATUnitKey | None"] = relationship(
+        "SATUnitKey", foreign_keys=[sat_unit_id]
+    )
     quote_items: Mapped[list[QuoteItem]] = relationship(back_populates="product")
     inventory_items: Mapped[list[InventoryItem]] = relationship(
         back_populates="product"
@@ -335,6 +386,36 @@ class Product(Base):
     )
     incomplete_orders: Mapped[list[IncompleteOrder]] = relationship(
         back_populates="product"
+    )
+    attributes: Mapped[list["ProductAttribute"]] = relationship(
+        "ProductAttribute",
+        primaryjoin="Product.id == foreign(ProductAttribute.product_id)",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    configurations: Mapped[list["ProductConfiguration"]] = relationship(
+        "ProductConfiguration",
+        primaryjoin="Product.id == foreign(ProductConfiguration.product_id)",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    boms: Mapped[list["BOM"]] = relationship(
+        "BOM",
+        primaryjoin="Product.id == foreign(BOM.product_id)",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    cost_history: Mapped[list["ProductCostHistory"]] = relationship(
+        "ProductCostHistory",
+        primaryjoin="Product.id == foreign(ProductCostHistory.product_id)",
+        order_by="desc(ProductCostHistory.recorded_at)",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+    contract_prices: Mapped[list["CustomerContractPrice"]] = relationship(
+        "CustomerContractPrice",
+        primaryjoin="Product.id == foreign(CustomerContractPrice.product_id)",
+        lazy="select",
     )
 
 
@@ -852,10 +933,11 @@ class InventoryMovement(Base):
     )
     external_product_id: Mapped[str | None] = mapped_column(String(80), index=True)
     movement_type: Mapped[str | None] = mapped_column(String(40), index=True)
-    # Entrada · Salida · Ajuste · Devolución · Merma · No conforme
+    # Entrada · Salida · Ajuste · Devolución · Merma · No conforme · RECEIPT · OPENING_BALANCE
     qty_in: Mapped[float | None] = mapped_column(Numeric(14, 4))
     qty_out: Mapped[float | None] = mapped_column(Numeric(14, 4))
     qty_nonconformity: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    unit_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
     moved_on: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )

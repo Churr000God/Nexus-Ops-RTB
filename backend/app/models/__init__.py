@@ -24,6 +24,17 @@ from app.models.ops_models import (  # noqa: F401
     SupplierOrder,
     SupplierProduct,
 )
+from app.models.productos_pricing_models import (  # noqa: F401
+    BOM,
+    BOMItem,
+    CustomerContractPrice,
+    ProductAttribute,
+    ProductAttributeOption,
+    ProductConfiguration,
+    ProductCostHistory,
+    SATProductKey,
+    SATUnitKey,
+)
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
 from app.models.user_model import (  # noqa: F401
     AuditLog,
@@ -38,6 +49,8 @@ from app.models.user_model import (  # noqa: F401
 __all__ = [
     "AuditLog",
     "Base",
+    "BOM",
+    "BOMItem",
     "Brand",
     "CancelledQuote",
     "Category",
@@ -46,6 +59,7 @@ __all__ = [
     "CsvRow",
     "CsvRowError",
     "Customer",
+    "CustomerContractPrice",
     "CustomerOrder",
     "GoodsReceipt",
     "IncompleteOrder",
@@ -58,6 +72,10 @@ __all__ = [
     "OrderDateVerification",
     "Permission",
     "Product",
+    "ProductAttribute",
+    "ProductAttributeOption",
+    "ProductConfiguration",
+    "ProductCostHistory",
     "PurchaseInvoice",
     "Quote",
     "QuoteItem",
@@ -65,6 +83,8 @@ __all__ = [
     "Role",
     "RolePermission",
     "Sale",
+    "SATProductKey",
+    "SATUnitKey",
     "Supplier",
     "SupplierOrder",
     "SupplierProduct",

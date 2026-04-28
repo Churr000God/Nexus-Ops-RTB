@@ -11,6 +11,12 @@ from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.health import router as health_router
 from app.routers.inventario import router as inventario_router
+from app.routers.productos import (
+    brand_router,
+    cat_router,
+    router as productos_router,
+    sat_router,
+)
 from app.routers.reportes import router as reportes_router
 from app.routers.sync import router as sync_router
 from app.routers.usuarios import router as usuarios_router
@@ -43,3 +49,7 @@ app.include_router(ventas_router)
 app.include_router(inventario_router)
 app.include_router(dashboard_router)
 app.include_router(reportes_router)
+app.include_router(productos_router)
+app.include_router(cat_router)
+app.include_router(brand_router)
+app.include_router(sat_router)
