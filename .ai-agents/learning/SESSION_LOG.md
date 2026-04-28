@@ -72,6 +72,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-23 | Reporte de ventas DOCX + email con MailerSend | backend | 2 | [2026-04-23_reporte-ventas-docx-email-mailersend.md](sessions/2026-04-23_reporte-ventas-docx-email-mailersend.md) |
 | 2026-04-24 | Mejora de diseño visual del reporte DOCX de ventas | backend | 2 | [2026-04-24_mejora-diseno-reporte-docx-ventas.md](sessions/2026-04-24_mejora-diseno-reporte-docx-ventas.md) |
 | 2026-04-24 | Sync fixes: GENERATED ALWAYS, FK delta, conflict_cols, headers duplicados, distribucion ventas | backend+scripts+db | 3 | [2026-04-24_sync-fixes-distribucion-ventas.md](sessions/2026-04-24_sync-fixes-distribucion-ventas.md) |
+| 2026-04-28 | RBAC — Seeds SQL, Schemas, Auth Service, require_permission, Router /api/usuarios | backend | 4 | [2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md](sessions/2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md) |
 
 ---
 
@@ -79,6 +80,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 16 |
-| Errores registrados | 17 |
-| Lecciones documentadas | 17 |
+| Total sesiones | 17 |
+| Errores registrados | 18 |
+| Lecciones documentadas | 19 |

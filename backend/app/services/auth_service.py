@@ -11,7 +11,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.user_model import RefreshToken, User
+from app.models.user_model import (
+    Permission,
+    RefreshToken,
+    Role,
+    RolePermission,
+    User,
+    UserRole,
+)
 from app.schemas.auth_schema import RegisterRequest
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
@@ -44,6 +51,7 @@ class AuthService:
 
         user = User(
             email=payload.email,
+            full_name=payload.full_name,
             hashed_password=self.hash_password(payload.password),
             role=payload.role,
             is_active=True,
@@ -53,18 +61,48 @@ class AuthService:
         await self.db.refresh(user)
         return user
 
-    async def authenticate_user(self, email: str, password: str) -> User:
+    async def authenticate_user(self, email: str, password: str) -> tuple[User, list[str]]:
         user = await self.db.scalar(select(User).where(User.email == email))
         if user is None or not self.verify_password(password, user.hashed_password):
             raise InvalidCredentialsError("Credenciales invalidas")
         if not user.is_active:
             raise InvalidCredentialsError("Usuario inactivo")
-        return user
+
+        user.last_login_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(user)
+
+        permissions = await self.get_user_permissions(user.id)
+        return user, permissions
 
     async def get_user_by_id(self, user_id: UUID) -> User | None:
         return await self.db.get(User, user_id)
 
-    def create_access_token(self, user: User) -> str:
+    async def get_user_permissions(self, user_id: UUID) -> list[str]:
+        """4 JOINs: users → user_roles → roles → role_permissions → permissions."""
+        result = await self.db.scalars(
+            select(Permission.code)
+            .select_from(User)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.role_id == UserRole.role_id)
+            .join(RolePermission, RolePermission.role_id == Role.role_id)
+            .join(Permission, Permission.permission_id == RolePermission.permission_id)
+            .where(User.id == user_id)
+            .distinct()
+            .order_by(Permission.code)
+        )
+        return list(result.all())
+
+    async def get_user_roles(self, user_id: UUID) -> list[str]:
+        result = await self.db.scalars(
+            select(Role.code)
+            .join(UserRole, UserRole.role_id == Role.role_id)
+            .where(UserRole.user_id == user_id)
+            .order_by(Role.code)
+        )
+        return list(result.all())
+
+    def create_access_token(self, user: User, permissions: list[str]) -> str:
         if settings.JWT_SECRET is None:
             raise RuntimeError("JWT_SECRET no esta configurado")
 
@@ -73,6 +111,7 @@ class AuthService:
             "sub": str(user.id),
             "email": user.email,
             "role": user.role,
+            "permissions": permissions,
             "iat": int(now.timestamp()),
             "exp": int(
                 (

@@ -12,6 +12,7 @@ from app.routers.health import router as health_router
 from app.routers.inventario import router as inventario_router
 from app.routers.reportes import router as reportes_router
 from app.routers.sync import router as sync_router
+from app.routers.usuarios import router as usuarios_router
 from app.routers.ventas import router as ventas_router
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(usuarios_router)
 app.include_router(sync_router)
 app.include_router(ventas_router)
 app.include_router(inventario_router)

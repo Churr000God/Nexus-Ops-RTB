@@ -59,6 +59,7 @@ async def get_current_user(
 
 
 def require_roles(*roles: str):
+    """Legacy: usa el campo role de users. Preferir require_permission para código nuevo."""
     async def validator(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
             raise HTTPException(
@@ -67,6 +68,28 @@ def require_roles(*roles: str):
         return user
 
     return validator
+
+
+def require_permission(permission: str):
+    """Verifica que el JWT del request incluya el permiso atómico indicado.
+
+    Uso:
+        current_user: User = Depends(require_permission("quote.create"))
+    """
+    async def dependency(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        token_payload: dict = request.state.token_payload or {}
+        perms: list[str] = token_payload.get("permissions", [])
+        if permission not in perms:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permiso requerido: {permission}",
+            )
+        return current_user
+
+    return dependency
 
 
 def decode_bearer_token_from_header(auth_header: str | None) -> dict | None:

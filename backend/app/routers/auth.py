@@ -63,6 +63,7 @@ async def register(
         user=UserResponse(
             id=user.id,
             email=user.email,
+            full_name=user.full_name,
             role=user.role,
             is_active=user.is_active,
             created_at=user.created_at,
@@ -78,14 +79,14 @@ async def login(
 ) -> TokenResponse:
     service = AuthService(db)
     try:
-        user = await service.authenticate_user(payload.email, payload.password)
+        user, permissions = await service.authenticate_user(payload.email, payload.password)
     except InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
     try:
-        access_token = service.create_access_token(user)
+        access_token = service.create_access_token(user, permissions)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
@@ -116,8 +117,9 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
+    permissions = await service.get_user_permissions(user.id)
     try:
-        access_token = service.create_access_token(user)
+        access_token = service.create_access_token(user, permissions)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
@@ -141,11 +143,21 @@ async def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
+async def me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    service = AuthService(db)
+    roles = await service.get_user_roles(current_user.id)
+    permissions = await service.get_user_permissions(current_user.id)
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
+        full_name=current_user.full_name,
         role=current_user.role,
         is_active=current_user.is_active,
+        last_login_at=current_user.last_login_at,
         created_at=current_user.created_at,
+        roles=roles,
+        permissions=permissions,
     )

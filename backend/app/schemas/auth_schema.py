@@ -1,11 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
     email: str
+    full_name: str = Field(default="", max_length=255)
     password: str = Field(min_length=10, max_length=128)
     role: str = Field(default="operativo")
 
@@ -67,11 +68,17 @@ class RefreshResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     email: str
+    full_name: str
     role: str
     is_active: bool
+    last_login_at: datetime | None = None
     created_at: datetime
+    roles: list[str] = []
+    permissions: list[str] = []
 
 
 class RegisterResponse(BaseModel):
