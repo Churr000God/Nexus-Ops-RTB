@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom"
-import { BarChart3, ClipboardList, Home, Package, Receipt, Shield, Truck, Users } from "lucide-react"
+import { BarChart3, Building2, ClipboardList, Home, Package, Receipt, Shield, Truck, Users } from "lucide-react"
 
 import { usePermission } from "@/hooks/usePermission"
 import { cn } from "@/lib/utils"
@@ -12,7 +12,8 @@ const items = [
   { to: "/", label: "Inicio", icon: Home },
   { to: "/ventas", label: "Ventas", icon: BarChart3 },
   { to: "/inventarios", label: "Almacén", icon: Package },
-  { to: "/proveedores", label: "Proveedores", icon: Truck, disabled: true },
+  { to: "/clientes", label: "Clientes", icon: Building2 },
+  { to: "/proveedores/maestro", label: "Proveedores", icon: Truck },
   { to: "/gastos", label: "Gastos", icon: Receipt, disabled: true },
 ]
 
@@ -107,8 +108,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
       )}
 
       <div className="mt-auto rounded-[var(--radius-lg)] border border-white/10 bg-white/5 px-3 py-4 text-xs text-white/55">
-        <div className="font-medium text-white/80">Navegación base</div>
-        <div className="mt-1">Ventas y Almacén activos · resto en construcción</div>
+        <div className="font-medium text-white/80">Nexus Ops RTB</div>
+        <div className="mt-1">Gastos en construcción</div>
       </div>
     </nav>
   )

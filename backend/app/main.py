@@ -8,6 +8,11 @@ from app.middleware.cors import configure_cors
 from app.middleware.logging import configure_logging, configure_middlewares
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.clientes_proveedores import (
+    clientes_router,
+    proveedores_router,
+    sat_cp_router,
+)
 from app.routers.dashboard import router as dashboard_router
 from app.routers.health import router as health_router
 from app.routers.inventario import router as inventario_router
@@ -53,3 +58,6 @@ app.include_router(productos_router)
 app.include_router(cat_router)
 app.include_router(brand_router)
 app.include_router(sat_router)
+app.include_router(clientes_router)
+app.include_router(proveedores_router)
+app.include_router(sat_cp_router)

@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/hooks/useAuth"
 import { AdminAuditLogPage } from "@/pages/AdminAuditLog"
 import { AdminUsuariosPage } from "@/pages/AdminUsuarios"
+import { ClientesPage } from "@/pages/Clientes"
 import { HomePage } from "@/pages/Home"
 import { AlmacenPage } from "@/pages/Inventarios"
 import { LoginPage } from "@/pages/Login"
 import { NotFoundPage } from "@/pages/NotFound"
+import { ProveedoresMaestroPage } from "@/pages/ProveedoresMaestro"
 import { VentasPage } from "@/pages/Ventas"
 
 function RequireAuth() {
@@ -57,6 +59,8 @@ export function AppRoutes() {
           <Route index element={<HomePage />} />
           <Route path="ventas" element={<VentasPage />} />
           <Route path="inventarios" element={<AlmacenPage />} />
+          <Route path="clientes" element={<ClientesPage />} />
+          <Route path="proveedores/maestro" element={<ProveedoresMaestroPage />} />
           <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
           <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="*" element={<NotFoundPage />} />
