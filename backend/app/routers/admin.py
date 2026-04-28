@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_db, require_permission
+from app.models.user_model import User
+from app.schemas.user_schema import (
+    AuditLogEntry,
+    AuditLogPage,
+    PermissionSchema,
+    RoleWithPermissions,
+)
+from app.services.admin_service import AdminService
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/roles", response_model=list[RoleWithPermissions])
+async def list_roles(
+    _: User = Depends(require_permission("role.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> list[RoleWithPermissions]:
+    service = AdminService(db)
+    roles = await service.list_roles_with_permissions()
+    return [
+        RoleWithPermissions(
+            role_id=r.role_id,
+            code=r.code,
+            name=r.name,
+            description=r.description,
+            permissions=[
+                PermissionSchema.model_validate(rp.permission)
+                for rp in r.role_permissions
+            ],
+        )
+        for r in roles
+    ]
+
+
+@router.get("/permissions", response_model=list[PermissionSchema])
+async def list_permissions(
+    _: User = Depends(require_permission("role.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> list[PermissionSchema]:
+    service = AdminService(db)
+    perms = await service.list_permissions()
+    return [PermissionSchema.model_validate(p) for p in perms]
+
+
+@router.get("/audit-log", response_model=AuditLogPage)
+async def list_audit_log(
+    entity_type: str | None = Query(default=None),
+    entity_id: str | None = Query(default=None),
+    user_id: UUID | None = Query(default=None),
+    from_date: datetime | None = Query(default=None),
+    to_date: datetime | None = Query(default=None),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(require_permission("audit.view")),
+    db: AsyncSession = Depends(get_db),
+) -> AuditLogPage:
+    service = AdminService(db)
+    items, total = await service.list_audit_log(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        user_id=user_id,
+        from_date=from_date,
+        to_date=to_date,
+        offset=offset,
+        limit=limit,
+    )
+    return AuditLogPage(
+        items=[AuditLogEntry.model_validate(entry) for entry in items],
+        total=total,
+    )

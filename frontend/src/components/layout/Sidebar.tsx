@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom"
-import { BarChart3, Home, Package, Receipt, Truck } from "lucide-react"
+import { BarChart3, ClipboardList, Home, Package, Receipt, Shield, Truck, Users } from "lucide-react"
 
+import { usePermission } from "@/hooks/usePermission"
 import { cn } from "@/lib/utils"
 
 type SidebarProps = {
@@ -16,6 +17,10 @@ const items = [
 ]
 
 export function Sidebar({ onNavigate }: SidebarProps) {
+  const canViewUsers = usePermission("user.view")
+  const canViewAudit = usePermission("audit.view")
+  const showAdmin = canViewUsers || canViewAudit
+
   return (
     <nav className="flex h-full flex-col gap-3 px-3 py-4 text-white">
       <div className="flex h-14 items-center gap-3 rounded-[var(--radius-lg)] border border-white/10 bg-white/5 px-3">
@@ -63,6 +68,44 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           )
         })}
       </div>
+      {showAdmin && (
+        <div className="flex flex-col gap-1">
+          <p className="px-3 pt-2 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+            Administración
+          </p>
+          {canViewUsers && (
+            <NavLink
+              to="/admin/usuarios"
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-3 text-sm font-medium text-white/60 transition-all duration-150 hover:bg-white/8 hover:text-white",
+                  isActive && "bg-[hsl(var(--primary))] text-white shadow-soft-sm"
+                )
+              }
+            >
+              <Users className="h-4 w-4" aria-hidden="true" />
+              <span>Usuarios</span>
+            </NavLink>
+          )}
+          {canViewAudit && (
+            <NavLink
+              to="/admin/audit-log"
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-3 text-sm font-medium text-white/60 transition-all duration-150 hover:bg-white/8 hover:text-white",
+                  isActive && "bg-[hsl(var(--primary))] text-white shadow-soft-sm"
+                )
+              }
+            >
+              <ClipboardList className="h-4 w-4" aria-hidden="true" />
+              <span>Bitácora</span>
+            </NavLink>
+          )}
+        </div>
+      )}
+
       <div className="mt-auto rounded-[var(--radius-lg)] border border-white/10 bg-white/5 px-3 py-4 text-xs text-white/55">
         <div className="font-medium text-white/80">Navegación base</div>
         <div className="mt-1">Ventas y Almacén activos · resto en construcción</div>

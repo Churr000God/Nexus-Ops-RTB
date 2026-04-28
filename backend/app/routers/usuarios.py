@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
@@ -96,13 +96,13 @@ async def assign_role(
     return _user_response(user, roles)
 
 
-@router.delete("/{user_id}/roles/{role_code}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}/roles/{role_code}")
 async def revoke_role(
     user_id: UUID,
     role_code: str,
     _: User = Depends(require_permission("role.manage")),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     service = UserService(db)
     try:
         await service.revoke_role(user_id, role_code)
@@ -110,3 +110,4 @@ async def revoke_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

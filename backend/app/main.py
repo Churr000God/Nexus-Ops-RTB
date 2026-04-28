@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.middleware.auth_middleware import auth_context_middleware
 from app.middleware.cors import configure_cors
 from app.middleware.logging import configure_logging, configure_middlewares
+from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.health import router as health_router
@@ -36,6 +37,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(usuarios_router)
+app.include_router(admin_router)
 app.include_router(sync_router)
 app.include_router(ventas_router)
 app.include_router(inventario_router)

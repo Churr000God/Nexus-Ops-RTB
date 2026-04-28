@@ -36,6 +36,16 @@ class AssignRoleRequest(BaseModel):
     role_code: str
 
 
+class RoleWithPermissions(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    role_id: int
+    code: str
+    name: str
+    description: str | None = None
+    permissions: list[PermissionSchema]
+
+
 class AuditLogEntry(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,3 +57,8 @@ class AuditLogEntry(BaseModel):
     before_data: dict[str, Any] | None = None
     after_data: dict[str, Any] | None = None
     changed_at: datetime
+
+
+class AuditLogPage(BaseModel):
+    items: list[AuditLogEntry]
+    total: int
