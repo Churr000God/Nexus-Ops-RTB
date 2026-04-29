@@ -1523,6 +1523,15 @@ class OperatingExpense(Base):
     )
     supplier_name: Mapped[str | None] = mapped_column(String(255))
     supplier_rfc: Mapped[str | None] = mapped_column(String(20))
+    # Campos SAT agregados por migración 0017
+    sat_payment_form_id: Mapped[str | None] = mapped_column(String(10))
+    sat_payment_method_id: Mapped[str | None] = mapped_column(String(10))
+    uuid_sat: Mapped[str | None] = mapped_column(String(40))
+    expense_number: Mapped[str | None] = mapped_column(String(80))
+    responsible_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    tax_amount: Mapped[float | None] = mapped_column(Numeric(14, 4))
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )

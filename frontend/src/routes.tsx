@@ -7,9 +7,14 @@ import { useAuth } from "@/hooks/useAuth"
 import { AdminAuditLogPage } from "@/pages/AdminAuditLog"
 import { AdminUsuariosPage } from "@/pages/AdminUsuarios"
 import { ClientesPage } from "@/pages/Clientes"
+import FacturasProveedorPage from "@/pages/compras/FacturasProveedorPage"
+import OrdenesPage from "@/pages/compras/OrdenesPage"
+import RecepcionesPage from "@/pages/compras/RecepcionesPage"
+import SolicitudesPage from "@/pages/compras/SolicitudesPage"
 import CotizacionesPage from "@/pages/CotizacionesPage"
 import EnviosPage from "@/pages/EnviosPage"
 import FleterasPage from "@/pages/FleterasPage"
+import GastosPage from "@/pages/GastosPage"
 import { HomePage } from "@/pages/Home"
 import { AlmacenPage } from "@/pages/Inventarios"
 import { LoginPage } from "@/pages/Login"
@@ -75,6 +80,11 @@ export function AppRoutes() {
           <Route path="logistica/envios" element={<EnviosPage />} />
           <Route path="logistica/rutas" element={<RutasPage />} />
           <Route path="logistica/fleteras" element={<FleterasPage />} />
+          <Route path="gastos" element={<GastosPage />} />
+          <Route path="compras/solicitudes" element={<SolicitudesPage />} />
+          <Route path="compras/ordenes" element={<OrdenesPage />} />
+          <Route path="compras/recepciones" element={<RecepcionesPage />} />
+          <Route path="compras/facturas" element={<FacturasProveedorPage />} />
           <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
           <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="*" element={<NotFoundPage />} />

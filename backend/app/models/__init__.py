@@ -48,6 +48,18 @@ from app.models.productos_pricing_models import (  # noqa: F401
     SATProductKey,
     SATUnitKey,
 )
+from app.models.compras_models import (  # noqa: F401
+    ComprasGoodsReceipt,
+    ComprasGoodsReceiptItem,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    PurchaseRequest,
+    PurchaseRequestItem,
+    SatPaymentForm,
+    SatPaymentMethod,
+    SupplierInvoice,
+    SupplierInvoiceItem,
+)
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
 from app.models.user_model import (  # noqa: F401
     AuditLog,
@@ -78,7 +90,17 @@ __all__ = [
     "CustomerMaster",
     "CustomerOrder",
     "CustomerTaxData",
+    "ComprasGoodsReceipt",
+    "ComprasGoodsReceiptItem",
     "GoodsReceipt",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "PurchaseRequest",
+    "PurchaseRequestItem",
+    "SatPaymentForm",
+    "SatPaymentMethod",
+    "SupplierInvoice",
+    "SupplierInvoiceItem",
     "IncompleteOrder",
     "InventoryGrowth",
     "InventoryItem",

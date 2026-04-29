@@ -11,6 +11,7 @@ import {
   MapPin,
   Package,
   Receipt,
+  ShoppingBag,
   ShoppingCart,
   Truck,
   Users,
@@ -81,13 +82,16 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <NavItem to="/inventarios" label="Almacén" icon={Package} onNavigate={onNavigate} />
         <NavItem to="/clientes" label="Clientes" icon={Building2} onNavigate={onNavigate} />
         <NavItem to="/proveedores/maestro" label="Proveedores" icon={Truck} onNavigate={onNavigate} />
-        <div className="flex cursor-not-allowed items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-white/45">
-          <Receipt className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Gastos</span>
-          <span className="ml-auto rounded-full bg-white/8 px-2 py-0.5 text-[10px] uppercase tracking-wide">
-            Pronto
-          </span>
-        </div>
+        <NavItem to="/gastos" label="Gastos" icon={Receipt} onNavigate={onNavigate} />
+      </div>
+
+      {/* Compras */}
+      <div className="flex flex-col gap-0.5">
+        <SectionLabel>Compras</SectionLabel>
+        <NavItem to="/compras/solicitudes" label="Solicitudes" icon={ClipboardList} onNavigate={onNavigate} />
+        <NavItem to="/compras/ordenes" label="Órdenes de Compra" icon={ShoppingBag} onNavigate={onNavigate} />
+        <NavItem to="/compras/recepciones" label="Recepciones" icon={Package} onNavigate={onNavigate} />
+        <NavItem to="/compras/facturas" label="Facturas Proveedor" icon={FileText} onNavigate={onNavigate} />
       </div>
 
       {/* Ventas Operativo */}
@@ -122,7 +126,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
       <div className="mt-auto rounded-[var(--radius-lg)] border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/55">
         <div className="font-medium text-white/80">Nexus Ops RTB</div>
-        <div className="mt-0.5">Gastos en construcción</div>
+        <div className="mt-0.5">v2026.04</div>
       </div>
     </nav>
   )

@@ -16,7 +16,11 @@ const titlesByPath: Record<string, { title: string; subtitle?: string }> = {
   "/ventas": { title: "Análisis de Ventas", subtitle: "Clientes · productos · márgenes" },
   "/inventarios": { title: "Almacén", subtitle: "Stock · movimientos · rotación" },
   "/proveedores": { title: "Proveedores" },
-  "/gastos": { title: "Gastos" },
+  "/gastos": { title: "Gastos Operativos RTB", subtitle: "Renta · servicios · viáticos · honorarios" },
+  "/compras/solicitudes": { title: "Solicitudes de Material", subtitle: "Flujo de compras · paso 1 de 4" },
+  "/compras/ordenes": { title: "Órdenes de Compra", subtitle: "Flujo de compras · paso 2 de 4" },
+  "/compras/recepciones": { title: "Recepciones de Mercancía", subtitle: "Flujo de compras · paso 3 de 4" },
+  "/compras/facturas": { title: "Facturas de Proveedor", subtitle: "Flujo de compras · paso 4 de 4" },
 }
 
 export function AppShell({ userEmail, onLogout }: AppShellProps) {
