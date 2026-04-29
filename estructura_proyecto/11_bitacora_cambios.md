@@ -1,5 +1,28 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-28 — Módulo Ventas y Logística (migraciones 0015-0016)
+
+### Base de datos
+- Migración `0015`: 21 tablas operativas en inglés (`quotes`, `orders`, `shipments`, `routes`, etc.) + 17 índices.
+- Migración `0016`: 5 vistas (`v_order_packing_progress`, `v_order_payment_status`, `v_orders_incomplete_tracking`, `v_shipments_overview`, `v_cfdi_cancellations`), 4 triggers de negocio, 11 permisos RBAC nuevos, rol `DRIVER`.
+- Fix migración 0016: vistas usaban `c.trade_name` → corregido a `c.business_name` (columna real de `customers`).
+
+### Backend
+- `app/models/ventas_logistica_models.py`: 21 modelos SQLAlchemy. Clases `SalesQuote`/`SalesQuoteItem` (renombradas para evitar colisión con `ops_models.Quote` → `cotizaciones`).
+- `app/schemas/ventas_logistica_schema.py`: ~30 schemas Pydantic v2.
+- `app/services/ventas_logistica_service.py`: CRUD + lógica de aprobación, empacado, entrega.
+- `app/routers/ventas_logistica.py`: 31 endpoints bajo `/api/ventas-logistica/`.
+- `app/main.py`: registro del nuevo router.
+
+### Frontend
+- Tipos: `src/types/ventasLogistica.ts`.
+- Service: `src/services/ventasLogisticaService.ts`.
+- Páginas nuevas (7): `VentasOperacional`, `CotizacionesPage`, `PedidosPage`, `NotasRemisionPage`, `EnviosPage`, `RutasPage`, `FleterasPage`.
+- `src/routes.tsx`: 7 rutas nuevas bajo `/ventas/*` y `/logistica/*`.
+- `src/components/layout/Sidebar.tsx`: secciones **Ventas Operativo** y **Logística** con 7 links nuevos; refactorizado con `NavItem`/`SectionLabel`.
+
+---
+
 ## 2026-04-24 — Tiempos de aprobación y diferencia Venta vs PO en Dashboard de Ventas
 
 ### Backend (FastAPI)

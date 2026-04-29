@@ -26,6 +26,7 @@ from app.routers.reportes import router as reportes_router
 from app.routers.sync import router as sync_router
 from app.routers.usuarios import router as usuarios_router
 from app.routers.ventas import router as ventas_router
+from app.routers.ventas_logistica import router as ventas_logistica_router
 
 logger = logging.getLogger(__name__)
 
@@ -61,3 +62,4 @@ app.include_router(sat_router)
 app.include_router(clientes_router)
 app.include_router(proveedores_router)
 app.include_router(sat_cp_router)
+app.include_router(ventas_logistica_router)

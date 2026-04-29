@@ -48,7 +48,31 @@
 - `pedidos_proveedor` — id, proveedor_id, estado, fecha_generacion, fecha_envio, fecha_recoleccion, fecha_recepcion, subtotal.
 - `facturas_compras` — id, pedido_id, proveedor_id, fecha_factura, fecha_pago, subtotal, costo_envio, descuento, iva, total, estado, tipo_pago, status_pago.
 
-### 3.4 Gastos
+### 3.4 Ventas Operativo y Logística (migraciones 0015-0016, 2026-04-28)
+
+Ciclo: **NR → Cotización → Pedido → Empacado → Envío/Ruta → CFDI → Cobro**
+
+- `carriers` — Catálogo de fleteras (`is_internal`, `tracking_url_template`).
+- `delivery_notes` / `delivery_note_items` — Notas de remisión informales previas a cotización.
+- `quote_delivery_notes` — Asociación M:N entre NRs y cotizaciones formales.
+- `quotes` / `quote_items` / `quote_status_history` — Cotizaciones formales aprobables. `approved_by`/`rejected_by` FK a `users.id` (UUID).
+- `orders` / `order_items` / `order_milestones` — Pedidos creados automáticamente al aprobar cotización (trigger `fn_create_order_from_quote`). `order_items` rastrea `quantity_ordered`, `quantity_packed`, `quantity_shipped`.
+- `cfdi` / `cfdi_items` / `cfdi_credit_notes` / `cfdi_payments` — Comprobantes CFDI 4.0. `cfdi` es auto-referenciante para cancelaciones con sustituto.
+- `payments` / `payment_applications` — Cobros y su aplicación a pedidos/CFDIs.
+- `shipments` / `shipment_items` / `shipment_tracking_events` — Envíos físicos con rastreo por evento.
+- `routes` / `route_stops` — Rutas de reparto diarias; paradas tipo `DELIVERY` o `PICKUP`.
+
+**Vistas:** `v_order_packing_progress`, `v_order_payment_status`, `v_orders_incomplete_tracking`, `v_shipments_overview`, `v_cfdi_cancellations`.
+
+**Triggers de negocio:**
+- `trg_create_order_from_quote` — Crea pedido al aprobar cotización.
+- `trg_sync_shipped_qty` — Sincroniza `order_items.quantity_shipped` desde `shipment_items`.
+- `trg_shipment_delivered` — Al entregar: actualiza `orders.delivery_date` + milestone.
+- `trg_packing_inv_movement` — Al empacar: genera movimiento `ISSUE` en `movimientos_inventario`.
+
+**Nota de modelos Python:** Las clases se llaman `SalesQuote`/`SalesQuoteItem` (no `Quote`/`QuoteItem`) para evitar colisión con `ops_models.Quote` que mapea a la tabla legacy `cotizaciones`.
+
+### 3.5 Gastos
 - `gastos_operativos` — id, fecha, categoria, proveedor_id, concepto, monto, estado, metodo_pago, deducible (bool).
 
 ### 3.5 Administración (Workflow)

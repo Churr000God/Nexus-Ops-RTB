@@ -7,11 +7,18 @@ import { useAuth } from "@/hooks/useAuth"
 import { AdminAuditLogPage } from "@/pages/AdminAuditLog"
 import { AdminUsuariosPage } from "@/pages/AdminUsuarios"
 import { ClientesPage } from "@/pages/Clientes"
+import CotizacionesPage from "@/pages/CotizacionesPage"
+import EnviosPage from "@/pages/EnviosPage"
+import FleterasPage from "@/pages/FleterasPage"
 import { HomePage } from "@/pages/Home"
 import { AlmacenPage } from "@/pages/Inventarios"
 import { LoginPage } from "@/pages/Login"
 import { NotFoundPage } from "@/pages/NotFound"
+import NotasRemisionPage from "@/pages/NotasRemisionPage"
+import PedidosPage from "@/pages/PedidosPage"
 import { ProveedoresMaestroPage } from "@/pages/ProveedoresMaestro"
+import RutasPage from "@/pages/RutasPage"
+import VentasOperacional from "@/pages/VentasOperacional"
 import { VentasPage } from "@/pages/Ventas"
 
 function RequireAuth() {
@@ -61,6 +68,13 @@ export function AppRoutes() {
           <Route path="inventarios" element={<AlmacenPage />} />
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="proveedores/maestro" element={<ProveedoresMaestroPage />} />
+          <Route path="ventas/operacional" element={<VentasOperacional />} />
+          <Route path="ventas/cotizaciones" element={<CotizacionesPage />} />
+          <Route path="ventas/pedidos" element={<PedidosPage />} />
+          <Route path="ventas/notas-remision" element={<NotasRemisionPage />} />
+          <Route path="logistica/envios" element={<EnviosPage />} />
+          <Route path="logistica/rutas" element={<RutasPage />} />
+          <Route path="logistica/fleteras" element={<FleterasPage />} />
           <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
           <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="*" element={<NotFoundPage />} />
