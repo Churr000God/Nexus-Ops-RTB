@@ -67,6 +67,26 @@ class RefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class MfaChallengeResponse(BaseModel):
+    mfa_token: str
+    totp_configured: bool
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    qr_uri: str
+
+
+class TotpVerifyRequest(BaseModel):
+    code: str
+
+
+class TotpSetupConfirmResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    backup_codes: list[str]
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

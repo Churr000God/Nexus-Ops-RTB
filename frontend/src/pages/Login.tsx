@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth"
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { isAuthenticated, login, clearError } = useAuth()
+  const { status, isAuthenticated, login, clearError } = useAuth()
 
   const redirectTo = useMemo(() => {
     const fromState = (location.state as { from?: string } | null)?.from
@@ -23,6 +23,11 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (status === "mfa_setup") navigate("/setup-2fa", { replace: true })
+    if (status === "mfa_verify") navigate("/verify-2fa", { replace: true })
+  }, [status, navigate])
+
   if (isAuthenticated) return <Navigate to="/" replace />
 
   async function onSubmit(e: React.FormEvent) {
@@ -32,7 +37,6 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login({ email, password })
-      navigate(redirectTo, { replace: true })
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message || "Credenciales incorrectas")

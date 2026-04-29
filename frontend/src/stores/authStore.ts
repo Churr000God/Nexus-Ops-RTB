@@ -2,15 +2,18 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
 import { authService } from "@/services/authService"
+import type { TotpSetupData } from "@/services/authService"
 import type { LoginRequest, User } from "@/types/auth"
 
-export type AuthStatus = "booting" | "anonymous" | "authenticated"
+export type AuthStatus = "booting" | "anonymous" | "authenticated" | "mfa_setup" | "mfa_verify"
 
 type AuthState = {
   status: AuthStatus
   accessToken: string | null
   user: User | null
   error: string | null
+  mfaToken: string | null
+  mfaConfigured: boolean
 }
 
 type AuthActions = {
@@ -18,6 +21,10 @@ type AuthActions = {
   login: (payload: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   clearError: () => void
+  refreshUser: () => Promise<void>
+  completeMfaSetup: () => Promise<TotpSetupData>
+  confirmMfaSetup: (code: string) => Promise<string[]>
+  completeMfaVerify: (code: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState & AuthActions>()(
@@ -27,6 +34,8 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       accessToken: null,
       user: null,
       error: null,
+      mfaToken: null,
+      mfaConfigured: false,
 
       clearError: () => set({ error: null }),
 
@@ -55,9 +64,12 @@ export const useAuthStore = create<AuthState & AuthActions>()(
 
       login: async (payload: LoginRequest) => {
         set({ error: null })
-        const token = await authService.login(payload)
-        const user = await authService.me(token.access_token)
-        set({ accessToken: token.access_token, user, status: "authenticated" })
+        const response = await authService.login(payload)
+        set({
+          mfaToken: response.mfa_token,
+          mfaConfigured: response.totp_configured,
+          status: response.totp_configured ? "mfa_verify" : "mfa_setup",
+        })
       },
 
       logout: async () => {
@@ -65,8 +77,48 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         try {
           await authService.logout()
         } finally {
-          set({ accessToken: null, user: null, status: "anonymous" })
+          set({
+            accessToken: null,
+            user: null,
+            status: "anonymous",
+            mfaToken: null,
+            mfaConfigured: false,
+          })
         }
+      },
+
+      refreshUser: async () => {
+        const token = get().accessToken
+        if (!token) return
+        try {
+          const user = await authService.me(token)
+          set({ user })
+        } catch {
+          // silent — no interrumpir el flujo si falla
+        }
+      },
+
+      completeMfaSetup: async () => {
+        const { mfaToken } = get()
+        if (!mfaToken) throw new Error("No hay challenge activo")
+        return authService.getTotpSetup(mfaToken)
+      },
+
+      confirmMfaSetup: async (code: string): Promise<string[]> => {
+        const { mfaToken } = get()
+        if (!mfaToken) throw new Error("No hay challenge activo")
+        const result = await authService.confirmTotpSetup(mfaToken, code)
+        const user = await authService.me(result.access_token)
+        set({ accessToken: result.access_token, user, status: "authenticated", mfaToken: null })
+        return result.backup_codes
+      },
+
+      completeMfaVerify: async (code: string) => {
+        const { mfaToken } = get()
+        if (!mfaToken) throw new Error("No hay challenge activo")
+        const token = await authService.verifyTotp(mfaToken, code)
+        const user = await authService.me(token.access_token)
+        set({ accessToken: token.access_token, user, status: "authenticated", mfaToken: null })
       },
     }),
     {

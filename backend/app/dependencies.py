@@ -36,6 +36,12 @@ async def get_current_user(
             detail="No autenticado",
         )
 
+    if token_payload.get("type") == "mfa_pending":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No autenticado",
+        )
+
     subject = token_payload.get("sub")
     if not subject:
         raise HTTPException(
@@ -106,3 +112,33 @@ def decode_bearer_token_from_header(auth_header: str | None) -> dict | None:
         return AuthService.decode_access_token(token)
     except InvalidCredentialsError:
         return None
+
+
+async def require_mfa_challenge(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token_payload = getattr(request.state, "token_payload", None)
+    if token_payload is None or token_payload.get("type") != "mfa_pending":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA challenge requerido",
+        )
+    subject = token_payload.get("sub")
+    if not subject:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido"
+        )
+    try:
+        user_id = UUID(subject)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido"
+        ) from exc
+    service = AuthService(db)
+    user = await service.get_user_by_id(user_id)
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no válido"
+        )
+    return user

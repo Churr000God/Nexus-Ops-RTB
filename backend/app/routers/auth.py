@@ -6,18 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 from app.config import settings
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, require_mfa_challenge
 from app.models.user_model import User
 from app.schemas.auth_schema import (
     ChangeOwnPasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    MfaChallengeResponse,
     RefreshResponse,
     RegisterRequest,
     RegisterResponse,
     ResetPasswordRequest,
     SessionInfo,
     TokenResponse,
+    TotpSetupConfirmResponse,
+    TotpSetupResponse,
+    TotpVerifyRequest,
     UpdateProfileRequest,
     UserResponse,
 )
@@ -82,35 +86,30 @@ async def register(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=MfaChallengeResponse)
 async def login(
     payload: LoginRequest,
-    request: Request,
-    response: Response,
     db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
+) -> MfaChallengeResponse:
     service = AuthService(db)
     try:
-        user, permissions = await service.authenticate_user(payload.email, payload.password)
+        user, _permissions = await service.authenticate_user(payload.email, payload.password)
     except InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
         ) from exc
 
     try:
-        access_token = service.create_access_token(user, permissions)
+        mfa_token = service.create_mfa_token(user)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
         ) from exc
 
-    user_agent = request.headers.get("user-agent")
-    ip_address = request.client.host if request.client else None
-    refresh_token = await service.issue_refresh_token(
-        user.id, user_agent=user_agent, ip_address=ip_address
+    return MfaChallengeResponse(
+        mfa_token=mfa_token,
+        totp_configured=user.totp_enabled,
     )
-    _set_refresh_cookie(response, refresh_token)
-    return TokenResponse(access_token=access_token)
 
 
 @router.post("/refresh", response_model=RefreshResponse)
@@ -157,6 +156,67 @@ async def logout(
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_refresh_cookie(response)
     return response
+
+
+@router.post("/totp/setup", response_model=TotpSetupResponse)
+async def totp_setup(
+    current_user: User = Depends(require_mfa_challenge),
+    db: AsyncSession = Depends(get_db),
+) -> TotpSetupResponse:
+    service = AuthService(db)
+    secret, qr_uri = await service.generate_totp_uri(current_user)
+    return TotpSetupResponse(secret=secret, qr_uri=qr_uri)
+
+
+@router.post("/totp/setup/confirm", response_model=TotpSetupConfirmResponse)
+async def totp_setup_confirm(
+    payload: TotpVerifyRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(require_mfa_challenge),
+    db: AsyncSession = Depends(get_db),
+) -> TotpSetupConfirmResponse:
+    service = AuthService(db)
+    try:
+        backup_codes = await service.confirm_totp_setup(current_user.id, payload.code)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    permissions = await service.get_user_permissions(current_user.id)
+    access_token = service.create_access_token(current_user, permissions)
+    user_agent = request.headers.get("user-agent")
+    ip_address = request.client.host if request.client else None
+    refresh_token = await service.issue_refresh_token(
+        current_user.id, user_agent=user_agent, ip_address=ip_address
+    )
+    _set_refresh_cookie(response, refresh_token)
+    return TotpSetupConfirmResponse(access_token=access_token, backup_codes=backup_codes)
+
+
+@router.post("/totp/verify", response_model=TokenResponse)
+async def totp_verify(
+    payload: TotpVerifyRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(require_mfa_challenge),
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    service = AuthService(db)
+    valid = await service.verify_totp_code(current_user, payload.code)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Código incorrecto"
+        )
+    permissions = await service.get_user_permissions(current_user.id)
+    access_token = service.create_access_token(current_user, permissions)
+    user_agent = request.headers.get("user-agent")
+    ip_address = request.client.host if request.client else None
+    refresh_token = await service.issue_refresh_token(
+        current_user.id, user_agent=user_agent, ip_address=ip_address
+    )
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -272,7 +332,7 @@ async def forgot_password(
         try:
             await send_password_reset_email(payload.email, reset_url)
         except EmailError:
-            pass  # No exponer error — la respuesta siempre es 204
+            pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -48,12 +48,21 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    totp_setup_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
     user_roles: Mapped[list[UserRole]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    totp_backup_codes: Mapped[list[TotpBackupCode]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -181,6 +190,31 @@ class PasswordResetToken(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class TotpBackupCode(Base):
+    __tablename__ = "totp_backup_codes"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="totp_backup_codes")
 
 
 class AuditLog(Base):

@@ -17,6 +17,7 @@ from app.models.user_model import (
     RefreshToken,
     Role,
     RolePermission,
+    TotpBackupCode,
     User,
     UserRole,
 )
@@ -128,6 +129,82 @@ class AuthService:
             payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
         )
 
+    def create_mfa_token(self, user: User) -> str:
+        if settings.JWT_SECRET is None:
+            raise RuntimeError("JWT_SECRET no esta configurado")
+
+        now = datetime.now(timezone.utc)
+        payload = {
+            "sub": str(user.id),
+            "type": "mfa_pending",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=5)).timestamp()),
+        }
+        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+    async def generate_totp_uri(self, user: User) -> tuple[str, str]:
+        import pyotp
+
+        secret = pyotp.random_base32()
+        user.totp_secret = secret
+        await self.db.commit()
+        totp = pyotp.TOTP(secret)
+        qr_uri = totp.provisioning_uri(name=user.email, issuer_name="Nexus Ops RTB")
+        return secret, qr_uri
+
+    async def confirm_totp_setup(self, user_id: UUID, code: str) -> list[str]:
+        import pyotp
+
+        user = await self.db.get(User, user_id)
+        if not user or not user.totp_secret:
+            raise InvalidCredentialsError("Setup no iniciado")
+        totp = pyotp.TOTP(user.totp_secret)
+        if not totp.verify(code.strip(), valid_window=1):
+            raise InvalidCredentialsError("Código incorrecto — verifica la hora de tu dispositivo")
+
+        user.totp_enabled = True
+        user.totp_setup_at = datetime.now(timezone.utc)
+
+        await self.db.execute(
+            delete(TotpBackupCode).where(TotpBackupCode.user_id == user_id)
+        )
+
+        backup_codes = [
+            secrets.token_hex(4).upper() + "-" + secrets.token_hex(4).upper()
+            for _ in range(8)
+        ]
+        for raw_code in backup_codes:
+            code_hash = self.hash_token(raw_code)
+            self.db.add(TotpBackupCode(user_id=user_id, code_hash=code_hash))
+
+        await self.db.commit()
+        return backup_codes
+
+    async def verify_totp_code(self, user: User, code: str) -> bool:
+        if not user.totp_enabled or not user.totp_secret:
+            return False
+
+        import pyotp
+
+        totp = pyotp.TOTP(user.totp_secret)
+        if totp.verify(code.strip(), valid_window=1):
+            return True
+
+        normalized = code.strip().upper()
+        code_hash = self.hash_token(normalized)
+        backup = await self.db.scalar(
+            select(TotpBackupCode).where(
+                TotpBackupCode.user_id == user.id,
+                TotpBackupCode.code_hash == code_hash,
+                TotpBackupCode.used_at.is_(None),
+            )
+        )
+        if backup:
+            backup.used_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            return True
+        return False
+
     async def issue_refresh_token(
         self,
         user_id: UUID,
@@ -139,7 +216,6 @@ class AuthService:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-        # Limpiar tokens expirados
         await self.db.execute(
             delete(RefreshToken).where(
                 RefreshToken.user_id == user_id,
@@ -147,7 +223,6 @@ class AuthService:
             )
         )
 
-        # Máximo 5 sesiones activas: eliminar la más antigua si se supera
         active = list(
             await self.db.scalars(
                 select(RefreshToken)
@@ -238,7 +313,6 @@ class AuthService:
         if user is None or not user.is_active:
             return None
 
-        # Eliminar tokens previos del usuario
         await self.db.execute(
             delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
         )

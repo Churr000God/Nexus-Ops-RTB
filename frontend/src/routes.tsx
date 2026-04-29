@@ -1,6 +1,8 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom"
 import { ForgotPasswordPage } from "@/pages/ForgotPassword"
 import { ResetPasswordPage } from "@/pages/ResetPassword"
+import { SetupTwoFaPage } from "@/pages/SetupTwoFa"
+import { VerifyTwoFaPage } from "@/pages/VerifyTwoFa"
 
 import { AppShell } from "@/components/layout/AppShell"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -108,6 +110,8 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/setup-2fa" element={<SetupTwoFaPage />} />
+      <Route path="/verify-2fa" element={<VerifyTwoFaPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />
