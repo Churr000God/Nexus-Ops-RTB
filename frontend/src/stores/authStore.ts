@@ -18,6 +18,7 @@ type AuthActions = {
   login: (payload: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   clearError: () => void
+  refreshUser: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState & AuthActions>()(
@@ -66,6 +67,17 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           await authService.logout()
         } finally {
           set({ accessToken: null, user: null, status: "anonymous" })
+        }
+      },
+
+      refreshUser: async () => {
+        const token = get().accessToken
+        if (!token) return
+        try {
+          const user = await authService.me(token)
+          set({ user })
+        } catch {
+          // silent — no interrumpir el flujo si falla
         }
       },
     }),

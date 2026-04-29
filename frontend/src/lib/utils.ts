@@ -25,3 +25,14 @@ export function formatIsoDate(value: string) {
     day: "2-digit",
   }).format(date)
 }
+
+export function formatIsoDateTime(value: string) {
+  const date = new Date(value)
+  return new Intl.DateTimeFormat("es-MX", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
