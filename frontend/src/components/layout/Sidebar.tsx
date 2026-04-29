@@ -14,6 +14,7 @@ import {
   Receipt,
   ShoppingBag,
   ShoppingCart,
+  Stamp,
   Truck,
   Users,
 } from "lucide-react"
@@ -94,6 +95,12 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <NavItem to="/compras/ordenes" label="Órdenes de Compra" icon={ShoppingBag} onNavigate={onNavigate} />
         <NavItem to="/compras/recepciones" label="Recepciones" icon={Package} onNavigate={onNavigate} />
         <NavItem to="/compras/facturas" label="Facturas Proveedor" icon={FileText} onNavigate={onNavigate} />
+      </div>
+
+      {/* Facturación */}
+      <div className="flex flex-col gap-0.5">
+        <SectionLabel>Facturación</SectionLabel>
+        <NavItem to="/cfdi" label="CFDI 4.0" icon={Stamp} onNavigate={onNavigate} />
       </div>
 
       {/* Ventas Operativo */}

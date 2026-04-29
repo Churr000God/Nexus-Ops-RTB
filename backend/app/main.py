@@ -33,6 +33,7 @@ from app.routers.assets import (
     router as assets_router,
     snapshot_router,
 )
+from app.routers.cfdi import router as cfdi_router
 
 logger = logging.getLogger(__name__)
 
@@ -74,3 +75,4 @@ app.include_router(gastos_router)
 app.include_router(assets_router)
 app.include_router(snapshot_router)
 app.include_router(assets_inventory_router)
+app.include_router(cfdi_router)

@@ -24,6 +24,7 @@ import NotasRemisionPage from "@/pages/NotasRemisionPage"
 import PedidosPage from "@/pages/PedidosPage"
 import { ProveedoresMaestroPage } from "@/pages/ProveedoresMaestro"
 import RutasPage from "@/pages/RutasPage"
+import CfdiPage from "@/pages/CfdiPage"
 import VentasOperacional from "@/pages/VentasOperacional"
 import { VentasPage } from "@/pages/Ventas"
 
@@ -87,6 +88,7 @@ export function AppRoutes() {
           <Route path="compras/ordenes" element={<OrdenesPage />} />
           <Route path="compras/recepciones" element={<RecepcionesPage />} />
           <Route path="compras/facturas" element={<FacturasProveedorPage />} />
+          <Route path="cfdi" element={<CfdiPage />} />
           <Route path="admin/usuarios" element={<AdminUsuariosPage />} />
           <Route path="admin/audit-log" element={<AdminAuditLogPage />} />
           <Route path="*" element={<NotFoundPage />} />

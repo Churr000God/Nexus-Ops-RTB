@@ -21,6 +21,7 @@ const titlesByPath: Record<string, { title: string; subtitle?: string }> = {
   "/compras/ordenes": { title: "Órdenes de Compra", subtitle: "Flujo de compras · paso 2 de 4" },
   "/compras/recepciones": { title: "Recepciones de Mercancía", subtitle: "Flujo de compras · paso 3 de 4" },
   "/compras/facturas": { title: "Facturas de Proveedor", subtitle: "Flujo de compras · paso 4 de 4" },
+  "/cfdi": { title: "CFDI 4.0", subtitle: "Facturación electrónica · timbrado · complementos de pago" },
 }
 
 export function AppShell({ userEmail, onLogout }: AppShellProps) {

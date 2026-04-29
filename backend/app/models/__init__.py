@@ -66,6 +66,11 @@ from app.models.assets_models import (  # noqa: F401
     AssetComponentHistory,
     InventorySnapshot,
 )
+from app.models.cfdi_models import (  # noqa: F401
+    CfdiIssuerConfig,
+    CfdiPacLog,
+    CfdiSeries,
+)
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
 from app.models.user_model import (  # noqa: F401
     AuditLog,
@@ -111,6 +116,9 @@ __all__ = [
     "Asset",
     "AssetComponent",
     "AssetComponentHistory",
+    "CfdiIssuerConfig",
+    "CfdiPacLog",
+    "CfdiSeries",
     "InventoryGrowth",
     "InventoryItem",
     "InventoryMovement",
