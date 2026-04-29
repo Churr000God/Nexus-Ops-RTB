@@ -1,5 +1,29 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-28 — Módulo de Compras (migraciones 0017-0018)
+
+### Base de datos
+- Migración `0017`: 10 tablas nuevas (`sat_payment_forms`, `sat_payment_methods`, `purchase_requests/items`, `purchase_orders/items`, `goods_receipts/items`, `supplier_invoices/items`) + ALTER TABLE `gastos_operativos` (6 columnas SAT opcionales).
+- Migración `0018`: vista `v_purchase_chain` (trazabilidad completa PR→OC→Recepción→Factura), 5 triggers de negocio, 7 permisos RBAC nuevos, seed SAT (8 formas de pago + 2 métodos PUE/PPD).
+- Triggers: `trg_validate_invoice_chain`, `trg_validate_po_has_request`, `trg_create_inv_from_receipt` (genera movimiento `ENTRY` en inventario al recibir), `trg_update_poi_received`, `trg_update_pri_qty_ordered`.
+
+### Backend
+- `app/models/compras_models.py`: 10 modelos SQLAlchemy. Clases `ComprasGoodsReceipt`/`ComprasGoodsReceiptItem` (renombradas para evitar colisión con `ops_models.GoodsReceipt` → `entradas_mercancia`).
+- `app/models/ops_models.py`: `OperatingExpense` ampliado con 6 campos nullable (sat_payment_form_id, uuid_sat, etc.) para reflejar el ALTER TABLE.
+- `app/schemas/compras_schema.py`: schemas Pydantic v2 completos. `OperatingExpenseOut` con `model_validate` override para mapear `spent_on → expense_date` (campo legacy).
+- `app/services/compras_service.py`: CRUD + catálogos SAT + gastos operativos.
+- `app/routers/compras.py`: 22 endpoints bajo `/api/compras` y `/api/gastos`.
+- `app/main.py`: registro de ambos routers.
+
+### Frontend
+- Tipos: `src/types/compras.ts`.
+- Service: `src/services/comprasService.ts`.
+- Páginas nuevas (5): `SolicitudesPage`, `OrdenesPage`, `RecepcionesPage`, `FacturasProveedorPage`, `GastosPage`.
+- `src/routes.tsx`: 5 rutas nuevas (`/gastos`, `/compras/solicitudes`, `/compras/ordenes`, `/compras/recepciones`, `/compras/facturas`).
+- `src/components/layout/Sidebar.tsx`: sección "Compras" con 4 links + link activo para Gastos.
+
+---
+
 ## 2026-04-28 — Módulo Ventas y Logística (migraciones 0015-0016)
 
 ### Base de datos

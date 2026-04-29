@@ -72,10 +72,33 @@ Ciclo: **NR → Cotización → Pedido → Empacado → Envío/Ruta → CFDI →
 
 **Nota de modelos Python:** Las clases se llaman `SalesQuote`/`SalesQuoteItem` (no `Quote`/`QuoteItem`) para evitar colisión con `ops_models.Quote` que mapea a la tabla legacy `cotizaciones`.
 
-### 3.5 Gastos
-- `gastos_operativos` — id, fecha, categoria, proveedor_id, concepto, monto, estado, metodo_pago, deducible (bool).
+### 3.5 Compras (migraciones 0017-0018, 2026-04-28)
 
-### 3.5 Administración (Workflow)
+Ciclo: **Solicitud → Orden de Compra → Recepción → Factura Proveedor → Pago**
+
+- `sat_payment_forms` / `sat_payment_methods` — Catálogos SAT (c_FormaPago, PUE/PPD).
+- `purchase_requests` / `purchase_request_items` — Solicitudes de material. `item_type`: `GOODS_RESALE`, `GOODS_INTERNAL` o `SERVICE`.
+- `purchase_orders` / `purchase_order_items` — Órdenes formales a proveedor. FK a `proveedores.id`. Soporta multi-moneda (`exchange_rate`).
+- `goods_receipts` / `goods_receipt_items` — Recepciones físicas. `po_id NOT NULL`. `delivery_pct` calculado por trigger.
+- `supplier_invoices` / `supplier_invoice_items` — Facturas de proveedor con CFDI UUID, formas de pago SAT, `payment_status` separado del estado documental.
+
+**Vista:** `v_purchase_chain` — trazabilidad completa PR → OC → Recepción → Factura en una sola fila por ítem.
+
+**Triggers de negocio:**
+- `trg_create_inv_from_receipt` — Al recibir mercancía: genera movimiento `ENTRY` en `movimientos_inventario`.
+- `trg_update_poi_received` — Actualiza `purchase_order_items.quantity_received` acumulado.
+- `trg_update_pri_qty_ordered` — Actualiza `purchase_request_items.quantity_ordered` al crear OC.
+- `trg_validate_invoice_chain` — Valida que factura tenga OC o recepción vinculada.
+- `trg_validate_po_has_request` — Valida que OC referencie solicitudes aprobadas.
+
+**Nota de modelos Python:** Las clases se llaman `ComprasGoodsReceipt`/`ComprasGoodsReceiptItem` para evitar colisión con `ops_models.GoodsReceipt` que mapea a la tabla legacy `entradas_mercancia`.
+
+**ALTER TABLE gastos_operativos:** Añadidos `sat_payment_form_id`, `sat_payment_method_id`, `uuid_sat`, `expense_number`, `responsible_user_id`, `tax_amount` (todos nullable).
+
+### 3.6 Gastos
+- `gastos_operativos` — id, fecha, categoria, proveedor_id, concepto, monto, estado, metodo_pago, deducible (bool). Extendido con campos SAT en migración 0017.
+
+### 3.6 Administración (Workflow)
 - `verificador_fechas_pedidos` — id, pedido_id, tipo_etapa, fecha, persona_activo_automatizacion.
 
 ### 3.6 Sistema / Auth
