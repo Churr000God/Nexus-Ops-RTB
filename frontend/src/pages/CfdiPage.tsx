@@ -5,6 +5,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { useApi } from "@/hooks/useApi"
 import { getCfdis, getIssuerConfig, getPpdPending } from "@/services/cfdiService"
 import type { CfdiListItem, CfdiIssuerConfigOut, CfdiPpdPending } from "@/types/cfdi"
+import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
 
 // ── Constantes de visualización ──────────────────────────────────────────────
@@ -252,7 +253,8 @@ function NotasCreditoTab() {
 }
 
 function ConfigTab() {
-  const fetcher = useCallback((signal: AbortSignal) => getIssuerConfig(signal), [])
+  const token = useAuthStore((s) => s.accessToken)
+  const fetcher = useCallback((signal: AbortSignal) => getIssuerConfig(token, signal), [token])
   const { data, status } = useApi<CfdiIssuerConfigOut | null>(fetcher)
 
   if (status === "loading") {

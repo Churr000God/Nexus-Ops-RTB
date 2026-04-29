@@ -202,3 +202,22 @@ export interface CfdiCancelIn {
   substitute_cfdi_number?: string | null
   notes?: string | null
 }
+
+export type PacProvider = "DIVERZA" | "EDICOM" | "FACTURAMA" | "STUB"
+export type PacEnvironment = "SANDBOX" | "PRODUCTION"
+
+export interface CfdiIssuerConfigIn {
+  rfc: string
+  legal_name: string
+  tax_regime_id?: number | null
+  zip_code: string
+  csd_serial_number?: string | null
+  csd_valid_from?: string | null
+  csd_valid_to?: string | null
+  pac_provider?: PacProvider | null
+  pac_username?: string | null
+  pac_endpoint_url?: string | null
+  pac_environment?: PacEnvironment
+  valid_from?: string | null
+  valid_to?: string | null
+}

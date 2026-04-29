@@ -3,6 +3,7 @@ import type {
   CfdiCancelIn,
   CfdiCancelResponse,
   CfdiCreateIn,
+  CfdiIssuerConfigIn,
   CfdiIssuerConfigOut,
   CfdiListItem,
   CfdiOut,
@@ -16,8 +17,12 @@ const BASE = "/api/cfdi"
 
 // ── Issuer Config ────────────────────────────────────────────────────────────
 
-export function getIssuerConfig(signal?: AbortSignal): Promise<CfdiIssuerConfigOut | null> {
-  return requestJson(`${BASE}/issuer-config`, { signal })
+export function getIssuerConfig(token: string | null, signal?: AbortSignal): Promise<CfdiIssuerConfigOut | null> {
+  return requestJson(`${BASE}/issuer-config`, { token, signal })
+}
+
+export function saveIssuerConfig(token: string | null, body: CfdiIssuerConfigIn): Promise<CfdiIssuerConfigOut> {
+  return requestJson(`${BASE}/issuer-config`, { method: "POST", body: body as never, token })
 }
 
 // ── Series ───────────────────────────────────────────────────────────────────
