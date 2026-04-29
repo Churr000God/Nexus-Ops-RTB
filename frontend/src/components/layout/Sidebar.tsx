@@ -7,6 +7,7 @@ import {
   FileCheck,
   FileText,
   Home,
+  Laptop,
   LayoutDashboard,
   MapPin,
   Package,
@@ -80,6 +81,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <NavItem to="/" label="Inicio" icon={Home} onNavigate={onNavigate} />
         <NavItem to="/ventas" label="Análisis Ventas" icon={BarChart3} onNavigate={onNavigate} />
         <NavItem to="/inventarios" label="Almacén" icon={Package} onNavigate={onNavigate} />
+        <NavItem to="/equipos" label="Equipos" icon={Laptop} onNavigate={onNavigate} />
         <NavItem to="/clientes" label="Clientes" icon={Building2} onNavigate={onNavigate} />
         <NavItem to="/proveedores/maestro" label="Proveedores" icon={Truck} onNavigate={onNavigate} />
         <NavItem to="/gastos" label="Gastos" icon={Receipt} onNavigate={onNavigate} />

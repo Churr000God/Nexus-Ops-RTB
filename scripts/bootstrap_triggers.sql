@@ -147,7 +147,7 @@ BEGIN
         SELECT
             COALESCE(SUM(CASE WHEN movement_type IN ('Entrada', 'Devolución') THEN qty_in  ELSE 0 END), 0) AS inbound_real,
             COALESCE(SUM(CASE WHEN movement_type = 'Salida'                   THEN qty_out ELSE 0 END), 0) AS outbound_real
-        FROM movimientos_inventario
+        FROM inventory_movements
         WHERE product_id = v_product_id
     ) AS mv,
     (
@@ -320,7 +320,7 @@ CREATE TRIGGER trg_productos_precio
 AFTER INSERT OR UPDATE OR DELETE ON proveedor_productos
 FOR EACH ROW EXECUTE FUNCTION app.trg_proveedor_productos_precio();
 
-CREATE OR REPLACE FUNCTION app.trg_movimientos_inventario_qty()
+CREATE OR REPLACE FUNCTION app.trg_inventory_movements_qty()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
@@ -361,10 +361,10 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_inventario_qty ON movimientos_inventario;
+DROP TRIGGER IF EXISTS trg_inventario_qty ON inventory_movements;
 CREATE TRIGGER trg_inventario_qty
-AFTER INSERT OR UPDATE OR DELETE ON movimientos_inventario
-FOR EACH ROW EXECUTE FUNCTION app.trg_movimientos_inventario_qty();
+AFTER INSERT OR UPDATE OR DELETE ON inventory_movements
+FOR EACH ROW EXECUTE FUNCTION app.trg_inventory_movements_qty();
 
 CREATE OR REPLACE FUNCTION app.trg_no_conformes_qty()
 RETURNS trigger

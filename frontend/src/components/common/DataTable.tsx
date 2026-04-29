@@ -15,6 +15,7 @@ type DataTableProps<T> = {
   rowKey: (row: T) => string
   emptyLabel?: string
   onRowClick?: (row: T) => void
+  selectedRowKey?: string
   className?: string
   toolbar?: ReactNode
   maxHeight?: string
@@ -26,6 +27,7 @@ export function DataTable<T>({
   rowKey,
   emptyLabel = "Sin resultados",
   onRowClick,
+  selectedRowKey,
   className,
   toolbar,
   maxHeight,
@@ -74,7 +76,8 @@ export function DataTable<T>({
                       key={key}
                       className={cn(
                         "border-t border-border/80 transition-colors",
-                        onRowClick ? "cursor-pointer hover:bg-accent/55" : "hover:bg-accent/35"
+                        onRowClick ? "cursor-pointer hover:bg-accent/55" : "hover:bg-accent/35",
+                        selectedRowKey === key && "bg-[hsl(var(--primary)_/_0.10)]",
                       )}
                       onClick={onRowClick ? () => onRowClick(row) : undefined}
                     >

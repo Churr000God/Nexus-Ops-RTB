@@ -62,7 +62,7 @@ async def db_session(_db_schema: None) -> AsyncIterator[AsyncSession]:
                 "productos, proveedor_productos, "
                 "cotizacion_items, cotizaciones, cotizaciones_canceladas, "
                 "ventas, "
-                "inventario, movimientos_inventario, no_conformes, "
+                "inventario, inventory_movements, no_conformes, "
                 "solicitudes_material, entradas_mercancia, facturas_compras, "
                 "pedidos_clientes, pedidos_incompletos, verificador_fechas_pedidos, "
                 "crecimiento_inventario, pedidos_proveedor, gastos_operativos "

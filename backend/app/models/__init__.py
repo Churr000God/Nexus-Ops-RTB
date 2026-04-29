@@ -60,6 +60,12 @@ from app.models.compras_models import (  # noqa: F401
     SupplierInvoice,
     SupplierInvoiceItem,
 )
+from app.models.assets_models import (  # noqa: F401
+    Asset,
+    AssetComponent,
+    AssetComponentHistory,
+    InventorySnapshot,
+)
 from app.models.staging_models import CsvFile, CsvRow, CsvRowError  # noqa: F401
 from app.models.user_model import (  # noqa: F401
     AuditLog,
@@ -102,9 +108,13 @@ __all__ = [
     "SupplierInvoice",
     "SupplierInvoiceItem",
     "IncompleteOrder",
+    "Asset",
+    "AssetComponent",
+    "AssetComponentHistory",
     "InventoryGrowth",
     "InventoryItem",
     "InventoryMovement",
+    "InventorySnapshot",
     "MaterialRequest",
     "NonConformity",
     "OperatingExpense",

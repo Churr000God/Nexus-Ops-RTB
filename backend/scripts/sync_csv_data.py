@@ -162,7 +162,7 @@ def _import_inventory_movements(
     conn.execute(
         text(
             """
-            UPDATE movimientos_inventario m
+            UPDATE inventory_movements m
             SET product_id = p.id
             FROM productos p
             WHERE m.product_id IS NULL
@@ -177,7 +177,7 @@ def _import_inventory_movements(
     conn.execute(
         text(
             """
-            UPDATE movimientos_inventario m
+            UPDATE inventory_movements m
             SET product_id = ci.product_id
             FROM cotizacion_items ci
             WHERE m.quote_item_id = ci.id

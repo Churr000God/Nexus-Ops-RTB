@@ -14,6 +14,7 @@ import SolicitudesPage from "@/pages/compras/SolicitudesPage"
 import CotizacionesPage from "@/pages/CotizacionesPage"
 import EnviosPage from "@/pages/EnviosPage"
 import FleterasPage from "@/pages/FleterasPage"
+import EquiposPage from "@/pages/EquiposPage"
 import GastosPage from "@/pages/GastosPage"
 import { HomePage } from "@/pages/Home"
 import { AlmacenPage } from "@/pages/Inventarios"
@@ -71,6 +72,7 @@ export function AppRoutes() {
           <Route index element={<HomePage />} />
           <Route path="ventas" element={<VentasPage />} />
           <Route path="inventarios" element={<AlmacenPage />} />
+          <Route path="equipos" element={<EquiposPage />} />
           <Route path="clientes" element={<ClientesPage />} />
           <Route path="proveedores/maestro" element={<ProveedoresMaestroPage />} />
           <Route path="ventas/operacional" element={<VentasOperacional />} />

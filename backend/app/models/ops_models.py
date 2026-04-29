@@ -307,7 +307,7 @@ class Product(Base):
     )  # Ubicación en Almacén
     image_url: Mapped[str | None] = mapped_column(String(500))  # Imagen
     datasheet_url: Mapped[str | None] = mapped_column(String(500))  # Ficha Técnica
-    is_internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_saleable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_configurable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_assembled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # --- Precios y costos (legado Notion) ---
@@ -918,7 +918,7 @@ class InventoryItem(Base):
 class InventoryMovement(Base):
     """Log unificado de movimientos (entradas, salidas, ajustes, devoluciones)."""
 
-    __tablename__ = "movimientos_inventario"
+    __tablename__ = "inventory_movements"
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
