@@ -22,6 +22,7 @@
 | 10 | [10_plan_sprints.md](10_plan_sprints.md) | Plan de implementación por sprints (8 sprints) |
 | 11 | [11_bitacora_cambios.md](11_bitacora_cambios.md) | Bitácora de cambios por sesión |
 | 12 | [12_modulo_usuarios_admin.md](12_modulo_usuarios_admin.md) | Módulo de gestión de usuarios y roles — schema BD, flujos, guards, pantallas |
+| 13 | [13_modulo_cfdi_admin.md](13_modulo_cfdi_admin.md) | Admin CFDI — Configuración Fiscal del Emisor y gestión de Series y Folios |
 
 ---
 

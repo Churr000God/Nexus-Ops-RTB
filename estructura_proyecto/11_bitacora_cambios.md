@@ -1,5 +1,23 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-29 — Admin CFDI: Configuración Fiscal y Series y Folios
+
+### Backend
+- `app/schemas/cfdi_schemas.py`: añadidos `CfdiSeriesIn` (series/cfdi_type/description) y `CfdiSeriesUpdate` (description/is_active).
+- `app/services/cfdi_service.py`: nuevas funciones `create_series` (unicidad por `(series, cfdi_type)`, `ValueError` si duplicado) y `update_series` (`ValueError` si no existe).
+- `app/routers/cfdi.py`: `POST /api/cfdi/series` (201, 409 en duplicado) y `PATCH /api/cfdi/series/{id}` (404 si no existe); ambos protegidos con `cfdi.config.manage`.
+
+### Frontend
+- `src/types/cfdi.ts`: añadidas interfaces `CfdiSeriesIn` y `CfdiSeriesUpdate`.
+- `src/services/cfdiService.ts`: firma de `getSeries` actualizada para recibir `token`; añadidas `createSeries` y `updateSeries`.
+- `src/pages/admin/FiscalPage.tsx`: reemplazo de PlaceholderPage — StatusBanner + 3 tarjetas (Datos del Emisor, CSD, PAC) con `ThemedSelect` nativo para tema light; contraste corregido (`text-foreground`, `bg-card`, `border-border`).
+- `src/pages/admin/SeriesPage.tsx`: reemplazo de PlaceholderPage — tabla completa con `SeriesRow` (edición inline de descripción, toggle activa/inactiva) y `CreateModal` (grid 4 tipos CFDI); `next_folio` es solo lectura.
+
+### Documentación
+- `estructura_proyecto/13_modulo_cfdi_admin.md`: nuevo documento — permisos RBAC, esquema de componentes, endpoints, schemas Pydantic/TS e invariantes de integridad.
+
+---
+
 ## 2026-04-29 — Edición de permisos de roles + limpieza de scripts
 
 ### Backend
