@@ -1,5 +1,26 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-29 — Módulo 15: Reportes y Analytics (migración 0024)
+
+### Base de datos
+- Migración `0024` (Supabase vía MCP): 21 vistas SQL analíticas creadas.
+- Vistas por área: 4 comerciales, 3 de margen, 3 de compras, 7 financieras, 3 de operación, 1 ejecutiva.
+- Adaptaciones al schema real: tablas en español (`productos`, `categorias`, `gastos_operativos`, `no_conformes`), `payment_due_date` calculado, `users.id` como UUID.
+
+### Backend
+- `app/schemas/analytics_schema.py` (nuevo): 21 modelos Pydantic v2.
+- `app/services/analytics_service.py` (nuevo): helpers `_fetch_all`/`_fetch_one`, 17 funciones async.
+- `app/routers/analytics.py` (nuevo): 20 GET endpoints bajo `/api/analytics`, todos con `report.view`.
+- `app/main.py`: registro de `analytics_router`.
+
+### Frontend
+- `src/types/analytics.ts` (nuevo): 21 interfaces TypeScript.
+- `src/services/analyticsService.ts` (nuevo): 17 funciones.
+- 5 páginas reemplazadas (eran PlaceholderPage): `ComercialPage`, `MargenPage`, `OperacionPage`, `ComprasReportesPage`, `FinancieroPage` — todas con tabs, DataTable y sumarios.
+- Rutas y sidebar ya existían, sin cambios.
+
+---
+
 ## 2026-04-28 — Módulo de Compras (migraciones 0017-0018)
 
 ### Base de datos
