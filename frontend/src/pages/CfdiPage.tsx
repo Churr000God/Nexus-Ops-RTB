@@ -176,7 +176,7 @@ function FacturasTab() {
       <DataTable
         columns={CFDI_COLUMNS}
         rows={data ?? []}
-        rowKey={(r) => r.cfdi_id}
+        rowKey={(r) => String(r.cfdi_id)}
         emptyLabel={
           status === "loading"
             ? "Cargando…"
@@ -215,7 +215,7 @@ function ComplementosTab() {
       <DataTable
         columns={PPD_COLUMNS}
         rows={data ?? []}
-        rowKey={(r) => r.cfdi_id}
+        rowKey={(r) => String(r.cfdi_id)}
         emptyLabel={
           status === "loading"
             ? "Cargando…"
@@ -239,7 +239,7 @@ function NotasCreditoTab() {
     <DataTable
       columns={CFDI_COLUMNS}
       rows={data ?? []}
-      rowKey={(r) => r.cfdi_id}
+      rowKey={(r) => String(r.cfdi_id)}
       emptyLabel={
         status === "loading"
           ? "Cargando…"
