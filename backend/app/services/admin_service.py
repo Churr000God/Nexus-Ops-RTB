@@ -8,6 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.user_model import AuditLog, Permission, Role, RolePermission
+from app.schemas.user_schema import CreateRoleRequest
+
+
+class RoleAlreadyExistsError(Exception):
+    pass
+
+
+class PermissionNotFoundError(Exception):
+    pass
 
 
 class AdminService:
@@ -27,6 +36,33 @@ class AdminService:
     async def list_permissions(self) -> list[Permission]:
         result = await self.db.scalars(select(Permission).order_by(Permission.code))
         return list(result.all())
+
+    async def create_role(self, payload: CreateRoleRequest) -> Role:
+        existing = await self.db.scalar(select(Role).where(Role.code == payload.code))
+        if existing is not None:
+            raise RoleAlreadyExistsError(f"El rol '{payload.code}' ya existe")
+
+        perms: list[Permission] = []
+        for code in payload.permission_codes:
+            perm = await self.db.scalar(select(Permission).where(Permission.code == code))
+            if perm is None:
+                raise PermissionNotFoundError(f"Permiso '{code}' no existe")
+            perms.append(perm)
+
+        role = Role(
+            code=payload.code,
+            name=payload.name,
+            description=payload.description,
+        )
+        self.db.add(role)
+        await self.db.flush()
+
+        for perm in perms:
+            self.db.add(RolePermission(role_id=role.role_id, permission_id=perm.permission_id))
+
+        await self.db.commit()
+        await self.db.refresh(role)
+        return role
 
     async def list_audit_log(
         self,

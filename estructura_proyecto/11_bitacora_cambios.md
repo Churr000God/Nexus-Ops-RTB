@@ -1,5 +1,27 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-29 — Módulo 16: Gestión de Usuarios y Roles (panel admin)
+
+### Base de datos
+- Sin nuevas migraciones. Usa tablas existentes: `users`, `roles`, `permissions`, `role_permissions`, `user_roles` (migración 0010).
+
+### Backend
+- `app/schemas/user_schema.py`: añadido `ChangePasswordRequest` (validación política contraseña) y `CreateRoleRequest` (code normalizado a mayúsculas, regex alfanumérico).
+- `app/services/user_service.py`: nuevo método `change_password()` con guard `CannotChangeAdminPasswordError` (bloquea cambio si target.role == "admin").
+- `app/services/admin_service.py`: nuevas excepciones `RoleAlreadyExistsError` / `PermissionNotFoundError` + método `create_role()` con flush+commit atómico.
+- `app/routers/usuarios.py`: endpoint `PATCH /api/usuarios/{id}/password` — doble guard: `user.manage` + `current_user.role == "admin"`.
+- `app/routers/admin.py`: endpoint `POST /api/admin/roles` — requiere `role.manage`, retorna `RoleWithPermissions`.
+
+### Frontend
+- `src/services/adminService.ts`: añadidas funciones `createUser`, `updateUser`, `changePassword`, `createRole` + tipos `CreateUserPayload`, `UpdateUserPayload`, `CreateRolePayload`.
+- `src/pages/AdminUsuarios.tsx`: reescritura completa — `CreateUserModal` (alta con validación client-side), `EditUserModal` (nombre + toggle is_active + sección colapsable cambio de contraseña protegida por role), gestión de modales unificada en discriminated union `ActiveModal`.
+- `src/pages/admin/RolesPage.tsx`: implementación completa desde stub — `RoleCard` expandible, `PermissionsSection` con búsqueda y grid agrupado por módulo (24 grupos), `CreateRoleModal` con multiselect de permisos y buscador interno.
+
+### Documentación
+- `estructura_proyecto/12_modulo_usuarios_admin.md`: nuevo documento — schema BD completo, sistema dual de roles, flujos de alta/edición/contraseña, guards de seguridad, inventario de archivos.
+
+---
+
 ## 2026-04-29 — Módulo 15: Reportes y Analytics (migración 0024)
 
 ### Base de datos

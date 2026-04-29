@@ -21,6 +21,7 @@
 | 09 | [09_estructura_revisada.md](09_estructura_revisada.md) | Auditoría y estructura definitiva mejorada |
 | 10 | [10_plan_sprints.md](10_plan_sprints.md) | Plan de implementación por sprints (8 sprints) |
 | 11 | [11_bitacora_cambios.md](11_bitacora_cambios.md) | Bitácora de cambios por sesión |
+| 12 | [12_modulo_usuarios_admin.md](12_modulo_usuarios_admin.md) | Módulo de gestión de usuarios y roles — schema BD, flujos, guards, pantallas |
 
 ---
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
@@ -11,10 +11,11 @@ from app.models.user_model import User
 from app.schemas.user_schema import (
     AuditLogEntry,
     AuditLogPage,
+    CreateRoleRequest,
     PermissionSchema,
     RoleWithPermissions,
 )
-from app.services.admin_service import AdminService
+from app.services.admin_service import AdminService, PermissionNotFoundError, RoleAlreadyExistsError
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -39,6 +40,28 @@ async def list_roles(
         )
         for r in roles
     ]
+
+
+@router.post("/roles", response_model=RoleWithPermissions, status_code=201)
+async def create_role(
+    payload: CreateRoleRequest,
+    _: User = Depends(require_permission("role.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> RoleWithPermissions:
+    service = AdminService(db)
+    try:
+        role = await service.create_role(payload)
+    except RoleAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RoleWithPermissions(
+        role_id=role.role_id,
+        code=role.code,
+        name=role.name,
+        description=role.description,
+        permissions=[],
+    )
 
 
 @router.get("/permissions", response_model=list[PermissionSchema])
