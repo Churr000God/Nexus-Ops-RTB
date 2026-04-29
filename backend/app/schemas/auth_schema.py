@@ -83,39 +83,3 @@ class UserResponse(BaseModel):
 
 class RegisterResponse(BaseModel):
     user: UserResponse
-
-
-class UpdateProfileRequest(BaseModel):
-    full_name: str = Field(min_length=1, max_length=255)
-
-    @field_validator("full_name")
-    @classmethod
-    def strip_name(cls, value: str) -> str:
-        return value.strip()
-
-
-class ChangeOwnPasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(min_length=10, max_length=128)
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_password_policy(cls, value: str) -> str:
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("La contrasena no puede exceder 72 bytes")
-        has_letter = any(char.isalpha() for char in value)
-        has_digit = any(char.isdigit() for char in value)
-        if not (has_letter and has_digit):
-            raise ValueError("La contrasena debe tener al menos una letra y un numero")
-        return value
-
-
-class SessionInfo(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    user_agent: str | None = None
-    ip_address: str | None = None
-    created_at: datetime
-    last_used_at: datetime | None = None
-    is_current: bool = False

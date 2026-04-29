@@ -68,8 +68,10 @@ function fmtDateTime(d: string | null) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-white/60">{label}</span>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
       {children}
     </div>
   )
@@ -80,18 +82,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusBanner({ config }: { config: CfdiIssuerConfigOut }) {
   const envColor =
     config.pac_environment === "PRODUCTION"
-      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-      : "border-amber-500/40 bg-amber-500/10 text-amber-400"
+      ? "border-emerald-600/40 bg-emerald-50 text-emerald-700"
+      : "border-amber-500/40 bg-amber-50 text-amber-700"
 
   return (
-    <div className="flex items-start justify-between rounded-lg border border-white/10 bg-white/5 px-5 py-4">
+    <div className="flex items-start justify-between rounded-lg border border-border bg-card px-5 py-4 shadow-soft-sm">
       <div className="flex items-center gap-3">
-        <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-400" />
+        <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-600" />
         <div>
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-foreground">
             {config.rfc} — {config.legal_name}
           </p>
-          <p className="mt-0.5 text-xs text-white/50">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Última actualización: {fmtDateTime(config.updated_at)}
           </p>
         </div>
@@ -120,13 +122,43 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-      <div className="mb-4 flex items-center gap-2">
+    <div className="rounded-lg border border-border bg-card p-5 shadow-soft-sm">
+      <div className="mb-4 flex items-center gap-2 border-b border-border pb-3">
         <Icon className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
     </div>
+  )
+}
+
+// ── Select nativo con estilos del tema ────────────────────────────────────────
+
+function ThemedSelect({
+  value,
+  onChange,
+  disabled,
+  children,
+}: {
+  value: string
+  onChange: (v: string) => void
+  disabled?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className={cn(
+        "h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground",
+        "shadow-soft-sm transition-colors",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+      )}
+    >
+      {children}
+    </select>
   )
 }
 
@@ -136,29 +168,23 @@ export function FiscalPage() {
   const token = useAuthStore((s) => s.accessToken)
   const canManage = usePermission("cfdi.config.manage")
 
-  // Carga config activa
   const configFetcher = useCallback(
     (signal: AbortSignal) => getIssuerConfig(token, signal),
     [token],
   )
   const { data: config, status: configStatus, refetch } = useApi(configFetcher)
 
-  // Carga regímenes fiscales SAT
   const regimesFetcher = useCallback(
     (signal: AbortSignal) => clientesProveedoresService.listRegimenesFiscales(token, signal),
     [token],
   )
   const { data: regimes } = useApi<SATTaxRegime[]>(regimesFetcher)
 
-  // Estado del formulario
   const [form, setForm] = useState<CfdiIssuerConfigIn>(EMPTY_FORM)
   const [submitting, setSubmitting] = useState(false)
 
-  // Sincroniza form con config cargada
   useEffect(() => {
-    if (config) {
-      setForm(configToForm(config))
-    }
+    if (config) setForm(configToForm(config))
   }, [config])
 
   function set<K extends keyof CfdiIssuerConfigIn>(key: K, value: CfdiIssuerConfigIn[K]) {
@@ -201,19 +227,19 @@ export function FiscalPage() {
     <div className="flex flex-col gap-6 p-6">
       {/* Encabezado */}
       <div>
-        <h1 className="text-xl font-semibold text-white">Configuración Fiscal (Emisor)</h1>
-        <p className="mt-1 text-sm text-white/50">
+        <h1 className="text-xl font-semibold text-foreground">Configuración Fiscal (Emisor)</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           RFC · razón social · régimen · CSD · PAC · entorno de timbrado
         </p>
       </div>
 
       {/* Banner de estado actual */}
       {isLoading && (
-        <div className="h-16 animate-pulse rounded-lg border border-white/10 bg-white/5" />
+        <div className="h-16 animate-pulse rounded-lg border border-border bg-muted/40" />
       )}
       {!isLoading && config && <StatusBanner config={config} />}
       {!isLoading && !config && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-400">
+        <div className="rounded-lg border border-amber-400/50 bg-amber-50 px-5 py-4 text-sm font-medium text-amber-800">
           Sin configuración fiscal activa — completa el formulario para registrar los datos del
           emisor.
         </div>
@@ -221,6 +247,7 @@ export function FiscalPage() {
 
       {/* Formulario */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
         {/* ── Datos del Emisor ── */}
         <Section icon={Building2} title="Datos del Emisor">
           <Field label="RFC *">
@@ -244,13 +271,10 @@ export function FiscalPage() {
           </Field>
 
           <Field label="Régimen Fiscal">
-            <select
-              value={form.tax_regime_id ?? ""}
-              onChange={(e) =>
-                set("tax_regime_id", e.target.value ? Number(e.target.value) : null)
-              }
+            <ThemedSelect
+              value={String(form.tax_regime_id ?? "")}
+              onChange={(v) => set("tax_regime_id", v ? Number(v) : null)}
               disabled={!canManage}
-              className="h-9 rounded-md border border-white/10 bg-background px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
             >
               <option value="">Seleccionar régimen…</option>
               {(regimes ?? []).map((r) => (
@@ -258,7 +282,7 @@ export function FiscalPage() {
                   {r.code} — {r.description}
                 </option>
               ))}
-            </select>
+            </ThemedSelect>
           </Field>
 
           <Field label="Código Postal *">
@@ -307,8 +331,8 @@ export function FiscalPage() {
 
           {config?.csd_valid_to && (
             <div className="sm:col-span-2">
-              <p className="text-xs text-white/40">
-                Vigencia actual: {fmtDate(config.csd_valid_from)} —{" "}
+              <p className="text-xs text-muted-foreground">
+                Vigencia registrada: {fmtDate(config.csd_valid_from)} —{" "}
                 {fmtDate(config.csd_valid_to)}
               </p>
             </div>
@@ -318,13 +342,10 @@ export function FiscalPage() {
         {/* ── PAC ── */}
         <Section icon={Server} title="Proveedor de Autorización y Certificación (PAC)">
           <Field label="Proveedor PAC">
-            <select
+            <ThemedSelect
               value={form.pac_provider ?? ""}
-              onChange={(e) =>
-                set("pac_provider", (e.target.value as PacProvider) || null)
-              }
+              onChange={(v) => set("pac_provider", (v as PacProvider) || null)}
               disabled={!canManage}
-              className="h-9 rounded-md border border-white/10 bg-background px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
             >
               <option value="">Sin proveedor</option>
               {PAC_PROVIDERS.map((p) => (
@@ -332,11 +353,11 @@ export function FiscalPage() {
                   {p.label}
                 </option>
               ))}
-            </select>
+            </ThemedSelect>
           </Field>
 
           <Field label="Entorno">
-            <div className="flex h-9 gap-2">
+            <div className="flex h-10 gap-2">
               {(["SANDBOX", "PRODUCTION"] as const).map((env) => (
                 <button
                   key={env}
@@ -346,9 +367,9 @@ export function FiscalPage() {
                     "flex-1 rounded-md border text-xs font-semibold transition-colors",
                     form.pac_environment === env
                       ? env === "PRODUCTION"
-                        ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-400"
-                        : "border-amber-500/50 bg-amber-500/20 text-amber-400"
-                      : "border-white/10 bg-white/5 text-white/40 hover:border-white/20",
+                        ? "border-emerald-600/50 bg-emerald-50 text-emerald-700"
+                        : "border-amber-500/50 bg-amber-50 text-amber-700"
+                      : "border-border bg-muted/50 text-muted-foreground hover:border-primary/30 hover:text-foreground",
                     !canManage && "cursor-not-allowed opacity-50",
                   )}
                 >
@@ -381,14 +402,22 @@ export function FiscalPage() {
         {canManage && (
           <div className="flex justify-end">
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Guardando…" : config ? "Actualizar Configuración" : "Guardar Configuración"}
+              {submitting
+                ? "Guardando…"
+                : config
+                  ? "Actualizar Configuración"
+                  : "Guardar Configuración"}
             </Button>
           </div>
         )}
 
         {!canManage && (
-          <p className="text-center text-xs text-white/40">
-            Se requiere permiso <code className="font-mono">cfdi.config.manage</code> para editar.
+          <p className="text-center text-xs text-muted-foreground">
+            Se requiere permiso{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
+              cfdi.config.manage
+            </code>{" "}
+            para editar.
           </p>
         )}
       </form>

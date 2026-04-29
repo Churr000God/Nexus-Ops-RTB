@@ -12,6 +12,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -61,6 +62,7 @@ class User(Base):
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_refresh_tokens_user_id"),)
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -74,11 +76,6 @@ class RefreshToken(Base):
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
-    )
-    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ip_address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_used_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
