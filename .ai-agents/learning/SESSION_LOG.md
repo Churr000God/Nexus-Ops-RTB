@@ -74,6 +74,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-24 | Sync fixes: GENERATED ALWAYS, FK delta, conflict_cols, headers duplicados, distribucion ventas | backend+scripts+db | 3 | [2026-04-24_sync-fixes-distribucion-ventas.md](sessions/2026-04-24_sync-fixes-distribucion-ventas.md) |
 | 2026-04-28 | RBAC — Seeds SQL, Schemas, Auth Service, require_permission, Router /api/usuarios | backend | 4 | [2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md](sessions/2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md) |
 | 2026-04-28 | RBAC — Router Admin (roles/permisos/audit) y Frontend Panel Admin | backend + frontend | 4 | [2026-04-28_rbac-router-admin-y-frontend-admin.md](sessions/2026-04-28_rbac-router-admin-y-frontend-admin.md) |
+| 2026-04-29 | Módulo 16 — Estructura de Navegación: 14 módulos, 50+ rutas, sidebar scrollable | frontend | 5 | [2026-04-29_estructura-navegacion.md](sessions/2026-04-29_estructura-navegacion.md) |
 
 ---
 
@@ -81,6 +82,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 18 |
-| Errores registrados | 21 |
-| Lecciones documentadas | 22 |
+| Total sesiones | 19 |
+| Errores registrados | 22 |
+| Lecciones documentadas | 25 |
