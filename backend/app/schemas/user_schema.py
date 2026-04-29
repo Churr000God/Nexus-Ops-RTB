@@ -67,6 +67,10 @@ class CreateRoleRequest(BaseModel):
         return value.upper()
 
 
+class UpdateRolePermissionsRequest(BaseModel):
+    permission_codes: list[str]
+
+
 class RoleWithPermissions(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

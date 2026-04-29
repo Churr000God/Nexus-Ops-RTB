@@ -19,6 +19,14 @@ class PermissionNotFoundError(Exception):
     pass
 
 
+class RoleNotFoundError(Exception):
+    pass
+
+
+class RoleProtectedError(Exception):
+    pass
+
+
 class AdminService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -63,6 +71,53 @@ class AdminService:
         await self.db.commit()
         await self.db.refresh(role)
         return role
+
+    async def update_role_permissions(
+        self, role_id: int, permission_codes: list[str]
+    ) -> Role:
+        role = await self.db.scalar(
+            select(Role)
+            .options(
+                selectinload(Role.role_permissions).selectinload(RolePermission.permission)
+            )
+            .where(Role.role_id == role_id)
+        )
+        if role is None:
+            raise RoleNotFoundError(f"Rol {role_id} no encontrado")
+        if role.code == "ADMIN":
+            raise RoleProtectedError("Los permisos del rol ADMIN no se pueden modificar")
+
+        # Verificar que todos los permission_codes existen
+        perms: list[Permission] = []
+        for code in permission_codes:
+            perm = await self.db.scalar(select(Permission).where(Permission.code == code))
+            if perm is None:
+                raise PermissionNotFoundError(f"Permiso '{code}' no existe")
+            perms.append(perm)
+
+        # Reemplazar todas las entradas role_permissions de este rol
+        existing = await self.db.scalars(
+            select(RolePermission).where(RolePermission.role_id == role_id)
+        )
+        for rp in existing:
+            await self.db.delete(rp)
+        await self.db.flush()
+
+        for perm in perms:
+            self.db.add(RolePermission(role_id=role_id, permission_id=perm.permission_id))
+
+        await self.db.commit()
+        await self.db.refresh(role)
+
+        # Recargar con permisos actualizados
+        result = await self.db.scalar(
+            select(Role)
+            .options(
+                selectinload(Role.role_permissions).selectinload(RolePermission.permission)
+            )
+            .where(Role.role_id == role_id)
+        )
+        return result  # type: ignore[return-value]
 
     async def list_audit_log(
         self,

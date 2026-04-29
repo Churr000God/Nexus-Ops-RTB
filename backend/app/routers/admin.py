@@ -14,8 +14,15 @@ from app.schemas.user_schema import (
     CreateRoleRequest,
     PermissionSchema,
     RoleWithPermissions,
+    UpdateRolePermissionsRequest,
 )
-from app.services.admin_service import AdminService, PermissionNotFoundError, RoleAlreadyExistsError
+from app.services.admin_service import (
+    AdminService,
+    PermissionNotFoundError,
+    RoleAlreadyExistsError,
+    RoleNotFoundError,
+    RoleProtectedError,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -61,6 +68,34 @@ async def create_role(
         name=role.name,
         description=role.description,
         permissions=[],
+    )
+
+
+@router.put("/roles/{role_id}/permissions", response_model=RoleWithPermissions)
+async def update_role_permissions(
+    role_id: int,
+    payload: UpdateRolePermissionsRequest,
+    _: User = Depends(require_permission("role.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> RoleWithPermissions:
+    service = AdminService(db)
+    try:
+        role = await service.update_role_permissions(role_id, payload.permission_codes)
+    except RoleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RoleProtectedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except PermissionNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RoleWithPermissions(
+        role_id=role.role_id,
+        code=role.code,
+        name=role.name,
+        description=role.description,
+        permissions=[
+            PermissionSchema.model_validate(rp.permission)
+            for rp in role.role_permissions
+        ],
     )
 
 

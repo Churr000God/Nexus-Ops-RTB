@@ -1,5 +1,28 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-29 — Edición de permisos de roles + limpieza de scripts
+
+### Backend
+- `app/schemas/user_schema.py`: añadido `UpdateRolePermissionsRequest` (`permission_codes: list[str]`).
+- `app/services/admin_service.py`: nuevas excepciones `RoleNotFoundError` y `RoleProtectedError`; nuevo método `update_role_permissions(role_id, codes)` — reemplaza toda la tabla `role_permissions` del rol, bloquea código `ADMIN`.
+- `app/routers/admin.py`: endpoint `PUT /api/admin/roles/{role_id}/permissions` — requiere `role.manage`; HTTP 403 si el rol es ADMIN, 404 si no existe, 422 si algún permiso no existe.
+
+### Frontend
+- `src/services/adminService.ts`: añadida función `updateRolePermissions(token, roleId, codes)`.
+- `src/pages/admin/RolesPage.tsx`: nuevo `EditPermissionsModal` con permisos pre-marcados, toggles de grupo por módulo (indeterminate), contador de cambios pendientes, botón deshabilitado sin cambios. `RoleCard` refactorizado: botón expand separado del contenido; ícono `✏` visible en todos los roles excepto ADMIN.
+
+### Scripts — limpieza de obsoletos
+- **Eliminados:** `rebuild-safe.sh`, `start-dev.sh`, `deploy.sh`, `update-and-deploy.sh` (todos absorbidos por `init-project.sh` y `update-safe.sh`).
+- **Actualizado `health-check.sh`:** eliminada verificación del contenedor `postgres` local (BD en Supabase).
+- **Actualizado `CLAUDE.md`:** sección de scripts reescrita — tabla con los 8 scripts actuales, instrucción de arranque apunta a `init-project.sh`.
+- **Actualizado `estructura_proyecto/08_scripts_git.md`:** reescritura completa con inventario real, flujos de uso y referencia de `lib/common.sh`.
+
+### Documentación
+- `estructura_proyecto/12_modulo_usuarios_admin.md`: sección 7 ampliada con endpoint de edición de permisos; sección 9 actualizada con descripción del `EditPermissionsModal`; tabla de guards y tabla de archivos actualizadas.
+- `estructura_proyecto/08_scripts_git.md`: reescrito desde cero para reflejar scripts reales actuales.
+
+---
+
 ## 2026-04-29 — Módulo 16: Gestión de Usuarios y Roles (panel admin)
 
 ### Base de datos

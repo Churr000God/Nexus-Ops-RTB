@@ -221,6 +221,21 @@ Devuelve `RoleWithPermissions[]` — cada rol incluye el array completo de sus p
 - Si el código ya existe → HTTP 409 Conflict.
 - Si algún `permission_code` no existe en la tabla `permissions` → HTTP 422.
 
+### Editar permisos de un rol existente
+
+**Endpoint:** `PUT /api/admin/roles/{role_id}/permissions`
+**Permiso requerido:** `role.manage`
+
+```json
+{ "permission_codes": ["quote.view", "quote.create", "order.view"] }
+```
+
+- **Reemplaza** la totalidad de los permisos del rol (no hace merge).
+- Bloquea el rol `ADMIN` → HTTP 403 `RoleProtectedError`.
+- Si `role_id` no existe → HTTP 404.
+- Si algún `permission_code` no existe → HTTP 422.
+- Devuelve `RoleWithPermissions` con los permisos actualizados.
+
 ### Asignar / revocar roles a usuarios
 
 ```
@@ -299,7 +314,11 @@ El listado completo con descripciones está disponible en `GET /api/admin/permis
 └───────────────────────────────────────────────┘
 ```
 
+El ícono `✏` aparece en todos los roles **excepto ADMIN**. El rol ADMIN es inmutable por diseño.
+
 **Modal "Nuevo rol"** — código (auto-mayúsculas), nombre, descripción opcional, lista de permisos agrupados por módulo con checkboxes y buscador interno.
+
+**Modal "Editar permisos"** — pre-marca los permisos actuales; checkboxes por permiso y toggle de grupo por módulo (indeterminate cuando parcial); contador de seleccionados y aviso de cambios pendientes; "Guardar cambios" deshabilitado si no hay diferencia.
 
 ---
 
@@ -312,6 +331,7 @@ El listado completo con descripciones está disponible en `GET /api/admin/permis
 | Cambiar contraseña de usuario | `user.manage` | `current.role == "admin"` y `target.role != "admin"` |
 | Asignar / revocar roles | `role.manage` | — |
 | Ver / crear roles | `role.manage` | — |
+| Editar permisos de un rol | `role.manage` | Bloqueado si `role.code == "ADMIN"` |
 | Ver catálogo de permisos | `role.manage` | — |
 
 Los guards se aplican en **dos niveles**:
@@ -327,21 +347,21 @@ Los guards se aplican en **dos niveles**:
 |---------|----------------|
 | `app/models/user_model.py` | ORM: `User`, `Role`, `Permission`, `RolePermission`, `UserRole`, `RefreshToken`, `AuditLog` |
 | `app/schemas/auth_schema.py` | `RegisterRequest`, `LoginRequest`, `UserResponse` |
-| `app/schemas/user_schema.py` | `UserUpdateSchema`, `ChangePasswordRequest`, `CreateRoleRequest`, `AssignRoleRequest` |
+| `app/schemas/user_schema.py` | `UserUpdateSchema`, `ChangePasswordRequest`, `CreateRoleRequest`, `UpdateRolePermissionsRequest`, `AssignRoleRequest` |
 | `app/services/auth_service.py` | Login, register, hash/verify password, JWT, refresh tokens |
 | `app/services/user_service.py` | CRUD de usuarios, asignación de roles, cambio de contraseña |
-| `app/services/admin_service.py` | Listado de roles con permisos, creación de roles, audit log |
+| `app/services/admin_service.py` | Roles con permisos, creación de roles, `update_role_permissions()`, audit log |
 | `app/routers/auth.py` | `/api/auth/*` |
 | `app/routers/usuarios.py` | `/api/usuarios/*` |
-| `app/routers/admin.py` | `/api/admin/roles`, `/api/admin/permissions`, `/api/admin/audit-log` |
+| `app/routers/admin.py` | `/api/admin/roles`, `PUT /api/admin/roles/{id}/permissions`, `/api/admin/permissions`, `/api/admin/audit-log` |
 | `app/dependencies.py` | `get_current_user`, `require_permission`, `require_roles` |
 
 ### Frontend
 | Archivo | Responsabilidad |
 |---------|----------------|
 | `src/pages/AdminUsuarios.tsx` | Página completa: listado, modales de alta/edición/roles/contraseña |
-| `src/pages/admin/RolesPage.tsx` | Página completa: cards de roles, catálogo de permisos con búsqueda, modal de nuevo rol |
-| `src/services/adminService.ts` | `listUsers`, `createUser`, `updateUser`, `changePassword`, `listRoles`, `createRole`, `listPermissions`, `assignRole`, `revokeRole` |
+| `src/pages/admin/RolesPage.tsx` | Cards de roles, catálogo de permisos, `CreateRoleModal`, `EditPermissionsModal` |
+| `src/services/adminService.ts` | `listUsers`, `createUser`, `updateUser`, `changePassword`, `listRoles`, `createRole`, `updateRolePermissions`, `listPermissions`, `assignRole`, `revokeRole` |
 | `src/stores/authStore.ts` | Estado de sesión: `user` (con `role`, `permissions`, `roles`), `accessToken` |
 | `src/hooks/usePermission.ts` | `usePermission(code)` — reactivo al store |
 | `src/types/auth.ts` | Tipo `User` (incluye `role`, `roles[]`, `permissions[]`) |

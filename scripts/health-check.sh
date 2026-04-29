@@ -72,8 +72,8 @@ log "=== Health Check — $TIMESTAMP ==="
 echo ""
 
 # --- Contenedores Docker ---
+# Nota: la BD está en Supabase (externa); no hay contenedor postgres local.
 log "Verificando contenedores..."
-check_container "PostgreSQL" "postgres"
 check_container "Redis" "redis"
 check_container "Backend" "backend"
 check_container "Frontend" "frontend"

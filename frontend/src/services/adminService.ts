@@ -96,4 +96,12 @@ export const adminService = {
       token,
     })
   },
+
+  updateRolePermissions(token: string | null, roleId: number, permissionCodes: string[]) {
+    return requestJson<Role>(`/api/admin/roles/${roleId}/permissions`, {
+      method: "PUT",
+      body: { permission_codes: permissionCodes },
+      token,
+    })
+  },
 }

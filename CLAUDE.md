@@ -6,41 +6,48 @@ Documentación detallada en `estructura_proyecto/`, contexto de negocio en `cont
 
 ## Reglas críticas
 
-### PROTECCIÓN DEL CONTENEDOR DE POSTGRESQL
-**NUNCA** ejecutes ninguno de los siguientes comandos sin pedir confirmación explícita al usuario primero:
-- `docker compose down` (si incluye el servicio `postgres`)
-- `docker compose down -v` (destruye volúmenes con datos)
-- `docker volume rm` sobre `postgres_data` o cualquier volumen de BD
-- `docker compose up --build` con `--force-recreate` sobre `postgres`
-- Eliminar, recrear o reinicializar el contenedor `postgres`
-- Borrar la carpeta de datos del volumen de PostgreSQL
+### BD EN SUPABASE — sin contenedor postgres local
+La base de datos vive en **Supabase** (externa). No hay contenedor `postgres` local en Docker Compose.
+**NUNCA** ejecutes los siguientes comandos sin confirmación explícita:
+- `docker compose down -v` (destruye volúmenes Docker — afecta redis, n8n)
+- `DROP SCHEMA public CASCADE` en Supabase sin backup previo
+- Eliminar el proyecto Supabase o resetear la BD
 
-Antes de ejecutar cualquiera de estas acciones **siempre pregunta**:
-> "Esto podría destruir todos los datos de PostgreSQL. ¿Confirmas que quieres continuar?"
+Antes de cualquier acción destructiva sobre datos **siempre pregunta**:
+> "Esto podría destruir datos en Supabase. ¿Confirmas que quieres continuar?"
 
-Si el usuario responde que sí, recuérdale que ejecute `./scripts/setup-db.sh` después para restaurar la BD.
-
-### Reconstrucción segura
-Para reconstruir servicios SIN destruir datos usa:
+### Iniciar el proyecto
 ```bash
-docker compose up -d --build backend frontend   # Solo app, nunca postgres
-bash ./scripts/rebuild-safe.sh                  # Script seguro existente
+bash ./scripts/init-project.sh          # bash / Git Bash (delega a init-dev.ps1 si hay pwsh)
+.\scripts\init-dev.ps1                  # PowerShell nativo (recomendado en Windows)
+.\scripts\init-dev.ps1 -SkipRelay       # relay ya corriendo en otra terminal
+.\scripts\init-dev.ps1 -WithFrontend    # incluir contenedor frontend
 ```
 
-Para reconstruir DESDE CERO (con pérdida de datos aceptada por el usuario):
+### Reconstruir sin perder datos
 ```bash
-bash ./scripts/setup-db.sh   # Restaura BD completa después de recrear postgres
+docker compose up -d --build backend frontend   # Solo app; la BD no se toca (está en Supabase)
+```
+
+### Restablecer BD desde cero
+```bash
+bash ./scripts/setup-db.sh   # Migraciones + triggers + CSVs + usuario admin
 ```
 
 ---
 
-## Scripts principales de base de datos
+## Scripts disponibles
 
 | Script | Propósito |
 |--------|-----------|
-| `./scripts/setup-db.sh` | Setup completo: levanta postgres, migraciones, CSVs, usuario admin, backup |
-| `./scripts/backup-db.sh` | Crea un backup comprimido en `data/backups/` |
-| `./scripts/restore-db.sh` | Restaura backup (sin argumento: usa el más reciente) |
+| `./scripts/init-project.sh` | **Arranque del proyecto** — relay + docker + migraciones |
+| `./scripts/init-dev.ps1` | Implementación PowerShell del arranque (llamado por init-project.sh) |
+| `./scripts/stop.sh` | Detener el stack (preserva volúmenes) |
+| `./scripts/setup-db.sh` | Setup completo de BD: migraciones, triggers, CSVs, usuario admin |
+| `./scripts/backup-db.sh` | Backup comprimido en `data/backups/` |
+| `./scripts/restore-db.sh` | Restaurar backup (sin argumento: usa el más reciente) |
+| `./scripts/update-safe.sh` | Actualización producción: pull + backup + build + restore + migrate |
+| `./scripts/health-check.sh` | Verificar estado de todos los servicios |
 
 ## Variables de entorno clave (`.env`)
 - `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` — credenciales de PostgreSQL

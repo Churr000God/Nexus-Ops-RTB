@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { ChevronDown, Plus, Search, ShieldCheck, X } from "lucide-react"
+import { ChevronDown, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -70,6 +70,179 @@ function groupPermissions(perms: Permission[]): Map<string, Permission[]> {
     map.get(mod)!.push(p)
   }
   return map
+}
+
+// ─── Modal de edición de permisos ────────────────────────────────────────────
+
+type EditPermissionsModalProps = {
+  role: Role
+  allPermissions: Permission[]
+  token: string | null
+  onClose: () => void
+  onSaved: () => void
+}
+
+function EditPermissionsModal({ role, allPermissions, token, onClose, onSaved }: EditPermissionsModalProps) {
+  const initialCodes = useMemo(() => new Set(role.permissions.map((p) => p.code)), [role])
+  const [selectedPerms, setSelectedPerms] = useState<Set<string>>(new Set(initialCodes))
+  const [permSearch, setPermSearch] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
+  const filteredPerms = useMemo(() => {
+    const q = permSearch.toLowerCase()
+    if (!q) return allPermissions
+    return allPermissions.filter(
+      (p) => p.code.toLowerCase().includes(q) || (p.description ?? "").toLowerCase().includes(q)
+    )
+  }, [allPermissions, permSearch])
+
+  const groupedFiltered = useMemo(() => groupPermissions(filteredPerms), [filteredPerms])
+
+  const hasChanges = useMemo(() => {
+    if (selectedPerms.size !== initialCodes.size) return true
+    for (const c of selectedPerms) if (!initialCodes.has(c)) return true
+    return false
+  }, [selectedPerms, initialCodes])
+
+  function togglePerm(code: string) {
+    setSelectedPerms((prev) => {
+      const next = new Set(prev)
+      next.has(code) ? next.delete(code) : next.add(code)
+      return next
+    })
+  }
+
+  function toggleAll(perms: Permission[]) {
+    const allSelected = perms.every((p) => selectedPerms.has(p.code))
+    setSelectedPerms((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        perms.forEach((p) => next.delete(p.code))
+      } else {
+        perms.forEach((p) => next.add(p.code))
+      }
+      return next
+    })
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      await adminService.updateRolePermissions(token, role.role_id, Array.from(selectedPerms))
+      toast.success(`Permisos de ${role.code} actualizados`)
+      onSaved()
+      onClose()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar permisos")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 surface-card flex w-full max-w-lg flex-col gap-5 p-6" style={{ maxHeight: "90vh" }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-base font-semibold">Editar permisos</p>
+              <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold", roleBadgeClass(role.code))}>
+                {role.code}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">{role.name}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 overflow-hidden">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{selectedPerms.size}</span> seleccionados
+              {hasChanges && <span className="ml-2 text-amber-400">· cambios sin guardar</span>}
+            </p>
+            <div className="relative w-48">
+              <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar permiso…"
+                value={permSearch}
+                onChange={(e) => setPermSearch(e.target.value)}
+                className="h-7 pl-7 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-y-auto rounded-[var(--radius-md)] border bg-background/50 p-2" style={{ maxHeight: "380px" }}>
+            {groupedFiltered.size === 0 ? (
+              <p className="py-4 text-center text-xs text-muted-foreground">Sin resultados</p>
+            ) : (
+              Array.from(groupedFiltered.entries()).map(([mod, perms]) => {
+                const allSelected = perms.every((p) => selectedPerms.has(p.code))
+                const someSelected = !allSelected && perms.some((p) => selectedPerms.has(p.code))
+                return (
+                  <div key={mod} className="mb-3 last:mb-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleAll(perms)}
+                      className="mb-1.5 flex w-full items-center gap-2 px-1 text-left hover:opacity-80"
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={allSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected }}
+                        className="accent-primary"
+                      />
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        {mod}
+                      </span>
+                    </button>
+                    <div className="space-y-0.5">
+                      {perms.map((p) => (
+                        <label
+                          key={p.code}
+                          className="flex cursor-pointer items-start gap-2.5 rounded px-2 py-1.5 hover:bg-accent/50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedPerms.has(p.code)}
+                            onChange={() => togglePerm(p.code)}
+                            className="mt-0.5 accent-primary"
+                          />
+                          <div className="min-w-0">
+                            <p className="font-mono text-xs text-foreground">{p.code}</p>
+                            {p.description && (
+                              <p className="text-[11px] text-muted-foreground">{p.description}</p>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 border-t pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+              Cancelar
+            </Button>
+            <Button type="submit" size="sm" disabled={submitting || !hasChanges}>
+              {submitting ? "Guardando…" : "Guardar cambios"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 // ─── Modal de nuevo rol ───────────────────────────────────────────────────────
@@ -260,16 +433,25 @@ function CreateRoleModal({ allPermissions, token, onClose, onCreated }: CreateRo
 
 // ─── Tarjeta de rol ───────────────────────────────────────────────────────────
 
-function RoleCard({ role }: { role: Role }) {
+type RoleCardProps = {
+  role: Role
+  allPermissions: Permission[]
+  token: string | null
+  onPermissionsUpdated: () => void
+}
+
+function RoleCard({ role, allPermissions, token, onPermissionsUpdated }: RoleCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const canEdit = role.code !== "ADMIN"
 
   return (
     <div className="surface-card overflow-hidden">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent/30"
-      >
-        <div className="flex min-w-0 items-center gap-3">
+      <div className="flex w-full items-center gap-3 px-4 py-3">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
           <span
             className={cn(
               "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
@@ -284,16 +466,31 @@ function RoleCard({ role }: { role: Role }) {
               <p className="truncate text-xs text-muted-foreground">{role.description}</p>
             )}
           </div>
-        </div>
+        </button>
+
         <div className="flex shrink-0 items-center gap-2">
           <span className="text-xs text-muted-foreground">
             {role.permissions.length} {role.permissions.length === 1 ? "permiso" : "permisos"}
           </span>
-          <ChevronDown
-            className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")}
-          />
+          {canEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowEditModal(true) }}
+              title="Editar permisos"
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown
+              className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")}
+            />
+          </button>
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <div className="border-t px-4 py-3">
@@ -313,6 +510,16 @@ function RoleCard({ role }: { role: Role }) {
             </div>
           )}
         </div>
+      )}
+
+      {showEditModal && (
+        <EditPermissionsModal
+          role={role}
+          allPermissions={allPermissions}
+          token={token}
+          onClose={() => setShowEditModal(false)}
+          onSaved={onPermissionsUpdated}
+        />
       )}
     </div>
   )
@@ -474,7 +681,13 @@ export function RolesPage() {
         {rolesStatus === "success" && roles && roles.length > 0 && (
           <div className="space-y-2">
             {roles.map((role) => (
-              <RoleCard key={role.role_id} role={role} />
+              <RoleCard
+                key={role.role_id}
+                role={role}
+                allPermissions={permissions ?? []}
+                token={token}
+                onPermissionsUpdated={refetchRoles}
+              />
             ))}
           </div>
         )}

@@ -1,298 +1,161 @@
-# Scripts de Sincronización con Git y Despliegue
+# Scripts del Proyecto — Inventario y Referencia
 
-**Propósito:** Definir los scripts que permiten:
-- Actualizar el repositorio local desde el remoto (pull seguro + rebuild).
-- Enviar cambios locales al repositorio remoto (commit + push controlado).
-- Desplegar/actualizar la aplicación en contenedores.
-
-Todos viven en `scripts/` y son ejecutables (`chmod +x`).
+Todos los scripts viven en `scripts/`. Se ejecutan desde la raíz del repositorio.
 
 ---
 
-## 1. Estructura de Directorios
+## Inventario actual
 
-```
-scripts/
-├── update-repo.sh            # Pull del remoto, rebuild, migrate, reiniciar
-├── push-repo.sh              # Commit + push al remoto (con verificaciones)
-├── deploy.sh                 # Despliegue en servidor (prod)
-├── backup-db.sh              # Backup de PostgreSQL
-├── restore-db.sh             # Restauración de backup
-├── rotate-secrets.sh         # Rotación de JWT_SECRET / tokens
-├── update-cf-ips.sh          # Refresca IPs de Cloudflare en Nginx
-├── init-project.sh           # Setup inicial (primer arranque)
-├── export-n8n-flows.sh       # Exporta flujos a automations/n8n_flows
-├── import-n8n-flows.sh       # Importa flujos
-└── lib/
-    ├── common.sh             # Funciones compartidas (log, err, check)
-    └── config.sh             # Carga .env
-```
-
----
-
-## 2. `lib/common.sh`
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-log()  { echo -e "\033[1;34m[INFO]\033[0m  $*"; }
-ok()   { echo -e "\033[1;32m[ OK ]\033[0m  $*"; }
-warn() { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
-err()  { echo -e "\033[1;31m[ERR ]\033[0m  $*" >&2; exit 1; }
-
-require() {
-    command -v "$1" >/dev/null 2>&1 || err "Falta dependencia: $1"
-}
-
-confirm() {
-    read -rp "$1 [y/N] " r
-    [[ "$r" =~ ^[Yy]$ ]]
-}
-```
+| Script | Propósito | Requiere |
+|--------|-----------|----------|
+| `init-project.sh` | **Arranque del proyecto** (bash → delega a init-dev.ps1) | pwsh o bash |
+| `init-dev.ps1` | Implementación PowerShell del arranque completo | pwsh, docker |
+| `stop.sh` | Detiene el stack preservando volúmenes | docker |
+| `setup-db.sh` | Setup BD completo: migraciones + triggers + CSVs + admin | psql, docker |
+| `backup-db.sh` | Backup comprimido de Supabase en `data/backups/` | pg_dump |
+| `restore-db.sh` | Restaura backup en Supabase (más reciente si no se especifica) | psql |
+| `update-safe.sh` | Pipeline prod: pull + backup + build + restore + migrate | psql, pg_dump, docker |
+| `health-check.sh` | Verifica estado de contenedores y endpoints | docker, curl |
+| `pull-auto.sh` / `.ps1` | git pull automático con stash | git |
+| `push-auto-branch.sh` / `.ps1` | Crea rama y hace push automático | git |
+| `supabase-relay.py` | Proxy TCP Supabase → localhost:5433 (necesario en Windows/WSL2) | python3 |
+| `import_sat_catalogs.py` | Importa catálogos SAT desde CSV a Supabase | python3, psycopg3 |
+| `bootstrap_triggers.sql` | DDL de triggers y funciones PostgreSQL | — (aplicado por setup-db.sh) |
+| `lib/common.sh` | Funciones compartidas: `log`, `ok`, `warn`, `err`, `compose_cmd` | — |
 
 ---
 
-## 3. `update-repo.sh` (pull + rebuild)
+## Flujos de uso comunes
 
-```bash
-#!/usr/bin/env bash
-# Actualiza el repositorio local y aplica cambios al entorno
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
+### Iniciar el proyecto (dev)
 
-BRANCH="${1:-main}"
-
-require git
-require docker
-
-log "Verificando estado del repositorio..."
-if [[ -n "$(git status --porcelain)" ]]; then
-    warn "Hay cambios locales sin commitear:"
-    git status --short
-    confirm "¿Continuar? Los cambios se stashearan." || err "Cancelado."
-    git stash push -m "auto-stash-$(date +%s)"
-fi
-
-log "Trayendo cambios del remoto (rama $BRANCH)..."
-git fetch origin
-git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
-ok "Código actualizado."
-
-log "Reconstruyendo imágenes..."
-docker compose build
-
-log "Aplicando migraciones..."
-docker compose up -d postgres redis
-docker compose run --rm backend alembic upgrade head
-
-log "Reiniciando servicios..."
-docker compose up -d
-
-ok "Actualización completada."
-docker compose ps
-```
-
----
-
-## 4. `push-repo.sh` (commit + push seguro)
-
-```bash
-#!/usr/bin/env bash
-# Commitea y hace push al remoto, corriendo lint/tests antes
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
-
-MSG="${1:-}"
-[[ -z "$MSG" ]] && err "Uso: push-repo.sh \"mensaje de commit\""
-
-require git
-
-log "Ejecutando lint/tests antes de push..."
-
-# Backend (si hay cambios)
-if git diff --cached --name-only | grep -q "^backend/"; then
-    docker compose run --rm backend bash -c "ruff check . && pytest -q"
-fi
-
-# Frontend (si hay cambios)
-if git diff --cached --name-only | grep -q "^frontend/"; then
-    docker compose run --rm frontend bash -c "npm run lint && npm run test -- --run"
-fi
-
-ok "Checks pasaron."
-
-log "Agregando archivos..."
-git add -A
-git status --short
-
-confirm "¿Confirmar commit y push?" || err "Cancelado."
-
-git commit -m "$MSG"
-
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-log "Push a origin/$BRANCH..."
-git push origin "$BRANCH"
-
-ok "Push completado."
-```
-
----
-
-## 5. `deploy.sh` (despliegue en servidor)
-
-```bash
-#!/usr/bin/env bash
-# Ejecutar en el servidor de producción
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
-
-PROJECT_DIR="${PROJECT_DIR:-/opt/nexus-ops-rtb}"
-cd "$PROJECT_DIR"
-
-log "Actualizando código..."
-git fetch origin
-git checkout main
-git pull --ff-only origin main
-
-log "Construyendo imágenes de producción..."
-docker compose -f docker-compose.yml -f docker-compose.prod.yml build
-
-log "Aplicando migraciones..."
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm backend alembic upgrade head
-
-log "Levantando servicios..."
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-log "Esperando healthchecks..."
-sleep 10
-curl -fsS http://localhost/api/health || warn "Health endpoint no responde"
-
-ok "Despliegue completado."
-docker compose ps
-```
-
----
-
-## 6. `backup-db.sh`
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
-
-STAMP=$(date +%Y%m%d_%H%M)
-DEST="${BACKUP_DIR:-./database/backups}/nexus_ops_${STAMP}.sql.gz"
-mkdir -p "$(dirname "$DEST")"
-
-log "Dump de PostgreSQL → $DEST"
-docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > "$DEST"
-
-# Retención: 7 diarios + 4 semanales + 6 mensuales
-log "Aplicando política de retención..."
-find "$(dirname "$DEST")" -name "nexus_ops_*.sql.gz" -mtime +60 -delete
-
-ok "Backup listo."
-```
-
----
-
-## 7. `restore-db.sh`
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
-
-FILE="${1:-}"
-[[ -z "$FILE" || ! -f "$FILE" ]] && err "Uso: restore-db.sh <ruta.sql.gz>"
-
-warn "Esto reemplazará el contenido de la base actual."
-confirm "¿Continuar?" || err "Cancelado."
-
-log "Restaurando $FILE..."
-gunzip -c "$FILE" | docker compose exec -T postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB"
-
-ok "Restauración completa."
-```
-
----
-
-## 8. `init-project.sh`
-
-```bash
-#!/usr/bin/env bash
-# Setup inicial en un entorno nuevo
-set -euo pipefail
-source "$(dirname "$0")/lib/common.sh"
-
-log "Verificando .env..."
-[[ ! -f .env ]] && cp .env.example .env && warn "Se copió .env.example → .env. Configúralo antes de continuar."
-
-log "Creando carpetas de datos..."
-mkdir -p data/csv data/reports database/backups automations/n8n_data
-
-log "Levantando infraestructura (postgres, redis)..."
-docker compose up -d postgres redis
-
-log "Esperando a que Postgres esté listo..."
-until docker compose exec -T postgres pg_isready -U "${POSTGRES_USER:-nexus}" >/dev/null 2>&1; do
-    sleep 2
-done
-
-log "Construyendo imágenes..."
-docker compose build
-
-log "Aplicando migraciones..."
-docker compose run --rm backend alembic upgrade head
-
-log "Cargando seeds (opcional)..."
-confirm "¿Cargar datos de seed?" && docker compose run --rm backend python -m app.scripts.seed
-
-log "Importando flujos de n8n..."
-./scripts/import-n8n-flows.sh || warn "No se pudieron importar flujos (ver n8n)."
-
-log "Arrancando todos los servicios..."
-docker compose up -d
-
-ok "Proyecto inicializado. Accede en http://localhost"
-```
-
----
-
-## 9. `export-n8n-flows.sh` y `import-n8n-flows.sh`
-
-```bash
-# export
-docker compose exec n8n n8n export:workflow --all --output=/flows/
+```powershell
+# Windows — PowerShell (recomendado)
+.\scripts\init-dev.ps1
+.\scripts\init-dev.ps1 -SkipRelay       # relay ya corriendo en otra terminal
+.\scripts\init-dev.ps1 -WithFrontend    # incluye frontend
+.\scripts\init-dev.ps1 -SkipMigrations  # solo docker, sin alembic
 ```
 
 ```bash
-# import
-docker compose exec n8n n8n import:workflow --separate --input=/flows/
+# bash / Git Bash
+bash ./scripts/init-project.sh
+```
+
+El script:
+1. Verifica `.env` (copia `.env.example` si no existe).
+2. Arranca `supabase-relay.py` en nueva ventana (puerto 5433) si el puerto no está activo.
+3. Levanta `redis` + `backend` con `docker compose up -d --build`.
+4. Espera a que `/health` responda.
+5. Ejecuta `alembic upgrade head`.
+
+### Detener el stack
+
+```bash
+bash ./scripts/stop.sh        # dev
+bash ./scripts/stop.sh prod   # prod
+```
+
+### Reconstruir solo la app (sin tocar BD)
+
+```bash
+docker compose up -d --build backend frontend
+```
+
+La BD está en Supabase — no se ve afectada por ningún rebuild de contenedores.
+
+### Setup de BD desde cero
+
+```bash
+bash ./scripts/setup-db.sh
+```
+
+Pasos que ejecuta:
+1. Verifica conectividad con Supabase.
+2. Levanta Redis si no está corriendo.
+3. `alembic upgrade head`.
+4. Aplica `bootstrap_triggers.sql` (triggers y funciones PL/pgSQL).
+5. Sincroniza CSVs con `sync_csv_data.py --force`.
+6. Crea/actualiza usuario administrador.
+
+Requiere `psql` instalado localmente y `SUPABASE_HOST` configurado en `.env`.
+
+### Backup y restore
+
+```bash
+bash ./scripts/backup-db.sh                        # backup con timestamp
+bash ./scripts/backup-db.sh nombre_custom          # nombre personalizado
+bash ./scripts/restore-db.sh                       # restaura el más reciente
+bash ./scripts/restore-db.sh data/backups/foo.sql.gz
+AUTO_CONFIRM=true bash ./scripts/restore-db.sh     # sin prompt (scripts CI)
+```
+
+### Actualización de producción
+
+```bash
+bash ./scripts/update-safe.sh           # actualización completa
+bash ./scripts/update-safe.sh --dry-run # simula sin ejecutar
+```
+
+Pasos que ejecuta:
+1. `git pull` (con stash si hay cambios locales).
+2. Backup de Supabase.
+3. `docker compose build backend frontend`.
+4. DROP/CREATE schema public + restaurar backup.
+5. `alembic upgrade head`.
+6. `docker compose up -d --force-recreate backend frontend` + restart proxy.
+7. Health check final.
+
+### Health check manual
+
+```bash
+bash ./scripts/health-check.sh        # dev
+bash ./scripts/health-check.sh prod   # prod
+```
+
+Verifica: Redis, Backend, Frontend, n8n, Proxy (+ Cloudflared en prod).  
+Nota: no verifica postgres local — la BD está en Supabase.
+
+---
+
+## lib/common.sh — funciones disponibles
+
+```bash
+log "mensaje"          # [INFO] en stdout
+ok "mensaje"           # [ OK ] en stdout
+warn "mensaje"         # [WARN] en stderr
+err "mensaje"          # [ERR ] en stderr + exit 1
+
+require docker         # verifica que el comando existe
+require_env_file       # verifica que existe .env
+
+env_get CLAVE default  # lee variable de .env
+
+compose_cmd dev up -d  # docker compose [-f ...] args
+                       # dev  → solo docker-compose.yml
+                       # prod → docker-compose.yml + docker-compose.prod.yml
+
+wait_for_supabase HOST USER PASS DB [TIMEOUT]  # espera conexión postgres
 ```
 
 ---
 
-## 10. Flujo Recomendado para Diego
+## Conventional Commits
 
-### En su máquina de desarrollo
-1. Programar cambios.
-2. `./scripts/push-repo.sh "feat: nueva gráfica de gastos"`.
-3. En el servidor: `./scripts/deploy.sh` (o vía GitHub Action).
+Los commits de este proyecto siguen la convención:
 
-### Para sincronizar desde el remoto
-- En cualquier máquina con el repo: `./scripts/update-repo.sh`.
-
-### Para hacer backup antes de un cambio grande
-- `./scripts/backup-db.sh` antes del deploy.
+```
+feat(scope):  nueva funcionalidad
+fix(scope):   corrección de bug
+docs(scope):  solo documentación
+refactor:     refactoring sin cambio de comportamiento
+chore:        tareas de mantenimiento (scripts, deps)
+```
 
 ---
 
-## 11. Buenas Prácticas
+## Notas de seguridad
 
-- No ejecutar `push-repo.sh` sin primero haber corrido `update-repo.sh` para evitar conflictos.
-- Los scripts no deben borrar datos sin confirmación (`confirm` de `lib/common.sh`).
-- Nunca pushear `.env` aunque se modifique `.env.example` primero.
-- Los commits deben seguir Conventional Commits (`feat:`, `fix:`, `docs:`, etc.) para que los changelogs sean automatizables.
+- Nunca commitear `.env` (está en `.gitignore`).
+- `update-safe.sh` hace `DROP SCHEMA public CASCADE` en Supabase antes de restaurar — siempre genera backup previo.
+- `restore-db.sh` pide confirmación interactiva excepto con `AUTO_CONFIRM=true`.
