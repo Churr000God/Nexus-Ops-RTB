@@ -9,7 +9,9 @@ import type {
   CustomerTaxDataCreate,
   CustomerUpdate,
   SATCfdiUse,
+  SATProductKey,
   SATTaxRegime,
+  SATUnitKey,
   SupplierContact,
   SupplierCreate,
   SupplierDetail,
@@ -47,6 +49,16 @@ export const clientesProveedoresService = {
 
   listUsosCfdi(token: string | null, signal?: AbortSignal) {
     return requestJson<SATCfdiUse[]>("/api/sat/usos-cfdi", { token, signal })
+  },
+
+  searchSatProductKeys(token: string | null, q: string, limit = 100, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ q, limit: String(limit) })
+    return requestJson<SATProductKey[]>(`/api/sat/claves-producto?${qs}`, { token, signal })
+  },
+
+  searchSatUnitKeys(token: string | null, q: string, limit = 100, signal?: AbortSignal) {
+    const qs = new URLSearchParams({ q, limit: String(limit) })
+    return requestJson<SATUnitKey[]>(`/api/sat/claves-unidad?${qs}`, { token, signal })
   },
 
   // ─── Clientes ──────────────────────────────────────────────────────────

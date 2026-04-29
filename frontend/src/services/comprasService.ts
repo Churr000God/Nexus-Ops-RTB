@@ -25,12 +25,12 @@ const GASTOS = "/api/gastos"
 
 // ── Catálogos SAT ────────────────────────────────────────────────────────────
 
-export function getSatPaymentForms(signal?: AbortSignal): Promise<SatPaymentForm[]> {
-  return requestJson(`${BASE}/sat/formas-pago`, { signal })
+export function getSatPaymentForms(token: string | null, signal?: AbortSignal): Promise<SatPaymentForm[]> {
+  return requestJson(`${BASE}/sat/formas-pago`, { token, signal })
 }
 
-export function getSatPaymentMethods(signal?: AbortSignal): Promise<SatPaymentMethod[]> {
-  return requestJson(`${BASE}/sat/metodos-pago`, { signal })
+export function getSatPaymentMethods(token: string | null, signal?: AbortSignal): Promise<SatPaymentMethod[]> {
+  return requestJson(`${BASE}/sat/metodos-pago`, { token, signal })
 }
 
 // ── Purchase Requests ────────────────────────────────────────────────────────

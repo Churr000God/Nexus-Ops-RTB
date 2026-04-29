@@ -1,3 +1,17 @@
+export type SATProductKey = {
+  id: string
+  code: string
+  description: string
+  is_active: boolean
+}
+
+export type SATUnitKey = {
+  id: string
+  code: string
+  description: string
+  is_active: boolean
+}
+
 export type SATTaxRegime = {
   regime_id: number
   code: string
