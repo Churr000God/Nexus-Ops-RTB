@@ -345,6 +345,53 @@ async def add_supplier_contact(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Proveedores — datos fiscales (edit)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@proveedores_router.put(
+    "/{supplier_id}/tax-data/{tax_data_id}",
+    response_model=SupplierTaxDataRead,
+)
+async def update_supplier_tax_data(
+    supplier_id: int,
+    tax_data_id: int,
+    data: SupplierTaxDataCreate,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.manage")),
+) -> SupplierTaxDataRead:
+    result = await svc.update_supplier_tax_data(supplier_id, tax_data_id, data)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Datos fiscales no encontrados"
+        )
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Proveedores — contactos (delete)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@proveedores_router.delete(
+    "/{supplier_id}/contacts/{contact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_supplier_contact(
+    supplier_id: int,
+    contact_id: int,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.manage")),
+) -> Response:
+    deleted = await svc.delete_supplier_contact(supplier_id, contact_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Contacto no encontrado"
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Proveedores — catálogo de productos
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -438,6 +438,45 @@ class ClientesProveedoresService:
         await self.db.refresh(contact)
         return SupplierContactRead.model_validate(contact)
 
+    async def delete_supplier_contact(
+        self, supplier_id: int, contact_id: int
+    ) -> bool:
+        contact = (
+            await self.db.execute(
+                select(SupplierContact).where(
+                    SupplierContact.contact_id == contact_id,
+                    SupplierContact.supplier_id == supplier_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if contact is None:
+            return False
+        await self.db.delete(contact)
+        await self.db.commit()
+        return True
+
+    async def update_supplier_tax_data(
+        self, supplier_id: int, tax_data_id: int, data: SupplierTaxDataCreate
+    ) -> SupplierTaxDataRead | None:
+        td = (
+            await self.db.execute(
+                select(SupplierTaxData).where(
+                    SupplierTaxData.tax_data_id == tax_data_id,
+                    SupplierTaxData.supplier_id == supplier_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if td is None:
+            return None
+        td.rfc = data.rfc.upper()
+        td.legal_name = data.legal_name
+        td.tax_regime_id = data.tax_regime_id
+        td.zip_code = data.zip_code
+        td.is_default = data.is_default
+        await self.db.commit()
+        await self.db.refresh(td)
+        return SupplierTaxDataRead.model_validate(td)
+
     async def add_supplier_product(
         self, supplier_id: int, data: SupplierProductCreate
     ) -> SupplierProductRead:

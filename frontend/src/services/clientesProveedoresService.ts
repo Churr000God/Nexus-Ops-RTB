@@ -198,6 +198,26 @@ export const clientesProveedoresService = {
     })
   },
 
+  deleteSupplierContact(token: string | null, supplierId: number, contactId: number) {
+    return requestJson<void>(`/api/proveedores/${supplierId}/contacts/${contactId}`, {
+      method: "DELETE",
+      token,
+    })
+  },
+
+  updateSupplierTaxData(
+    token: string | null,
+    supplierId: number,
+    taxDataId: number,
+    data: SupplierTaxDataCreate
+  ) {
+    return requestJson<SupplierTaxData>(`/api/proveedores/${supplierId}/tax-data/${taxDataId}`, {
+      method: "PUT",
+      body: data,
+      token,
+    })
+  },
+
   addSupplierProduct(token: string | null, supplierId: number, data: SupplierProductCreate) {
     return requestJson<SupplierProduct>(`/api/proveedores/${supplierId}/products`, {
       method: "POST",

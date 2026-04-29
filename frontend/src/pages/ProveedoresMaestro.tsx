@@ -3,9 +3,11 @@ import {
   CheckCircle2,
   DollarSign,
   Package,
+  Pencil,
   Plus,
   Search,
   Star,
+  Trash2,
   Truck,
   X,
   XCircle,
@@ -205,16 +207,24 @@ type DetailPanelProps = {
   token: string | null
   onClose: () => void
   onUpdated: () => void
+  onEdit: () => void
 }
 
-function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: DetailPanelProps) {
+function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated, onEdit }: DetailPanelProps) {
   const [tab, setTab] = useState<SupplierTab>("fiscal")
   const [showTaxForm, setShowTaxForm] = useState(false)
+  const [editingTaxId, setEditingTaxId] = useState<number | null>(null)
   const [showContactForm, setShowContactForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [priceProduct, setPriceProduct] = useState<SupplierProduct | null>(null)
 
   const [taxForm, setTaxForm] = useState<SupplierTaxDataCreate>({
+    rfc: "",
+    legal_name: "",
+    zip_code: "",
+    is_default: true,
+  })
+  const [editTaxForm, setEditTaxForm] = useState<SupplierTaxDataCreate>({
     rfc: "",
     legal_name: "",
     zip_code: "",
@@ -259,6 +269,49 @@ function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
       onUpdated()
     } catch {
       toast.error("Error al guardar contacto")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEditTax(td: { tax_data_id: number; rfc: string; legal_name: string; zip_code: string; is_default: boolean }) {
+    setEditTaxForm({
+      rfc: td.rfc,
+      legal_name: td.legal_name,
+      zip_code: td.zip_code,
+      is_default: td.is_default,
+    })
+    setEditingTaxId(td.tax_data_id)
+  }
+
+  async function handleUpdateTaxData() {
+    if (editingTaxId == null) return
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateSupplierTaxData(
+        token,
+        detail.supplier_id,
+        editingTaxId,
+        editTaxForm
+      )
+      toast.success("Datos fiscales actualizados")
+      setEditingTaxId(null)
+      onUpdated()
+    } catch {
+      toast.error("Error al actualizar datos fiscales")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteContact(contactId: number) {
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.deleteSupplierContact(token, detail.supplier_id, contactId)
+      toast.success("Contacto eliminado")
+      onUpdated()
+    } catch {
+      toast.error("Error al eliminar contacto")
     } finally {
       setSubmitting(false)
     }
@@ -312,15 +365,26 @@ function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {canManage && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleToggleActive}
-                disabled={submitting}
-                className="h-7 text-xs"
-              >
-                {detail.is_active ? "Desactivar" : "Activar"}
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onEdit}
+                  className="h-7 gap-1 text-xs"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleActive}
+                  disabled={submitting}
+                  className="h-7 text-xs"
+                >
+                  {detail.is_active ? "Desactivar" : "Activar"}
+                </Button>
+              </>
             )}
             <button
               onClick={onClose}
@@ -357,20 +421,85 @@ function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
                 <p className="text-sm text-muted-foreground">Sin datos fiscales registrados.</p>
               )}
               {detail.tax_data.map((td) => (
-                <div
-                  key={td.tax_data_id}
-                  className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-semibold">{td.rfc}</span>
-                    {td.is_default && (
-                      <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                        Principal
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm">{td.legal_name}</p>
-                  <p className="text-xs text-muted-foreground">CP: {td.zip_code}</p>
+                <div key={td.tax_data_id} className="rounded-[var(--radius-md)] border bg-accent/20 p-4">
+                  {editingTaxId === td.tax_data_id ? (
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        Editar RFC
+                      </p>
+                      <input
+                        className={inputCls}
+                        placeholder="RFC (12 o 13 caracteres)"
+                        maxLength={13}
+                        value={editTaxForm.rfc}
+                        onChange={(e) =>
+                          setEditTaxForm((p) => ({ ...p, rfc: e.target.value.toUpperCase() }))
+                        }
+                      />
+                      <input
+                        className={inputCls}
+                        placeholder="Razón social fiscal"
+                        value={editTaxForm.legal_name}
+                        onChange={(e) =>
+                          setEditTaxForm((p) => ({ ...p, legal_name: e.target.value }))
+                        }
+                      />
+                      <input
+                        className={inputCls}
+                        placeholder="Código Postal"
+                        maxLength={10}
+                        value={editTaxForm.zip_code}
+                        onChange={(e) =>
+                          setEditTaxForm((p) => ({ ...p, zip_code: e.target.value }))
+                        }
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleUpdateTaxData}
+                          disabled={
+                            submitting ||
+                            editTaxForm.rfc.length < 12 ||
+                            !editTaxForm.legal_name ||
+                            !editTaxForm.zip_code
+                          }
+                        >
+                          Guardar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingTaxId(null)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-semibold">{td.rfc}</span>
+                          {td.is_default && (
+                            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                              Principal
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm">{td.legal_name}</p>
+                        <p className="text-xs text-muted-foreground">CP: {td.zip_code}</p>
+                      </div>
+                      {canManage && (
+                        <button
+                          onClick={() => startEditTax(td)}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          title="Editar RFC"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               {showTaxForm && (
@@ -462,6 +591,16 @@ function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
                         <p className="text-xs text-muted-foreground">{c.phone}</p>
                       )}
                     </div>
+                    {canManage && (
+                      <button
+                        onClick={() => handleDeleteContact(c.contact_id)}
+                        disabled={submitting}
+                        className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                        title="Eliminar contacto"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -602,6 +741,197 @@ function SupplierDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
         />
       )}
     </>
+  )
+}
+
+// ─── Edit supplier modal ───────────────────────────────────────────────────
+
+type EditSupplierModalProps = {
+  supplier: SupplierDetail
+  token: string | null
+  onClose: () => void
+  onUpdated: () => void
+}
+
+function EditSupplierModal({ supplier, token, onClose, onUpdated }: EditSupplierModalProps) {
+  const [form, setForm] = useState({
+    business_name: supplier.business_name,
+    supplier_type: supplier.supplier_type,
+    locality: supplier.locality,
+    is_occasional: supplier.is_occasional,
+    payment_terms_days: supplier.payment_terms_days,
+    avg_payment_time_days: supplier.avg_payment_time_days ?? ("" as number | ""),
+    currency: supplier.currency,
+    notes: supplier.notes ?? "",
+  })
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateSupplier(token, supplier.supplier_id, {
+        business_name: form.business_name || undefined,
+        supplier_type: form.supplier_type,
+        locality: form.locality,
+        is_occasional: form.is_occasional,
+        payment_terms_days: Number(form.payment_terms_days),
+        avg_payment_time_days:
+          form.avg_payment_time_days !== "" ? Number(form.avg_payment_time_days) : null,
+        currency: form.currency,
+        notes: form.notes || null,
+      })
+      toast.success("Proveedor actualizado")
+      onUpdated()
+      onClose()
+    } catch {
+      toast.error("Error al actualizar proveedor")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="surface-card relative z-10 w-full max-w-md space-y-5 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Editar Proveedor</h2>
+            <p className="text-xs text-muted-foreground font-mono">{supplier.code}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Nombre comercial *
+            </label>
+            <input
+              className={inputCls}
+              placeholder="Nombre comercial"
+              value={form.business_name}
+              onChange={(e) => setForm((p) => ({ ...p, business_name: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Tipo
+              </label>
+              <select
+                className={inputCls}
+                value={form.supplier_type}
+                onChange={(e) => setForm((p) => ({ ...p, supplier_type: e.target.value }))}
+              >
+                <option value="GOODS">Bienes</option>
+                <option value="SERVICES">Servicios</option>
+                <option value="BOTH">Mixto</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Localidad
+              </label>
+              <select
+                className={inputCls}
+                value={form.locality}
+                onChange={(e) => setForm((p) => ({ ...p, locality: e.target.value }))}
+              >
+                <option value="LOCAL">Nacional</option>
+                <option value="FOREIGN">Extranjero</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Plazo de pago (días)
+              </label>
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                max={365}
+                value={form.payment_terms_days}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, payment_terms_days: Number(e.target.value) }))
+                }
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                TPP promedio (días)
+              </label>
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                max={365}
+                placeholder="Opcional"
+                value={form.avg_payment_time_days}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    avg_payment_time_days: e.target.value === "" ? "" : Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Moneda
+            </label>
+            <select
+              className={inputCls}
+              value={form.currency}
+              onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}
+            >
+              <option value="MXN">MXN</option>
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Notas
+            </label>
+            <textarea
+              className={cn(inputCls, "min-h-[72px] resize-y")}
+              placeholder="Notas internas…"
+              value={form.notes}
+              onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+            />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.is_occasional}
+              onChange={(e) => setForm((p) => ({ ...p, is_occasional: e.target.checked }))}
+              className="h-4 w-4"
+            />
+            Proveedor ocasional
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={submitting || !form.business_name}
+          >
+            Guardar cambios
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -779,6 +1109,7 @@ export function ProveedoresMaestroPage() {
   const [detail, setDetail] = useState<SupplierDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const fetchSuppliers = useCallback(
     (signal: AbortSignal) =>
@@ -990,6 +1321,7 @@ export function ProveedoresMaestroPage() {
                   setDetail(null)
                 }}
                 onUpdated={handleDetailUpdated}
+                onEdit={() => setShowEditModal(true)}
               />
             )}
           </div>
@@ -1001,6 +1333,19 @@ export function ProveedoresMaestroPage() {
           token={token}
           onClose={() => setShowNewModal(false)}
           onCreated={refetch}
+        />
+      )}
+
+      {showEditModal && detail && (
+        <EditSupplierModal
+          supplier={detail}
+          token={token}
+          onClose={() => setShowEditModal(false)}
+          onUpdated={() => {
+            setShowEditModal(false)
+            handleDetailUpdated()
+            refetch()
+          }}
         />
       )}
     </div>
