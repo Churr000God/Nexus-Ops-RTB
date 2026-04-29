@@ -8,9 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, require_permission
 from app.models.user_model import User
 from app.schemas.auth_schema import RegisterRequest, UserResponse
-from app.schemas.user_schema import AssignRoleRequest, UserUpdateSchema
+from app.schemas.user_schema import AssignRoleRequest, ChangePasswordRequest, UserUpdateSchema
 from app.services.auth_service import AuthService, UserAlreadyExistsError
-from app.services.user_service import RoleNotFoundError, UserNotFoundError, UserService
+from app.services.user_service import (
+    CannotChangeAdminPasswordError,
+    RoleNotFoundError,
+    UserNotFoundError,
+    UserService,
+)
 
 router = APIRouter(prefix="/api/usuarios", tags=["usuarios"])
 
@@ -71,6 +76,28 @@ async def update_user(
         ) from exc
     roles = await service.get_user_roles(user_id)
     return _user_response(user, roles)
+
+
+@router.patch("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_user_password(
+    user_id: UUID,
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(require_permission("user.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo administradores pueden cambiar contraseñas",
+        )
+    service = UserService(db)
+    try:
+        await service.change_password(user_id, payload.new_password)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except CannotChangeAdminPasswordError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{user_id}/roles", response_model=UserResponse)

@@ -2,6 +2,25 @@ import { requestJson } from "@/lib/http"
 import type { AuditLogPage, AuditLogParams, Permission, Role } from "@/types/admin"
 import type { User } from "@/types/auth"
 
+export type CreateUserPayload = {
+  email: string
+  full_name: string
+  password: string
+  role: "admin" | "operativo" | "lectura"
+}
+
+export type UpdateUserPayload = {
+  full_name?: string
+  is_active?: boolean
+}
+
+export type CreateRolePayload = {
+  code: string
+  name: string
+  description?: string
+  permission_codes: string[]
+}
+
 export const adminService = {
   listUsers(token: string | null, signal?: AbortSignal) {
     return requestJson<User[]>("/api/usuarios", { token, signal })
@@ -29,6 +48,38 @@ export const adminService = {
       `/api/admin/audit-log${query ? `?${query}` : ""}`,
       { token, signal }
     )
+  },
+
+  createRole(token: string | null, payload: CreateRolePayload) {
+    return requestJson<Role>("/api/admin/roles", {
+      method: "POST",
+      body: payload,
+      token,
+    })
+  },
+
+  createUser(token: string | null, payload: CreateUserPayload) {
+    return requestJson<User>("/api/usuarios", {
+      method: "POST",
+      body: payload,
+      token,
+    })
+  },
+
+  updateUser(token: string | null, userId: string, payload: UpdateUserPayload) {
+    return requestJson<User>(`/api/usuarios/${userId}`, {
+      method: "PATCH",
+      body: payload,
+      token,
+    })
+  },
+
+  changePassword(token: string | null, userId: string, newPassword: string) {
+    return requestJson<void>(`/api/usuarios/${userId}/password`, {
+      method: "PATCH",
+      body: { new_password: newPassword },
+      token,
+    })
   },
 
   assignRole(token: string | null, userId: string, roleCode: string) {

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user_model import Role, User, UserRole
 from app.schemas.user_schema import UserUpdateSchema
+from app.services.auth_service import AuthService
 
 
 class UserNotFoundError(Exception):
@@ -14,6 +15,10 @@ class UserNotFoundError(Exception):
 
 
 class RoleNotFoundError(Exception):
+    pass
+
+
+class CannotChangeAdminPasswordError(Exception):
     pass
 
 
@@ -94,6 +99,17 @@ class UserService:
             return
 
         self.db.add(UserRole(user_id=user_id, role_id=role.role_id))
+        await self.db.commit()
+
+    async def change_password(self, user_id: UUID, new_password: str) -> None:
+        user = await self.db.get(User, user_id)
+        if user is None:
+            raise UserNotFoundError(f"Usuario {user_id} no encontrado")
+        if user.role == "admin":
+            raise CannotChangeAdminPasswordError(
+                "No se puede cambiar la contraseña de un usuario administrador"
+            )
+        user.hashed_password = AuthService.hash_password(new_password)
         await self.db.commit()
 
     async def revoke_role(self, user_id: UUID, role_code: str) -> None:
