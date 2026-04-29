@@ -1,4 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom"
+import { ForgotPasswordPage } from "@/pages/ForgotPassword"
+import { ResetPasswordPage } from "@/pages/ResetPassword"
 
 import { AppShell } from "@/components/layout/AppShell"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -104,6 +106,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
           <Route index element={<HomePage />} />

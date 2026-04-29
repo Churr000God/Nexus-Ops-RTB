@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     MAILERSEND_API_TOKEN: str | None = None
     MAILERSEND_FROM_EMAIL: str = "noreply@refacrtb.com.mx"
     MAILERSEND_FROM_NAME: str = "Nexus Ops RTB"
+    FRONTEND_URL: str = "http://localhost:5173"
 
     CSV_DIR: str = "/data/csv"
     REPORTS_DIR: str = "/data/reports"

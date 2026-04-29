@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.user_model import (
+    PasswordResetToken,
     Permission,
     RefreshToken,
     Role,
@@ -37,6 +38,10 @@ class RefreshTokenError(AuthError):
 
 
 class UserAlreadyExistsError(AuthError):
+    pass
+
+
+class WrongCurrentPasswordError(AuthError):
     pass
 
 
@@ -123,21 +128,43 @@ class AuthService:
             payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
         )
 
-    async def issue_refresh_token(self, user_id: UUID) -> str:
+    async def issue_refresh_token(
+        self,
+        user_id: UUID,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
+    ) -> str:
         raw_token = secrets.token_urlsafe(48)
         token_hash = self.hash_token(raw_token)
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        # Limpiar tokens expirados
+        await self.db.execute(
+            delete(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.expires_at <= now,
+            )
         )
 
-        await self.db.execute(
-            delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        # Máximo 5 sesiones activas: eliminar la más antigua si se supera
+        active = list(
+            await self.db.scalars(
+                select(RefreshToken)
+                .where(RefreshToken.user_id == user_id)
+                .order_by(RefreshToken.created_at.asc())
+            )
         )
+        if len(active) >= 5:
+            await self.db.delete(active[0])
+
         self.db.add(
             RefreshToken(
                 user_id=user_id,
                 token_hash=token_hash,
                 expires_at=expires_at,
+                user_agent=user_agent,
+                ip_address=ip_address,
             )
         )
         await self.db.commit()
@@ -163,10 +190,10 @@ class AuthService:
             raise RefreshTokenError("Usuario invalido")
 
         new_token = secrets.token_urlsafe(48)
+        now = datetime.now(timezone.utc)
         token_record.token_hash = self.hash_token(new_token)
-        token_record.expires_at = datetime.now(timezone.utc) + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
+        token_record.expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        token_record.last_used_at = now
         await self.db.commit()
         return user, new_token
 
@@ -175,6 +202,103 @@ class AuthService:
         await self.db.execute(
             delete(RefreshToken).where(RefreshToken.token_hash == token_hash)
         )
+        await self.db.commit()
+
+    async def change_own_password(
+        self, user_id: UUID, current_password: str, new_password: str
+    ) -> None:
+        user = await self.db.get(User, user_id)
+        if user is None or not self.verify_password(current_password, user.hashed_password):
+            raise WrongCurrentPasswordError("Contraseña actual incorrecta")
+        user.hashed_password = self.hash_password(new_password)
+        await self.db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+        await self.db.commit()
+
+    async def list_sessions(self, user_id: UUID) -> list[RefreshToken]:
+        result = await self.db.scalars(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+        return list(result.all())
+
+    async def revoke_session(self, session_id: UUID, user_id: UUID) -> None:
+        token = await self.db.get(RefreshToken, session_id)
+        if token is None or token.user_id != user_id:
+            return
+        await self.db.delete(token)
+        await self.db.commit()
+
+    async def create_password_reset_token(self, email: str) -> tuple[User, str] | None:
+        """Genera token de reset. Devuelve (user, raw_token) o None si el email no existe."""
+        user = await self.db.scalar(select(User).where(User.email == email))
+        if user is None or not user.is_active:
+            return None
+
+        # Eliminar tokens previos del usuario
+        await self.db.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+        )
+
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = self.hash_token(raw_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+        self.db.add(
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+        )
+        await self.db.commit()
+        return user, raw_token
+
+    async def consume_password_reset_token(
+        self, raw_token: str, new_password: str
+    ) -> None:
+        """Valida el token, actualiza la contraseña e invalida todas las sesiones."""
+        token_hash = self.hash_token(raw_token)
+        record = await self.db.scalar(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash
+            )
+        )
+        if record is None:
+            raise InvalidCredentialsError("El enlace de restablecimiento no es válido")
+        if record.expires_at <= datetime.now(timezone.utc):
+            await self.db.delete(record)
+            await self.db.commit()
+            raise InvalidCredentialsError("El enlace de restablecimiento ha expirado")
+
+        user = await self.db.get(User, record.user_id)
+        if user is None or not user.is_active:
+            raise InvalidCredentialsError("Usuario no válido")
+
+        user.hashed_password = self.hash_password(new_password)
+        await self.db.delete(record)
+        await self.db.execute(
+            delete(RefreshToken).where(RefreshToken.user_id == user.id)
+        )
+        await self.db.commit()
+
+    async def revoke_all_except(
+        self, user_id: UUID, current_token_hash: str | None
+    ) -> None:
+        if current_token_hash:
+            await self.db.execute(
+                delete(RefreshToken).where(
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.token_hash != current_token_hash,
+                )
+            )
+        else:
+            await self.db.execute(
+                delete(RefreshToken).where(RefreshToken.user_id == user_id)
+            )
         await self.db.commit()
 
     @staticmethod
