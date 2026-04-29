@@ -213,6 +213,16 @@ class ProductRead(BaseModel):
     category: str | None
     sat_product_key_id: UUID | None
     sat_unit_id: UUID | None
+    status: str | None
+    sale_type: str | None = None
+    package_size: Decimal | None
+    warehouse_location: str | None = None
+    image_url: str | None = None
+    datasheet_url: str | None = None
+    unit_price: Decimal | None = None
+    unit_price_base: Decimal | None = None
+    purchase_cost_parts: Decimal | None = None
+    purchase_cost_ariba: Decimal | None = None
     is_configurable: bool
     is_assembled: bool
     pricing_strategy: str
@@ -222,9 +232,13 @@ class ProductRead(BaseModel):
     current_avg_cost_updated_at: datetime | None
     suggested_price: Decimal | None = None
     is_active: bool | None = None
-    status: str | None
     min_stock: Decimal | None = None
-    package_size: Decimal | None
+    theoretical_outflow: Decimal | None = None
+    real_outflow: Decimal | None = None
+    demand_90_days: Decimal | None = None
+    demand_180_days: Decimal | None = None
+    total_accumulated_sales: Decimal | None = None
+    last_outbound_date: date | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -242,18 +256,24 @@ class ProductCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     brand_id: UUID | None = None
-    category_id: UUID
+    category_id: UUID | None = None
     sat_product_key_id: UUID | None = None
     sat_unit_id: UUID | None = None
+    status: str | None = None
+    sale_type: str | None = None
+    package_size: Decimal | None = None
+    warehouse_location: str | None = None
+    image_url: str | None = None
+    datasheet_url: str | None = None
+    unit_price: Decimal | None = None
+    purchase_cost_parts: Decimal | None = None
+    purchase_cost_ariba: Decimal | None = None
     is_configurable: bool = False
     is_assembled: bool = False
     pricing_strategy: str = Field(
         default="MOVING_AVG", pattern="^(MOVING_AVG|PASSTHROUGH)$"
     )
     moving_avg_months: int = Field(default=6, ge=1, le=60)
-    package_size: Decimal | None = None
-    status: str | None = None
-    warehouse_location: str | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -263,15 +283,21 @@ class ProductUpdate(BaseModel):
     category_id: UUID | None = None
     sat_product_key_id: UUID | None = None
     sat_unit_id: UUID | None = None
+    status: str | None = None
+    sale_type: str | None = None
+    package_size: Decimal | None = None
+    warehouse_location: str | None = None
+    image_url: str | None = None
+    datasheet_url: str | None = None
+    unit_price: Decimal | None = None
+    purchase_cost_parts: Decimal | None = None
+    purchase_cost_ariba: Decimal | None = None
     is_configurable: bool | None = None
     is_assembled: bool | None = None
     pricing_strategy: str | None = Field(
         default=None, pattern="^(MOVING_AVG|PASSTHROUGH)$"
     )
     moving_avg_months: int | None = Field(default=None, ge=1, le=60)
-    package_size: Decimal | None = None
-    status: str | None = None
-    warehouse_location: str | None = None
     is_active: bool | None = None
 
 

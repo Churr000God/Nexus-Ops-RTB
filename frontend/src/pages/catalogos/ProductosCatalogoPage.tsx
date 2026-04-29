@@ -1,10 +1,904 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  ExternalLink,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react"
+import { toast } from "sonner"
+
+import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { StatusBadge } from "@/components/common/StatusBadge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { useApi } from "@/hooks/useApi"
+import { cn, formatCurrencyMXN } from "@/lib/utils"
+import { productosService } from "@/services/productosService"
+import { useAuthStore } from "@/stores/authStore"
+import type { BrandRead, CategoryRead, ProductCreate, ProductRead, ProductUpdate } from "@/types/productos"
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" })
+
+function fmtPrice(n: number | null | undefined) {
+  return n != null ? fmt.format(n) : "—"
+}
+
+const STATUS_OPTIONS = [
+  "Activo",
+  "Dado de Baja",
+  "Agotado",
+  "Próximamente",
+  "Descontinuado",
+  "Pendiente",
+  "Inactivo",
+]
+
+const SALE_TYPE_OPTIONS = [
+  "Por Pieza",
+  "Por Caja",
+  "Ambos",
+  "Blister",
+  "Por Paquete",
+  "Por Juego",
+  "Por Bolsa",
+]
+
+function StatusChip({ status }: { status: string | null }) {
+  if (!status) return <span className="text-white/30">—</span>
+  const active = !["Dado de Baja", "Descontinuado", "Inactivo"].includes(status)
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        active
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          : "border-red-500/30 bg-red-500/10 text-red-400",
+      )}
+    >
+      {status}
+    </span>
+  )
+}
+
+function flattenCategories(nodes: CategoryRead[], depth = 0): { id: string; label: string }[] {
+  return nodes.flatMap((n) => [
+    { id: n.id, label: "  ".repeat(depth) + n.name },
+    ...flattenCategories(n.children, depth + 1),
+  ])
+}
+
+// ── Form modal (create / edit) ─────────────────────────────────────────────────
+
+type ModalMode = { type: "create" } | { type: "edit"; product: ProductRead }
+
+interface ProductFormProps {
+  mode: ModalMode
+  token: string | null
+  categories: CategoryRead[]
+  brands: BrandRead[]
+  onClose: () => void
+  onSaved: () => void
+}
+
+function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }: ProductFormProps) {
+  const isEdit = mode.type === "edit"
+  const existing = isEdit ? mode.product : null
+
+  const [form, setForm] = useState<ProductCreate & { id?: string }>({
+    sku: existing?.sku ?? "",
+    internal_code: existing?.internal_code ?? "",
+    name: existing?.name ?? "",
+    description: existing?.description ?? "",
+    brand_id: existing?.brand_id ?? null,
+    category_id: existing?.category_id ?? null,
+    status: existing?.status ?? "Activo",
+    sale_type: existing?.sale_type ?? "",
+    package_size: existing?.package_size ?? null,
+    warehouse_location: existing?.warehouse_location ?? "",
+    image_url: existing?.image_url ?? "",
+    datasheet_url: existing?.datasheet_url ?? "",
+    unit_price: existing?.unit_price ?? null,
+    purchase_cost_parts: existing?.purchase_cost_parts ?? null,
+    purchase_cost_ariba: existing?.purchase_cost_ariba ?? null,
+    is_configurable: existing?.is_configurable ?? false,
+    is_assembled: existing?.is_assembled ?? false,
+    pricing_strategy: existing?.pricing_strategy ?? "MOVING_AVG",
+    moving_avg_months: existing?.moving_avg_months ?? 6,
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const flatCats = flattenCategories(categories)
+
+  function set<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
+    setForm((prev) => ({ ...prev, [key]: val }))
+  }
+
+  function numOrNull(val: string): number | null {
+    const n = parseFloat(val)
+    return isNaN(n) ? null : n
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name.trim()) {
+      toast.error("El nombre es requerido")
+      return
+    }
+    if (!isEdit && !form.sku?.trim()) {
+      toast.error("El SKU es requerido para crear un producto")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const payload = {
+        ...form,
+        internal_code: form.internal_code?.trim() || null,
+        description: form.description?.trim() || null,
+        sale_type: form.sale_type?.trim() || null,
+        warehouse_location: form.warehouse_location?.trim() || null,
+        image_url: form.image_url?.trim() || null,
+        datasheet_url: form.datasheet_url?.trim() || null,
+      }
+      if (isEdit) {
+        const update: ProductUpdate = {
+          name: payload.name,
+          description: payload.description,
+          brand_id: payload.brand_id,
+          category_id: payload.category_id,
+          status: payload.status,
+          sale_type: payload.sale_type,
+          package_size: payload.package_size,
+          warehouse_location: payload.warehouse_location,
+          image_url: payload.image_url,
+          datasheet_url: payload.datasheet_url,
+          unit_price: payload.unit_price,
+          purchase_cost_parts: payload.purchase_cost_parts,
+          purchase_cost_ariba: payload.purchase_cost_ariba,
+          is_configurable: payload.is_configurable,
+          is_assembled: payload.is_assembled,
+          pricing_strategy: payload.pricing_strategy,
+          moving_avg_months: payload.moving_avg_months,
+        }
+        await productosService.updateProduct(token, existing!.id, update)
+        toast.success("Producto actualizado")
+      } else {
+        await productosService.createProduct(token, payload as ProductCreate)
+        toast.success("Producto creado")
+      }
+      onSaved()
+      onClose()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al guardar")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-10">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 surface-card w-full max-w-2xl space-y-5 p-6 mb-10">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-base font-semibold">
+              {isEdit ? "Editar producto" : "Nuevo producto"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {isEdit ? `SKU: ${existing?.sku ?? "—"}` : "Datos del catálogo maestro"}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Identificación */}
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Identificación
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  SKU {!isEdit && <span className="text-red-400">*</span>}
+                </label>
+                <Input
+                  value={form.sku ?? ""}
+                  onChange={(e) => set("sku", e.target.value)}
+                  placeholder="Ej. SH-1154"
+                  disabled={isEdit}
+                  className={isEdit ? "opacity-60" : ""}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Código interno</label>
+                <Input
+                  value={form.internal_code ?? ""}
+                  onChange={(e) => set("internal_code", e.target.value)}
+                  placeholder="Ej. RTB-REFH-SH-1154"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Nombre <span className="text-red-400">*</span>
+              </label>
+              <Input
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                placeholder="Nombre del producto"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
+              <textarea
+                value={form.description ?? ""}
+                onChange={(e) => set("description", e.target.value)}
+                rows={3}
+                placeholder="Descripción técnica del producto"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
+          </fieldset>
+
+          {/* Clasificación */}
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Clasificación
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Categoría</label>
+                <select
+                  value={form.category_id ?? ""}
+                  onChange={(e) => set("category_id", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Sin categoría —</option>
+                  {flatCats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Marca</label>
+                <select
+                  value={form.brand_id ?? ""}
+                  onChange={(e) => set("brand_id", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Sin marca —</option>
+                  {brands.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <select
+                  value={form.status ?? ""}
+                  onChange={(e) => set("status", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Sin status —</option>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Tipo de venta</label>
+                <select
+                  value={form.sale_type ?? ""}
+                  onChange={(e) => set("sale_type", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Sin tipo —</option>
+                  {SALE_TYPE_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Tamaño paquete</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={form.package_size ?? ""}
+                  onChange={(e) => set("package_size", numOrNull(e.target.value))}
+                  placeholder="Ej. 1, 6, 12"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Ubicación almacén</label>
+                <Input
+                  value={form.warehouse_location ?? ""}
+                  onChange={(e) => set("warehouse_location", e.target.value)}
+                  placeholder="Ej. A-03-04"
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          {/* Precios */}
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Precios y costos
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Precio unitario</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.unit_price ?? ""}
+                  onChange={(e) => set("unit_price", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Costo refacciones</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.purchase_cost_parts ?? ""}
+                  onChange={(e) => set("purchase_cost_parts", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Costo Ariba</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.purchase_cost_ariba ?? ""}
+                  onChange={(e) => set("purchase_cost_ariba", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          {/* Adjuntos / URLs */}
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Imagen y documentos
+            </legend>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <ImageIcon className="h-3 w-3" /> URL de imagen
+              </label>
+              <Input
+                type="url"
+                value={form.image_url ?? ""}
+                onChange={(e) => set("image_url", e.target.value)}
+                placeholder="https://example.com/imagen-producto.jpg"
+              />
+              {form.image_url && (
+                <img
+                  src={form.image_url}
+                  alt="preview"
+                  className="mt-2 h-24 w-24 rounded border border-border object-cover"
+                  onError={(e) => (e.currentTarget.style.display = "none")}
+                />
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <FileText className="h-3 w-3" /> URL ficha técnica / documento
+              </label>
+              <Input
+                type="url"
+                value={form.datasheet_url ?? ""}
+                onChange={(e) => set("datasheet_url", e.target.value)}
+                placeholder="https://example.com/ficha-tecnica.pdf"
+              />
+            </div>
+          </fieldset>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEdit ? "Guardar cambios" : "Crear producto"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+
+function ProductDetailPanel({
+  product,
+  onClose,
+  onEdit,
+}: {
+  product: ProductRead
+  onClose: () => void
+  onEdit: () => void
+}) {
+  return (
+    <div className="surface-card border-white/70 space-y-4 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{product.name}</p>
+          <p className="text-xs text-muted-foreground">
+            SKU: {product.sku ?? "—"} · {product.internal_code ?? "Sin cód. interno"}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            <Pencil className="h-3 w-3 mr-1" />
+            Editar
+          </Button>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {product.image_url && (
+        <img
+          src={product.image_url}
+          alt={product.name}
+          className="h-40 w-full rounded border border-border object-contain bg-background/50"
+          onError={(e) => (e.currentTarget.style.display = "none")}
+        />
+      )}
+
+      {product.description && (
+        <p className="text-sm text-muted-foreground leading-relaxed">{product.description}</p>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+        <Row label="Categoría" value={product.category ?? "—"} />
+        <Row label="Marca" value={product.brand ?? "—"} />
+        <Row label="Status" value={product.status ?? "—"} />
+        <Row label="Tipo venta" value={product.sale_type ?? "—"} />
+        <Row label="Precio unit." value={fmtPrice(product.unit_price)} />
+        <Row label="Costo ref." value={fmtPrice(product.purchase_cost_parts)} />
+        <Row label="Costo Ariba" value={fmtPrice(product.purchase_cost_ariba)} />
+        <Row label="Precio sugerido" value={fmtPrice(product.suggested_price)} />
+        <Row label="Demanda 90d" value={product.demand_90_days?.toString() ?? "—"} />
+        <Row label="Demanda 180d" value={product.demand_180_days?.toString() ?? "—"} />
+        <Row label="Total venta acum." value={fmtPrice(product.total_accumulated_sales)} />
+        <Row label="Última salida" value={product.last_outbound_date ?? "—"} />
+        <Row label="Ubicación" value={product.warehouse_location ?? "—"} />
+      </div>
+
+      {(product.image_url || product.datasheet_url) && (
+        <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
+          {product.image_url && (
+            <a
+              href={product.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ImageIcon className="h-3 w-3" />
+              Ver imagen
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {product.datasheet_url && (
+            <a
+              href={product.datasheet_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <FileText className="h-3 w-3" />
+              Ficha técnica
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium truncate">{value}</span>
+    </>
+  )
+}
+
+// ── Delete confirmation ───────────────────────────────────────────────────────
+
+function DeleteConfirmModal({
+  product,
+  token,
+  onClose,
+  onDeleted,
+}: {
+  product: ProductRead
+  token: string | null
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await productosService.deleteProduct(token, product.id)
+      toast.success("Producto eliminado")
+      onDeleted()
+      onClose()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 surface-card w-full max-w-sm space-y-4 p-6">
+        <p className="text-base font-semibold">Eliminar producto</p>
+        <p className="text-sm text-muted-foreground">
+          ¿Estás seguro de eliminar{" "}
+          <span className="font-medium text-foreground">{product.name}</span>? Esta acción no se
+          puede deshacer.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={deleting}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Eliminar
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+type ActiveModal =
+  | { type: "create" }
+  | { type: "edit"; product: ProductRead }
+  | { type: "delete"; product: ProductRead }
 
 export function ProductosCatalogoPage() {
+  const token = useAuthStore((s) => s.accessToken)
+
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [filterStatus, setFilterStatus] = useState<"activos" | "todos">("activos")
+  const [selectedProduct, setSelectedProduct] = useState<ProductRead | null>(null)
+  const [activeModal, setActiveModal] = useState<ActiveModal | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [search])
+
+  const productsFetcher = useCallback(
+    (signal: AbortSignal) =>
+      productosService.listProducts(
+        token,
+        {
+          limit: 500,
+          solo_activos: filterStatus === "activos",
+          search: debouncedSearch || undefined,
+        },
+        signal,
+      ),
+    [token, filterStatus, debouncedSearch, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const categoriesFetcher = useCallback(
+    (signal: AbortSignal) => productosService.listCategories(token, signal),
+    [token],
+  )
+
+  const brandsFetcher = useCallback(
+    (signal: AbortSignal) => productosService.listBrands(token, signal),
+    [token],
+  )
+
+  const { data: productsData, status: productsStatus } = useApi(productsFetcher)
+  const { data: categories } = useApi(categoriesFetcher)
+  const { data: brands } = useApi(brandsFetcher)
+
+  const rows = productsData?.items ?? []
+  const total = productsData?.total ?? 0
+  const isLoading = productsStatus === "loading"
+
+  const COLUMNS: DataTableColumn<ProductRead>[] = [
+    {
+      key: "sku",
+      header: "SKU",
+      className: "w-[140px]",
+      cell: (r) => (
+        <span className="font-mono text-[11px] text-muted-foreground">{r.sku ?? "—"}</span>
+      ),
+    },
+    {
+      key: "name",
+      header: "Nombre",
+      cell: (r) => (
+        <div className="flex items-center gap-2">
+          {r.image_url ? (
+            <img
+              src={r.image_url}
+              alt=""
+              className="h-7 w-7 shrink-0 rounded border border-border object-cover"
+              onError={(e) => (e.currentTarget.style.display = "none")}
+            />
+          ) : (
+            <div className="h-7 w-7 shrink-0 rounded border border-border bg-accent/30 flex items-center justify-center">
+              <Package className="h-3 w-3 text-muted-foreground" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium max-w-[280px]">{r.name}</p>
+            {r.internal_code && (
+              <p className="text-[10px] text-muted-foreground">{r.internal_code}</p>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "category",
+      header: "Categoría",
+      className: "w-[130px]",
+      cell: (r) => <span className="text-xs text-muted-foreground">{r.category ?? "—"}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      className: "w-[110px]",
+      cell: (r) => <StatusChip status={r.status} />,
+    },
+    {
+      key: "unit_price",
+      header: "Precio unit.",
+      className: "w-[110px] text-right",
+      cell: (r) => (
+        <span className="text-sm tabular-nums">{fmtPrice(r.unit_price)}</span>
+      ),
+    },
+    {
+      key: "demand",
+      header: "Demanda 90d",
+      className: "w-[100px] text-right",
+      cell: (r) => (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {r.demand_90_days != null ? r.demand_90_days.toString() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "links",
+      header: "Doc.",
+      className: "w-[60px]",
+      cell: (r) => (
+        <div className="flex gap-1">
+          {r.image_url && (
+            <a
+              href={r.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Ver imagen"
+              className="text-muted-foreground hover:text-primary"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+            </a>
+          )}
+          {r.datasheet_url && (
+            <a
+              href={r.datasheet_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Ficha técnica"
+              className="text-muted-foreground hover:text-primary"
+            >
+              <FileText className="h-3.5 w-3.5" />
+            </a>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "w-[80px]",
+      cell: (r) => (
+        <div className="flex gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveModal({ type: "edit", product: r })
+            }}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Editar"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveModal({ type: "delete", product: r })
+            }}
+            className="rounded p-1 text-muted-foreground hover:bg-red-500/15 hover:text-red-400"
+            title="Eliminar"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  function refresh() {
+    setRefreshKey((k) => k + 1)
+  }
+
   return (
-    <PlaceholderPage
-      title="Catálogo de Productos"
-      description="SKU · marcas · categorías · atributos · BOM · precios y costos"
-    />
+    <div className="flex h-full min-h-0 flex-col gap-6">
+      {/* Header */}
+      <section className="surface-card border-white/70 bg-white p-5 md:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap gap-2">
+              <StatusBadge variant="success">En vivo</StatusBadge>
+              <StatusBadge variant="info">{total} productos</StatusBadge>
+            </div>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Catálogo de Productos
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              SKU · marcas · categorías · precios · fichas técnicas
+            </p>
+          </div>
+          <Button onClick={() => setActiveModal({ type: "create" })}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo producto
+          </Button>
+        </div>
+      </section>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, SKU o código…"
+            className="pl-9"
+          />
+        </div>
+
+        <div className="flex rounded-md border border-border overflow-hidden text-sm">
+          {(["activos", "todos"] as const).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setFilterStatus(opt)}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium transition-colors",
+                filterStatus === opt
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+              )}
+            >
+              {opt === "activos" ? "Activos" : "Todos"}
+            </button>
+          ))}
+        </div>
+
+        {isLoading && (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        )}
+      </div>
+
+      {/* Layout: table + detail panel */}
+      <div className={cn("flex min-h-0 flex-1 gap-4", selectedProduct ? "items-start" : "")}>
+        <div className={cn("flex-1 min-w-0", selectedProduct ? "max-w-[calc(100%-320px)]" : "")}>
+          <DataTable
+            columns={COLUMNS}
+            rows={rows}
+            rowKey={(r) => r.id}
+            emptyLabel={
+              isLoading
+                ? "Cargando productos…"
+                : debouncedSearch
+                  ? `Sin resultados para "${debouncedSearch}"`
+                  : "No hay productos en el catálogo"
+            }
+            onRowClick={(r) =>
+              setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
+            }
+            selectedRowKey={selectedProduct?.id}
+            maxHeight="calc(100vh - 340px)"
+          />
+        </div>
+
+        {selectedProduct && (
+          <div className="w-[300px] shrink-0">
+            <ProductDetailPanel
+              product={selectedProduct}
+              onClose={() => setSelectedProduct(null)}
+              onEdit={() => {
+                setActiveModal({ type: "edit", product: selectedProduct })
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Modals */}
+      {(activeModal?.type === "create" || activeModal?.type === "edit") && (
+        <ProductFormModal
+          mode={activeModal}
+          token={token}
+          categories={categories ?? []}
+          brands={brands ?? []}
+          onClose={() => setActiveModal(null)}
+          onSaved={() => {
+            refresh()
+            if (activeModal.type === "edit") setSelectedProduct(null)
+          }}
+        />
+      )}
+
+      {activeModal?.type === "delete" && (
+        <DeleteConfirmModal
+          product={activeModal.product}
+          token={token}
+          onClose={() => setActiveModal(null)}
+          onDeleted={() => {
+            refresh()
+            if (selectedProduct?.id === activeModal.product.id) setSelectedProduct(null)
+          }}
+        />
+      )}
+    </div>
   )
 }

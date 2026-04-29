@@ -113,6 +113,16 @@ class ProductosService:
                 p.category,
                 p.sat_product_key_id,
                 p.sat_unit_id,
+                p.status,
+                p.sale_type,
+                p.package_size,
+                p.warehouse_location,
+                p.image_url,
+                p.datasheet_url,
+                p.unit_price,
+                p.unit_price_base,
+                p.purchase_cost_parts,
+                p.purchase_cost_ariba,
                 p.is_configurable,
                 p.is_assembled,
                 p.pricing_strategy,
@@ -120,8 +130,12 @@ class ProductosService:
                 p.current_avg_cost,
                 p.current_avg_cost_currency,
                 p.current_avg_cost_updated_at,
-                p.status,
-                p.package_size,
+                p.theoretical_outflow,
+                p.real_outflow,
+                p.demand_90_days,
+                p.demand_180_days,
+                p.total_accumulated_sales,
+                p.last_outbound_date,
                 NULL::numeric AS min_stock,
                 p.created_at,
                 p.updated_at,
@@ -314,19 +328,36 @@ class ProductosService:
             category_id=data.category_id,
             sat_product_key_id=data.sat_product_key_id,
             sat_unit_id=data.sat_unit_id,
+            status=data.status,
+            sale_type=data.sale_type,
+            package_size=str(data.package_size) if data.package_size else None,
+            warehouse_location=data.warehouse_location,
+            image_url=data.image_url,
+            datasheet_url=data.datasheet_url,
+            unit_price=float(data.unit_price) if data.unit_price is not None else None,
+            purchase_cost_parts=float(data.purchase_cost_parts) if data.purchase_cost_parts is not None else None,
+            purchase_cost_ariba=float(data.purchase_cost_ariba) if data.purchase_cost_ariba is not None else None,
             is_configurable=data.is_configurable,
             is_assembled=data.is_assembled,
             pricing_strategy=data.pricing_strategy,
             moving_avg_months=data.moving_avg_months,
-            package_size=str(data.package_size) if data.package_size else None,
-            status=data.status,
-            warehouse_location=data.warehouse_location,
         )
         self.db.add(product)
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(product)
         return ProductRead.model_validate(product)
+
+    async def delete_product(self, product_id: UUID) -> bool:
+        result = await self.db.execute(
+            select(Product).where(Product.id == product_id)
+        )
+        product = result.scalar_one_or_none()
+        if product is None:
+            return False
+        await self.db.delete(product)
+        await self.db.commit()
+        return True
 
     async def update_product(
         self, product_id: UUID, data: ProductUpdate
