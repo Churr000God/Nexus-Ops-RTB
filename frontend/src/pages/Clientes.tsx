@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { Building2, CheckCircle2, Plus, Search, X, XCircle } from "lucide-react"
+import { Building2, CheckCircle2, Pencil, Plus, Search, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
@@ -70,13 +70,21 @@ type DetailPanelProps = {
   token: string | null
   onClose: () => void
   onUpdated: () => void
+  onEdit: () => void
 }
 
-function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated }: DetailPanelProps) {
+function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onEdit }: DetailPanelProps) {
   const [tab, setTab] = useState<Tab>("fiscal")
   const [showTaxForm, setShowTaxForm] = useState(false)
   const [showContactForm, setShowContactForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [editingTaxId, setEditingTaxId] = useState<number | null>(null)
+  const [editTaxForm, setEditTaxForm] = useState<CustomerTaxDataCreate>({
+    rfc: "",
+    legal_name: "",
+    zip_code: "",
+    is_default: true,
+  })
 
   const [taxForm, setTaxForm] = useState<CustomerTaxDataCreate>({
     rfc: "",
@@ -91,6 +99,27 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
     phone: "",
     is_primary: false,
   })
+
+  function startEditTax(td: { tax_data_id: number; rfc: string; legal_name: string; zip_code: string; is_default: boolean }) {
+    setEditingTaxId(td.tax_data_id)
+    setEditTaxForm({ rfc: td.rfc, legal_name: td.legal_name, zip_code: td.zip_code, is_default: td.is_default })
+    setShowTaxForm(false)
+  }
+
+  async function handleUpdateTaxData() {
+    if (editingTaxId == null) return
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateCustomerTaxData(token, detail.customer_id, editingTaxId, editTaxForm)
+      toast.success("Datos fiscales actualizados")
+      setEditingTaxId(null)
+      onUpdated()
+    } catch {
+      toast.error("Error al actualizar datos fiscales")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   async function handleAddTaxData() {
     setSubmitting(true)
@@ -178,15 +207,26 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {canManage && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleToggleActive}
-              disabled={submitting}
-              className="h-7 text-xs"
-            >
-              {detail.is_active ? "Desactivar" : "Activar"}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEdit}
+                disabled={submitting}
+                className="h-7 gap-1.5 text-xs"
+              >
+                <Pencil className="h-3 w-3" /> Editar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleActive}
+                disabled={submitting}
+                className="h-7 text-xs"
+              >
+                {detail.is_active ? "Desactivar" : "Activar"}
+              </Button>
+            </>
           )}
           <button
             onClick={onClose}
@@ -227,23 +267,83 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
             {detail.tax_data.length === 0 && !showTaxForm && (
               <p className="text-sm text-muted-foreground">Sin datos fiscales registrados.</p>
             )}
-            {detail.tax_data.map((td) => (
-              <div
-                key={td.tax_data_id}
-                className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-semibold">{td.rfc}</span>
-                  {td.is_default && (
-                    <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                      Principal
-                    </span>
-                  )}
+            {detail.tax_data.map((td) =>
+              editingTaxId === td.tax_data_id ? (
+                <div
+                  key={td.tax_data_id}
+                  className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Editar RFC
+                  </p>
+                  <input
+                    className={inputCls}
+                    placeholder="RFC (12 o 13 caracteres)"
+                    maxLength={13}
+                    value={editTaxForm.rfc}
+                    onChange={(e) =>
+                      setEditTaxForm((p) => ({ ...p, rfc: e.target.value.toUpperCase() }))
+                    }
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="Razón social fiscal"
+                    value={editTaxForm.legal_name}
+                    onChange={(e) => setEditTaxForm((p) => ({ ...p, legal_name: e.target.value }))}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="Código Postal"
+                    maxLength={10}
+                    value={editTaxForm.zip_code}
+                    onChange={(e) => setEditTaxForm((p) => ({ ...p, zip_code: e.target.value }))}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleUpdateTaxData}
+                      disabled={
+                        submitting ||
+                        editTaxForm.rfc.length < 12 ||
+                        !editTaxForm.legal_name ||
+                        !editTaxForm.zip_code
+                      }
+                    >
+                      Guardar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditingTaxId(null)}>
+                      Cancelar
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-sm">{td.legal_name}</p>
-                <p className="text-xs text-muted-foreground">CP: {td.zip_code}</p>
-              </div>
-            ))}
+              ) : (
+                <div
+                  key={td.tax_data_id}
+                  className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-semibold">{td.rfc}</span>
+                      {td.is_default && (
+                        <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          Principal
+                        </span>
+                      )}
+                    </div>
+                    {canManage && (
+                      <button
+                        onClick={() => startEditTax(td)}
+                        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm">{td.legal_name}</p>
+                  <p className="text-xs text-muted-foreground">CP: {td.zip_code}</p>
+                </div>
+              )
+            )}
             {showTaxForm && (
               <div className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -403,6 +503,170 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated }: D
             )}
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Edit customer modal ───────────────────────────────────────────────────
+
+type EditCustomerModalProps = {
+  token: string | null
+  customer: CustomerDetail
+  onClose: () => void
+  onUpdated: () => void
+}
+
+function EditCustomerModal({ token, customer, onClose, onUpdated }: EditCustomerModalProps) {
+  const [form, setForm] = useState({
+    business_name: customer.business_name,
+    customer_type: customer.customer_type,
+    locality: customer.locality,
+    payment_terms_days: customer.payment_terms_days,
+    credit_limit: customer.credit_limit != null ? String(customer.credit_limit) : "",
+    currency: customer.currency,
+    notes: customer.notes ?? "",
+  })
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateCustomer(token, customer.customer_id, {
+        business_name: form.business_name,
+        customer_type: form.customer_type,
+        locality: form.locality,
+        payment_terms_days: Number(form.payment_terms_days),
+        credit_limit: form.credit_limit !== "" ? Number(form.credit_limit) : null,
+        currency: form.currency,
+        notes: form.notes || null,
+      })
+      toast.success("Cliente actualizado")
+      onUpdated()
+      onClose()
+    } catch {
+      toast.error("Error al actualizar cliente")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="surface-card relative z-10 w-full max-w-md space-y-5 p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Editar Cliente</h2>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Nombre comercial *
+            </label>
+            <input
+              className={inputCls}
+              value={form.business_name}
+              onChange={(e) => setForm((p) => ({ ...p, business_name: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Tipo</label>
+              <select
+                className={inputCls}
+                value={form.customer_type}
+                onChange={(e) => setForm((p) => ({ ...p, customer_type: e.target.value }))}
+              >
+                <option value="COMPANY">Empresa</option>
+                <option value="PERSON">Persona</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Localidad
+              </label>
+              <select
+                className={inputCls}
+                value={form.locality}
+                onChange={(e) => setForm((p) => ({ ...p, locality: e.target.value }))}
+              >
+                <option value="LOCAL">Nacional</option>
+                <option value="FOREIGN">Extranjero</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Plazo (días)
+              </label>
+              <input
+                className={inputCls}
+                type="number"
+                min={0}
+                max={365}
+                value={form.payment_terms_days}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, payment_terms_days: Number(e.target.value) }))
+                }
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Moneda
+              </label>
+              <select
+                className={inputCls}
+                value={form.currency}
+                onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}
+              >
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Límite de crédito
+            </label>
+            <input
+              className={inputCls}
+              type="number"
+              min={0}
+              placeholder="Sin límite"
+              value={form.credit_limit}
+              onChange={(e) => setForm((p) => ({ ...p, credit_limit: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Notas</label>
+            <textarea
+              className={inputCls}
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={submitting || !form.business_name}
+          >
+            Guardar cambios
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -569,6 +833,7 @@ export function ClientesPage() {
   const [detail, setDetail] = useState<CustomerDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const fetchCustomers = useCallback(
     (signal: AbortSignal) =>
@@ -758,6 +1023,7 @@ export function ClientesPage() {
                   setDetail(null)
                 }}
                 onUpdated={handleDetailUpdated}
+                onEdit={() => setShowEditModal(true)}
               />
             )}
           </div>
@@ -769,6 +1035,14 @@ export function ClientesPage() {
           token={token}
           onClose={() => setShowNewModal(false)}
           onCreated={refetch}
+        />
+      )}
+      {showEditModal && detail && (
+        <EditCustomerModal
+          token={token}
+          customer={detail}
+          onClose={() => setShowEditModal(false)}
+          onUpdated={handleDetailUpdated}
         />
       )}
     </div>
