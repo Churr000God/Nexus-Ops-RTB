@@ -9,7 +9,9 @@ import type {
   CfdiOut,
   CfdiPacLogOut,
   CfdiPpdPending,
+  CfdiSeriesIn,
   CfdiSeriesOut,
+  CfdiSeriesUpdate,
   CfdiStampResponse,
 } from "@/types/cfdi"
 
@@ -27,9 +29,17 @@ export function saveIssuerConfig(token: string | null, body: CfdiIssuerConfigIn)
 
 // ── Series ───────────────────────────────────────────────────────────────────
 
-export function getSeries(activeOnly = true, signal?: AbortSignal): Promise<CfdiSeriesOut[]> {
+export function getSeries(token: string | null, activeOnly = true, signal?: AbortSignal): Promise<CfdiSeriesOut[]> {
   const q = new URLSearchParams({ active_only: String(activeOnly) })
-  return requestJson(`${BASE}/series?${q}`, { signal })
+  return requestJson(`${BASE}/series?${q}`, { token, signal })
+}
+
+export function createSeries(token: string | null, body: CfdiSeriesIn): Promise<CfdiSeriesOut> {
+  return requestJson(`${BASE}/series`, { method: "POST", body: body as never, token })
+}
+
+export function updateSeries(token: string | null, seriesId: number, body: CfdiSeriesUpdate): Promise<CfdiSeriesOut> {
+  return requestJson(`${BASE}/series/${seriesId}`, { method: "PATCH", body: body as never, token })
 }
 
 // ── CFDIs ────────────────────────────────────────────────────────────────────

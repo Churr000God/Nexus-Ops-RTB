@@ -80,6 +80,17 @@ class CfdiSeriesOut(BaseModel):
     is_active: bool
 
 
+class CfdiSeriesIn(BaseModel):
+    series: str = Field(min_length=1, max_length=10)
+    cfdi_type: CfdiType
+    description: str | None = None
+
+
+class CfdiSeriesUpdate(BaseModel):
+    description: str | None = None
+    is_active: bool | None = None
+
+
 # ---------------------------------------------------------------------------
 # CFDI Items
 # ---------------------------------------------------------------------------

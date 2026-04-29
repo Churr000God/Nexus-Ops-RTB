@@ -25,7 +25,9 @@ from app.schemas.cfdi_schemas import (
     CfdiPaymentComplementIn,
     CfdiPaymentComplementOut,
     CfdiPpdPending,
+    CfdiSeriesIn,
     CfdiSeriesOut,
+    CfdiSeriesUpdate,
     CfdiStampResponse,
 )
 from app.services import cfdi_service
@@ -77,6 +79,37 @@ async def list_series(
     _perm=Depends(require_permission("cfdi.view")),
 ):
     return await cfdi_service.list_series(db, active_only=active_only)
+
+
+@router.post(
+    "/series",
+    response_model=CfdiSeriesOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_series(
+    data: CfdiSeriesIn,
+    db: DbDep,
+    _: UserDep,
+    _perm=Depends(require_permission("cfdi.config.manage")),
+):
+    try:
+        return await cfdi_service.create_series(db, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+
+
+@router.patch("/series/{series_id}", response_model=CfdiSeriesOut)
+async def update_series(
+    series_id: int,
+    data: CfdiSeriesUpdate,
+    db: DbDep,
+    _: UserDep,
+    _perm=Depends(require_permission("cfdi.config.manage")),
+):
+    try:
+        return await cfdi_service.update_series(db, series_id, data)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

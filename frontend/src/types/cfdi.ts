@@ -203,6 +203,17 @@ export interface CfdiCancelIn {
   notes?: string | null
 }
 
+export interface CfdiSeriesIn {
+  series: string
+  cfdi_type: CfdiType
+  description?: string | null
+}
+
+export interface CfdiSeriesUpdate {
+  description?: string | null
+  is_active?: boolean | null
+}
+
 export type PacProvider = "DIVERZA" | "EDICOM" | "FACTURAMA" | "STUB"
 export type PacEnvironment = "SANDBOX" | "PRODUCTION"
 

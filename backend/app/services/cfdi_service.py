@@ -24,6 +24,8 @@ from app.schemas.cfdi_schemas import (
     CfdiIssuerConfigIn,
     CfdiPaymentComplementIn,
     CfdiPpdPending,
+    CfdiSeriesIn,
+    CfdiSeriesUpdate,
 )
 from app.services.pac_client import get_pac_client
 
@@ -121,6 +123,42 @@ async def list_series(db: AsyncSession, active_only: bool = True) -> list[CfdiSe
         q = q.where(CfdiSeries.is_active.is_(True))
     result = await db.execute(q)
     return list(result.scalars().all())
+
+
+async def create_series(db: AsyncSession, data: CfdiSeriesIn) -> CfdiSeries:
+    existing = await db.execute(
+        select(CfdiSeries).where(
+            CfdiSeries.series == data.series.upper(),
+            CfdiSeries.cfdi_type == data.cfdi_type,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise ValueError(f"Ya existe la serie '{data.series}' para tipo {data.cfdi_type}")
+    serie = CfdiSeries(
+        series=data.series.upper(),
+        cfdi_type=data.cfdi_type,
+        description=data.description,
+        next_folio=1,
+        is_active=True,
+    )
+    db.add(serie)
+    await db.commit()
+    await db.refresh(serie)
+    return serie
+
+
+async def update_series(db: AsyncSession, series_id: int, data: CfdiSeriesUpdate) -> CfdiSeries:
+    result = await db.execute(select(CfdiSeries).where(CfdiSeries.series_id == series_id))
+    serie = result.scalar_one_or_none()
+    if serie is None:
+        raise ValueError(f"Serie {series_id} no encontrada")
+    if data.description is not None:
+        serie.description = data.description
+    if data.is_active is not None:
+        serie.is_active = data.is_active
+    await db.commit()
+    await db.refresh(serie)
+    return serie
 
 
 # ---------------------------------------------------------------------------
