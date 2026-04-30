@@ -24,27 +24,30 @@ function withQuery(
 export const assetsService = {
   // ── Inventario v2 ────────────────────────────────────────────────────────
 
-  getKpisV2(signal?: AbortSignal): Promise<InventoryKpiV2> {
-    return requestJson("/api/inventario/kpis-v2", { signal })
+  getKpisV2(token: string | null, signal?: AbortSignal): Promise<InventoryKpiV2> {
+    return requestJson("/api/inventario/kpis-v2", { token, signal })
   },
 
   getVendible(
+    token: string | null,
     params: { stock_status?: string; limit?: number; offset?: number } = {},
     signal?: AbortSignal,
   ): Promise<InventoryCurrentItem[]> {
-    return requestJson(withQuery("/api/inventario/vendible", params), { signal })
+    return requestJson(withQuery("/api/inventario/vendible", params), { token, signal })
   },
 
   getInterno(
+    token: string | null,
     params: { stock_status?: string; limit?: number; offset?: number } = {},
     signal?: AbortSignal,
   ): Promise<InventoryCurrentItem[]> {
-    return requestJson(withQuery("/api/inventario/interno", params), { signal })
+    return requestJson(withQuery("/api/inventario/interno", params), { token, signal })
   },
 
   // ── Assets ───────────────────────────────────────────────────────────────
 
   listAssets(
+    token: string | null,
     params: {
       status?: string
       asset_type?: string
@@ -54,22 +57,23 @@ export const assetsService = {
     } = {},
     signal?: AbortSignal,
   ): Promise<AssetRead[]> {
-    return requestJson(withQuery("/api/assets", params), { signal })
+    return requestJson(withQuery("/api/assets", params), { token, signal })
   },
 
-  getAsset(id: string, signal?: AbortSignal): Promise<AssetRead> {
-    return requestJson(`/api/assets/${id}`, { signal })
+  getAsset(token: string | null, id: string, signal?: AbortSignal): Promise<AssetRead> {
+    return requestJson(`/api/assets/${id}`, { token, signal })
   },
 
-  getComponents(assetId: string, signal?: AbortSignal): Promise<AssetComponentDetail[]> {
-    return requestJson(`/api/assets/${assetId}/components`, { signal })
+  getComponents(token: string | null, assetId: string, signal?: AbortSignal): Promise<AssetComponentDetail[]> {
+    return requestJson(`/api/assets/${assetId}/components`, { token, signal })
   },
 
   getHistory(
+    token: string | null,
     assetId: string,
     params: { limit?: number; offset?: number } = {},
     signal?: AbortSignal,
   ): Promise<AssetComponentHistoryItem[]> {
-    return requestJson(withQuery(`/api/assets/${assetId}/history`, params), { signal })
+    return requestJson(withQuery(`/api/assets/${assetId}/history`, params), { token, signal })
   },
 }

@@ -9,6 +9,7 @@ import {
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { useApi } from "@/hooks/useApi"
 import { assetsService } from "@/services/assetsService"
+import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
 import type {
   AssetComponentDetail,
@@ -150,15 +151,16 @@ const HIST_COLS: DataTableColumn<AssetComponentHistoryItem>[] = [
 type DetailTab = "componentes" | "historial"
 
 function AssetDetailPanel({ asset }: { asset: AssetRead }) {
+  const token = useAuthStore((s) => s.accessToken)
   const [detailTab, setDetailTab] = useState<DetailTab>("componentes")
 
   const compFetcher = useCallback(
-    (signal: AbortSignal) => assetsService.getComponents(asset.id, signal),
-    [asset.id],
+    (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
+    [token, asset.id],
   )
   const histFetcher = useCallback(
-    (signal: AbortSignal) => assetsService.getHistory(asset.id, { limit: 200 }, signal),
-    [asset.id],
+    (signal: AbortSignal) => assetsService.getHistory(token, asset.id, { limit: 200 }, signal),
+    [token, asset.id],
   )
 
   const { data: components, status: compStatus } = useApi(compFetcher, {
@@ -169,11 +171,11 @@ function AssetDetailPanel({ asset }: { asset: AssetRead }) {
   })
 
   return (
-    <div className="mt-4 rounded-xl border border-white/10 bg-white/5">
+    <div className="mt-4 rounded-xl border border-slate-700 bg-slate-800/60">
       {/* Detail header */}
-      <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+      <div className="flex items-center justify-between border-b border-slate-700 px-5 py-3">
         <div className="flex items-center gap-3">
-          <Laptop className="h-4 w-4 text-white/50" aria-hidden="true" />
+          <Laptop className="h-4 w-4 text-slate-400" aria-hidden="true" />
           <span className="text-sm font-semibold text-white">
             {asset.asset_code} — {asset.name}
           </span>
@@ -187,7 +189,7 @@ function AssetDetailPanel({ asset }: { asset: AssetRead }) {
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               detailTab === "componentes"
                 ? "bg-[hsl(var(--primary))] text-white"
-                : "text-white/50 hover:text-white",
+                : "text-slate-400 hover:text-white hover:bg-slate-700/50",
             )}
           >
             <Package className="h-3.5 w-3.5" aria-hidden="true" />
@@ -200,7 +202,7 @@ function AssetDetailPanel({ asset }: { asset: AssetRead }) {
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               detailTab === "historial"
                 ? "bg-[hsl(var(--primary))] text-white"
-                : "text-white/50 hover:text-white",
+                : "text-slate-400 hover:text-white hover:bg-slate-700/50",
             )}
           >
             <History className="h-3.5 w-3.5" aria-hidden="true" />
@@ -264,6 +266,7 @@ const ASSET_STATUSES = [
 ]
 
 export default function EquiposPage() {
+  const token = useAuthStore((s) => s.accessToken)
   const [filterType, setFilterType] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
   const [selectedAsset, setSelectedAsset] = useState<AssetRead | null>(null)
@@ -271,6 +274,7 @@ export default function EquiposPage() {
   const fetcher = useCallback(
     (signal: AbortSignal) =>
       assetsService.listAssets(
+        token,
         {
           asset_type: filterType || undefined,
           status: filterStatus || undefined,
@@ -278,7 +282,7 @@ export default function EquiposPage() {
         },
         signal,
       ),
-    [filterType, filterStatus],
+    [token, filterType, filterStatus],
   )
   const { data, status } = useApi(fetcher)
 
@@ -287,17 +291,22 @@ export default function EquiposPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <ClipboardList className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
-        <h1 className="text-xl font-semibold text-white">Gestión de Equipos</h1>
+    <div className="space-y-6">
+      {/* Page header */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <ClipboardList className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Gestión de Equipos</h1>
+            <p className="text-sm text-gray-500">Activos físicos registrados, componentes e historial</p>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <select
-          className="rounded-md border border-white/10 bg-background px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
+          className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
           value={filterType}
           onChange={(e) => { setFilterType(e.target.value); setSelectedAsset(null) }}
         >
@@ -308,7 +317,7 @@ export default function EquiposPage() {
         </select>
 
         <select
-          className="rounded-md border border-white/10 bg-background px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
+          className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
           value={filterStatus}
           onChange={(e) => { setFilterStatus(e.target.value); setSelectedAsset(null) }}
         >
@@ -322,7 +331,7 @@ export default function EquiposPage() {
           <button
             type="button"
             onClick={() => setSelectedAsset(null)}
-            className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-white/50 hover:text-white"
+            className="rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-700/50"
           >
             Cerrar detalle
           </button>
