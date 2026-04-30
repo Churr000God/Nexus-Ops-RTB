@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ExternalLink,
   FileText,
+  Filter,
   Image as ImageIcon,
+  LayoutGrid,
+  List,
   Loader2,
   Package,
   Pencil,
@@ -15,13 +18,18 @@ import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { StatusBadge } from "@/components/common/StatusBadge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
-import { cn, formatCurrencyMXN } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { productosService } from "@/services/productosService"
 import { useAuthStore } from "@/stores/authStore"
 import type { BrandRead, CategoryRead, ProductCreate, ProductRead, ProductUpdate } from "@/types/productos"
+
+// ── View mode type ────────────────────────────────────────────────────────────
+type ViewMode = "table" | "grid"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,18 +59,68 @@ const SALE_TYPE_OPTIONS = [
   "Por Bolsa",
 ]
 
+function statusColor(status: string | null): { bg: string; text: string; border: string; dot: string } {
+  switch (status) {
+    case "Activo":
+      return {
+        bg: "bg-emerald-500/10",
+        text: "text-emerald-400",
+        border: "border-emerald-500/30",
+        dot: "bg-emerald-400",
+      }
+    case "Agotado":
+      return {
+        bg: "bg-amber-500/10",
+        text: "text-amber-400",
+        border: "border-amber-500/30",
+        dot: "bg-amber-400",
+      }
+    case "Próximamente":
+      return {
+        bg: "bg-sky-500/10",
+        text: "text-sky-400",
+        border: "border-sky-500/30",
+        dot: "bg-sky-400",
+      }
+    case "Pendiente":
+      return {
+        bg: "bg-orange-500/10",
+        text: "text-orange-400",
+        border: "border-orange-500/30",
+        dot: "bg-orange-400",
+      }
+    case "Dado de Baja":
+    case "Descontinuado":
+    case "Inactivo":
+      return {
+        bg: "bg-red-500/10",
+        text: "text-red-400",
+        border: "border-red-500/30",
+        dot: "bg-red-400",
+      }
+    default:
+      return {
+        bg: "bg-neutral-500/10",
+        text: "text-neutral-400",
+        border: "border-neutral-500/30",
+        dot: "bg-neutral-400",
+      }
+  }
+}
+
 function StatusChip({ status }: { status: string | null }) {
   if (!status) return <span className="text-white/30">—</span>
-  const active = !["Dado de Baja", "Descontinuado", "Inactivo"].includes(status)
+  const colors = statusColor(status)
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-        active
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-          : "border-red-500/30 bg-red-500/10 text-red-400",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+        colors.bg,
+        colors.text,
+        colors.border,
       )}
     >
+      <span className={cn("h-1.5 w-1.5 rounded-full", colors.dot)} />
       {status}
     </span>
   )
@@ -469,42 +527,57 @@ function ProductDetailPanel({
       </div>
 
       {product.image_url && (
-        <img
-          src={product.image_url}
-          alt={product.name}
-          className="h-40 w-full rounded border border-border object-contain bg-background/50"
-          onError={(e) => (e.currentTarget.style.display = "none")}
-        />
+        <div className="rounded-lg border border-border bg-background/50 overflow-hidden">
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="h-44 w-full object-contain"
+            onError={(e) => (e.currentTarget.style.display = "none")}
+          />
+        </div>
       )}
+
+      <div className="flex flex-wrap gap-2">
+        {product.status && <StatusChip status={product.status} />}
+        {product.category && (
+          <Badge variant="secondary" className="text-[11px]">
+            {product.category}
+          </Badge>
+        )}
+        {product.brand && (
+          <Badge variant="outline" className="text-[11px]">
+            {product.brand}
+          </Badge>
+        )}
+      </div>
 
       {product.description && (
         <p className="text-sm text-muted-foreground leading-relaxed">{product.description}</p>
       )}
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
         <Row label="Categoría" value={product.category ?? "—"} />
         <Row label="Marca" value={product.brand ?? "—"} />
-        <Row label="Status" value={product.status ?? "—"} />
         <Row label="Tipo venta" value={product.sale_type ?? "—"} />
+        <Row label="Ubicación" value={product.warehouse_location ?? "—"} />
         <Row label="Precio unit." value={fmtPrice(product.unit_price)} />
+        <Row label="Precio sugerido" value={fmtPrice(product.suggested_price)} />
         <Row label="Costo ref." value={fmtPrice(product.purchase_cost_parts)} />
         <Row label="Costo Ariba" value={fmtPrice(product.purchase_cost_ariba)} />
-        <Row label="Precio sugerido" value={fmtPrice(product.suggested_price)} />
         <Row label="Demanda 90d" value={product.demand_90_days?.toString() ?? "—"} />
         <Row label="Demanda 180d" value={product.demand_180_days?.toString() ?? "—"} />
         <Row label="Total venta acum." value={fmtPrice(product.total_accumulated_sales)} />
         <Row label="Última salida" value={product.last_outbound_date ?? "—"} />
-        <Row label="Ubicación" value={product.warehouse_location ?? "—"} />
       </div>
 
       {(product.image_url || product.datasheet_url) && (
-        <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           {product.image_url && (
             <a
               href={product.image_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <ImageIcon className="h-3 w-3" />
               Ver imagen
@@ -516,7 +589,7 @@ function ProductDetailPanel({
               href={product.datasheet_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <FileText className="h-3 w-3" />
               Ficha técnica
@@ -591,6 +664,133 @@ function DeleteConfirmModal({
   )
 }
 
+// ── Grid card item ────────────────────────────────────────────────────────────
+
+function ProductGridCard({
+  product,
+  isSelected,
+  onSelect,
+  onEdit,
+  onDelete,
+}: {
+  product: ProductRead
+  isSelected: boolean
+  onSelect: () => void
+  onEdit: (e: React.MouseEvent) => void
+  onDelete: (e: React.MouseEvent) => void
+}) {
+  return (
+    <Card
+      className={cn(
+        "cursor-pointer transition-all duration-200 hover:shadow-soft-md hover:border-primary/30",
+        isSelected && "ring-1 ring-primary border-primary/50",
+      )}
+      onClick={onSelect}
+    >
+      <CardContent className="p-0">
+        {/* Image */}
+        <div className="relative h-40 w-full bg-accent/30 rounded-t-[var(--radius-lg)] overflow-hidden">
+          {product.image_url ? (
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="h-full w-full object-contain p-2"
+              onError={(e) => (e.currentTarget.style.display = "none")}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Package className="h-10 w-10 text-muted-foreground/40" />
+            </div>
+          )}
+          <div className="absolute top-2 right-2">
+            <StatusChip status={product.status} />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 space-y-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold leading-tight">{product.name}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground font-mono">
+              {product.sku ?? "Sin SKU"}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {product.category && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                {product.category}
+              </Badge>
+            )}
+            {product.brand && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {product.brand}
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex items-end justify-between pt-1">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Precio</p>
+              <p className="text-sm font-semibold tabular-nums text-foreground">
+                {fmtPrice(product.unit_price)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Demanda 90d</p>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {product.demand_90_days != null ? product.demand_90_days.toString() : "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-1 pt-2 border-t border-border">
+            {product.image_url && (
+              <a
+                href={product.image_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Ver imagen"
+                className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+              </a>
+            )}
+            {product.datasheet_url && (
+              <a
+                href={product.datasheet_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Ficha técnica"
+                className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FileText className="h-3.5 w-3.5" />
+              </a>
+            )}
+            <button
+              onClick={onEdit}
+              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              title="Editar"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="rounded p-1.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-400"
+              title="Eliminar"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ActiveModal =
@@ -604,6 +804,9 @@ export function ProductosCatalogoPage() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<"activos" | "todos">("activos")
+  const [filterCategory, setFilterCategory] = useState<string>("")
+  const [filterBrand, setFilterBrand] = useState<string>("")
+  const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [selectedProduct, setSelectedProduct] = useState<ProductRead | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -612,7 +815,9 @@ export function ProductosCatalogoPage() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => setDebouncedSearch(search), 350)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
   }, [search])
 
   const productsFetcher = useCallback(
@@ -623,10 +828,12 @@ export function ProductosCatalogoPage() {
           limit: 500,
           solo_activos: filterStatus === "activos",
           search: debouncedSearch || undefined,
+          category_id: filterCategory || undefined,
+          brand_id: filterBrand || undefined,
         },
         signal,
       ),
-    [token, filterStatus, debouncedSearch, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
+    [token, filterStatus, debouncedSearch, filterCategory, filterBrand, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const categoriesFetcher = useCallback(
@@ -647,6 +854,14 @@ export function ProductosCatalogoPage() {
   const total = productsData?.total ?? 0
   const isLoading = productsStatus === "loading"
 
+  const flatCats = flattenCategories(categories ?? [])
+
+  const activeFiltersCount = [
+    filterStatus !== "activos",
+    !!filterCategory,
+    !!filterBrand,
+  ].filter(Boolean).length
+
   const COLUMNS: DataTableColumn<ProductRead>[] = [
     {
       key: "sku",
@@ -660,23 +875,23 @@ export function ProductosCatalogoPage() {
       key: "name",
       header: "Nombre",
       cell: (r) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {r.image_url ? (
             <img
               src={r.image_url}
               alt=""
-              className="h-7 w-7 shrink-0 rounded border border-border object-cover"
+              className="h-8 w-8 shrink-0 rounded-md border border-border object-cover"
               onError={(e) => (e.currentTarget.style.display = "none")}
             />
           ) : (
-            <div className="h-7 w-7 shrink-0 rounded border border-border bg-accent/30 flex items-center justify-center">
-              <Package className="h-3 w-3 text-muted-foreground" />
+            <div className="h-8 w-8 shrink-0 rounded-md border border-border bg-accent/40 flex items-center justify-center">
+              <Package className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
           )}
           <div className="min-w-0">
             <p className="truncate text-sm font-medium max-w-[280px]">{r.name}</p>
             {r.internal_code && (
-              <p className="text-[10px] text-muted-foreground">{r.internal_code}</p>
+              <p className="text-[10px] text-muted-foreground font-mono">{r.internal_code}</p>
             )}
           </div>
         </div>
@@ -685,21 +900,25 @@ export function ProductosCatalogoPage() {
     {
       key: "category",
       header: "Categoría",
-      className: "w-[130px]",
-      cell: (r) => <span className="text-xs text-muted-foreground">{r.category ?? "—"}</span>,
+      className: "w-[140px]",
+      cell: (r) => (
+        <Badge variant="secondary" className="text-[10px]">
+          {r.category ?? "—"}
+        </Badge>
+      ),
     },
     {
       key: "status",
       header: "Status",
-      className: "w-[110px]",
+      className: "w-[130px]",
       cell: (r) => <StatusChip status={r.status} />,
     },
     {
       key: "unit_price",
       header: "Precio unit.",
-      className: "w-[110px] text-right",
+      className: "w-[120px] text-right",
       cell: (r) => (
-        <span className="text-sm tabular-nums">{fmtPrice(r.unit_price)}</span>
+        <span className="text-sm tabular-nums font-medium">{fmtPrice(r.unit_price)}</span>
       ),
     },
     {
@@ -780,8 +999,15 @@ export function ProductosCatalogoPage() {
     setRefreshKey((k) => k + 1)
   }
 
+  function clearFilters() {
+    setFilterStatus("activos")
+    setFilterCategory("")
+    setFilterBrand("")
+    setSearch("")
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-6">
+    <div className="flex h-full min-h-0 flex-col gap-5">
       {/* Header */}
       <section className="surface-card border-white/70 bg-white p-5 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -789,6 +1015,12 @@ export function ProductosCatalogoPage() {
             <div className="mb-2 flex flex-wrap gap-2">
               <StatusBadge variant="success">En vivo</StatusBadge>
               <StatusBadge variant="info">{total} productos</StatusBadge>
+              {activeFiltersCount > 0 && (
+                <Badge variant="outline" className="text-[11px]">
+                  {activeFiltersCount} filtro{activeFiltersCount > 1 ? "s" : ""} activo
+                  {activeFiltersCount > 1 ? "s" : ""}
+                </Badge>
+              )}
             </div>
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">
               Catálogo de Productos
@@ -797,67 +1029,187 @@ export function ProductosCatalogoPage() {
               SKU · marcas · categorías · precios · fichas técnicas
             </p>
           </div>
-          <Button onClick={() => setActiveModal({ type: "create" })}>
+          <Button onClick={() => setActiveModal({ type: "create" })} className="shrink-0">
             <Plus className="mr-2 h-4 w-4" />
             Nuevo producto
           </Button>
         </div>
       </section>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, SKU o código…"
-            className="pl-9"
-          />
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3">
+        {/* Search + View toggle */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nombre, SKU o código…"
+              className="pl-9"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex rounded-md border border-border overflow-hidden">
+              <button
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "px-2.5 py-1.5 transition-colors",
+                  viewMode === "table"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                )}
+                title="Vista lista"
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "px-2.5 py-1.5 transition-colors",
+                  viewMode === "grid"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                )}
+                title="Vista grid"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {isLoading && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
 
-        <div className="flex rounded-md border border-border overflow-hidden text-sm">
-          {(["activos", "todos"] as const).map((opt) => (
+        {/* Filters bar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Filter className="h-3.5 w-3.5" />
+            <span>Filtros:</span>
+          </div>
+
+          {/* Status filter */}
+          <div className="flex rounded-md border border-border overflow-hidden text-sm">
+            {(["activos", "todos"] as const).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setFilterStatus(opt)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium transition-colors",
+                  filterStatus === opt
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                )}
+              >
+                {opt === "activos" ? "Activos" : "Todos"}
+              </button>
+            ))}
+          </div>
+
+          {/* Category filter */}
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">Todas las categorías</option>
+            {flatCats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label.trim()}
+              </option>
+            ))}
+          </select>
+
+          {/* Brand filter */}
+          <select
+            value={filterBrand}
+            onChange={(e) => setFilterBrand(e.target.value)}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">Todas las marcas</option>
+            {(brands ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+
+          {activeFiltersCount > 0 && (
             <button
-              key={opt}
-              onClick={() => setFilterStatus(opt)}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium transition-colors",
-                filterStatus === opt
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
-              )}
+              onClick={clearFilters}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
             >
-              {opt === "activos" ? "Activos" : "Todos"}
+              Limpiar filtros
             </button>
-          ))}
+          )}
         </div>
-
-        {isLoading && (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        )}
       </div>
 
-      {/* Layout: table + detail panel */}
+      {/* Content area */}
       <div className={cn("flex min-h-0 flex-1 gap-4", selectedProduct ? "items-start" : "")}>
         <div className={cn("flex-1 min-w-0", selectedProduct ? "max-w-[calc(100%-320px)]" : "")}>
-          <DataTable
-            columns={COLUMNS}
-            rows={rows}
-            rowKey={(r) => r.id}
-            emptyLabel={
-              isLoading
-                ? "Cargando productos…"
-                : debouncedSearch
-                  ? `Sin resultados para "${debouncedSearch}"`
-                  : "No hay productos en el catálogo"
-            }
-            onRowClick={(r) =>
-              setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
-            }
-            selectedRowKey={selectedProduct?.id}
-            maxHeight="calc(100vh - 340px)"
-          />
+          {viewMode === "table" ? (
+            <DataTable
+              columns={COLUMNS}
+              rows={rows}
+              rowKey={(r) => r.id}
+              emptyLabel={
+                isLoading
+                  ? "Cargando productos…"
+                  : debouncedSearch || filterCategory || filterBrand
+                    ? `Sin resultados para los filtros aplicados`
+                    : "No hay productos en el catálogo"
+              }
+              onRowClick={(r) =>
+                setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
+              }
+              selectedRowKey={selectedProduct?.id}
+              maxHeight="calc(100vh - 380px)"
+            />
+          ) : (
+            /* Grid view */
+            <div className="overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 380px)" }}>
+              {rows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                  <Package className="h-10 w-10 mb-3 opacity-40" />
+                  <p className="text-sm">
+                    {isLoading
+                      ? "Cargando productos…"
+                      : debouncedSearch || filterCategory || filterBrand
+                        ? "Sin resultados para los filtros aplicados"
+                        : "No hay productos en el catálogo"}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {rows.map((product) => (
+                    <ProductGridCard
+                      key={product.id}
+                      product={product}
+                      isSelected={selectedProduct?.id === product.id}
+                      onSelect={() =>
+                        setSelectedProduct((prev) =>
+                          prev?.id === product.id ? null : product,
+                        )
+                      }
+                      onEdit={(e) => {
+                        e.stopPropagation()
+                        setActiveModal({ type: "edit", product })
+                      }}
+                      onDelete={(e) => {
+                        e.stopPropagation()
+                        setActiveModal({ type: "delete", product })
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {selectedProduct && (

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>RTB · Dashboard Ejecutivo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f3f4f6; color: #1f2937;
+  }
+  .header {
+    background: #1f2937; color: white; padding: 16px 32px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header .meta { font-size: 13px; color: #9ca3af; }
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px; margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: white; padding: 18px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border-left: 4px solid #2563eb;
+  }
+  .kpi-card.green  { border-left-color: #10b981; }
+  .kpi-card.yellow { border-left-color: #f59e0b; }
+  .kpi-card.red    { border-left-color: #ef4444; }
+  .kpi-card.purple { border-left-color: #8b5cf6; }
+  .kpi-card .label { color: #6b7280; font-size: 13px; margin-bottom: 6px; }
+  .kpi-card .value { font-size: 26px; font-weight: 700; color: #111827; }
+  .kpi-card .delta { font-size: 12px; margin-top: 4px; }
+  .delta.up   { color: #10b981; }
+  .delta.down { color: #ef4444; }
+
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .panel {
+    background: white; padding: 20px; border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .panel h2 {
+    font-size: 14px; font-weight: 600; color: #6b7280;
+    margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .panel-tall { min-height: 360px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 6px; color: #6b7280; font-weight: 600;
+       border-bottom: 1px solid #e5e7eb; }
+  td { padding: 8px 6px; border-bottom: 1px solid #f3f4f6; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+           font-size: 11px; font-weight: 600; }
+  .badge.green  { background: #d1fae5; color: #065f46; }
+  .badge.yellow { background: #fef3c7; color: #92400e; }
+  .badge.red    { background: #fee2e2; color: #991b1b; }
+  .badge.gray   { background: #e5e7eb; color: #374151; }
+
+  .footer { text-align: center; padding: 24px; color: #6b7280; font-size: 12px; }
+
+  .source-note {
+    background: #fffbeb; border: 1px solid #fde68a; padding: 12px 16px;
+    border-radius: 6px; margin-bottom: 24px; font-size: 13px; color: #92400e;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 RTB · Dashboard Ejecutivo</h1>
+  <div class="meta">Período: Abril 2026 · Datos simulados</div>
+</div>
+
+<div class="container">
+
+  <div class="source-note">
+    💡 <strong>Nota:</strong> este dashboard consume las vistas <code>v_executive_dashboard</code>,
+    <code>v_sales_by_period</code>, <code>v_top_customers</code>, <code>v_inventory_kpis</code>,
+    <code>v_accounts_receivable</code>, <code>v_quote_conversion</code>. En producción, los datos
+    vienen de una API REST que ejecuta los SELECTs.
+  </div>
+
+  <!-- KPIs principales -->
+  <div class="kpi-grid">
+    <div class="kpi-card green">
+      <div class="label">Ventas del mes</div>
+      <div class="value">$1,847,300</div>
+      <div class="delta up">▲ 12.4% vs mes anterior</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="label">Margen bruto del mes</div>
+      <div class="value">$498,771</div>
+      <div class="delta up">27.0% margen</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Pipeline abierto</div>
+      <div class="value">$823,450</div>
+      <div class="delta">14 cotizaciones</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="label">Por cobrar (AR)</div>
+      <div class="value">$612,800</div>
+      <div class="delta down">$87,200 &gt;60 días</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Por pagar (AP)</div>
+      <div class="value">$324,150</div>
+      <div class="delta">8 facturas</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="label">Valor de inventario</div>
+      <div class="value">$2,143,750</div>
+      <div class="delta">347 SKUs activos</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="label">SKUs en alerta</div>
+      <div class="value">23</div>
+      <div class="delta down">8 sin stock</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="label">Pedidos con faltante</div>
+      <div class="value">5</div>
+      <div class="delta">de 31 activos</div>
+    </div>
+  </div>
+
+  <!-- Fila 1: ventas y conversión -->
+  <div class="row">
+    <div class="panel panel-tall">
+      <h2>Ventas y margen últimos 6 meses</h2>
+      <canvas id="salesChart"></canvas>
+    </div>
+    <div class="panel panel-tall">
+      <h2>Conversión de cotizaciones</h2>
+      <canvas id="conversionChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Fila 2: AR aging y top clientes -->
+  <div class="row">
+    <div class="panel">
+      <h2>Cuentas por cobrar — aging</h2>
+      <canvas id="arChart" style="max-height:240px"></canvas>
+      <table style="margin-top:12px">
+        <thead><tr><th>Bucket</th><th class="right">Monto</th></tr></thead>
+        <tbody>
+          <tr><td>0-30 días</td><td class="right">$352,400</td></tr>
+          <tr><td>31-60 días</td><td class="right">$173,200</td></tr>
+          <tr><td>61-90 días</td><td class="right">$45,800</td></tr>
+          <tr><td>+90 días</td><td class="right">$41,400</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Top 5 clientes (revenue YTD)</h2>
+      <table>
+        <thead>
+          <tr><th>Cliente</th><th class="right">Revenue</th><th class="right">Margen %</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Femsa</td><td class="right">$643,200</td><td class="right"><span class="badge green">28%</span></td></tr>
+          <tr><td>Bimbo</td><td class="right">$487,500</td><td class="right"><span class="badge green">31%</span></td></tr>
+          <tr><td>Ternium</td><td class="right">$298,400</td><td class="right"><span class="badge yellow">22%</span></td></tr>
+          <tr><td>Coca-Cola Femsa</td><td class="right">$215,800</td><td class="right"><span class="badge green">29%</span></td></tr>
+          <tr><td>Heineken</td><td class="right">$187,200</td><td class="right"><span class="badge yellow">24%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Fila 3: ABC y alertas -->
+  <div class="row">
+    <div class="panel">
+      <h2>Inventario por clasificación ABC</h2>
+      <canvas id="abcChart" style="max-height:240px"></canvas>
+      <table style="margin-top:12px">
+        <thead><tr><th>Clase</th><th class="right">SKUs</th><th class="right">Valor</th></tr></thead>
+        <tbody>
+          <tr><td><strong>A</strong> (alto valor)</td><td class="right">52</td><td class="right">$1,712,400</td></tr>
+          <tr><td><strong>B</strong> (medio)</td><td class="right">98</td><td class="right">$321,800</td></tr>
+          <tr><td><strong>C</strong> (bajo)</td><td class="right">197</td><td class="right">$109,550</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Productos con alerta de stock</h2>
+      <table>
+        <thead>
+          <tr><th>SKU</th><th>Producto</th><th class="right">Stock</th><th class="center">Estado</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>CIL-FE-50</td><td>Cilindro Festo 50mm</td><td class="right">0</td><td class="center"><span class="badge red">Sin stock</span></td></tr>
+          <tr><td>VAR-220V</td><td>Variador 220V 5HP</td><td class="right">0</td><td class="center"><span class="badge red">Sin stock</span></td></tr>
+          <tr><td>KIT-SELLOS-A</td><td>Kit de sellos tipo A</td><td class="right">3</td><td class="center"><span class="badge yellow">Bajo mín.</span></td></tr>
+          <tr><td>MAN-DIG-100</td><td>Manómetro digital 100bar</td><td class="right">2</td><td class="center"><span class="badge yellow">Bajo mín.</span></td></tr>
+          <tr><td>VAL-PRES-2</td><td>Válvula presión 2"</td><td class="right">1</td><td class="center"><span class="badge yellow">Bajo mín.</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Fila 4: pipeline y proveedores -->
+  <div class="row">
+    <div class="panel">
+      <h2>Pipeline de cotizaciones por estado</h2>
+      <canvas id="pipelineChart" style="max-height:240px"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Performance de proveedores (últimos 90 días)</h2>
+      <table>
+        <thead>
+          <tr><th>Proveedor</th><th class="right">OCs</th><th class="center">A tiempo</th><th class="center">NCs</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Festo México</td><td class="right">12</td><td class="center"><span class="badge green">92%</span></td><td class="center">0</td></tr>
+          <tr><td>SMC</td><td class="right">8</td><td class="center"><span class="badge green">88%</span></td><td class="center">1</td></tr>
+          <tr><td>Bosch Rexroth</td><td class="right">6</td><td class="center"><span class="badge yellow">67%</span></td><td class="center">2</td></tr>
+          <tr><td>Parker Hannifin</td><td class="right">5</td><td class="center"><span class="badge green">100%</span></td><td class="center">0</td></tr>
+          <tr><td>Schneider</td><td class="right">4</td><td class="center"><span class="badge red">50%</span></td><td class="center">3</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Sistema RTB · Dashboard ejecutivo · Datos simulados con fines demostrativos</div>
+
+<script>
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = '#6b7280';
+
+  // Sales chart
+  new Chart(document.getElementById('salesChart'), {
+    type: 'line',
+    data: {
+      labels: ['Nov','Dic','Ene','Feb','Mar','Abr'],
+      datasets: [
+        { label: 'Ventas', data: [1450000, 1320000, 1580000, 1650000, 1720000, 1847300],
+          borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: 0.3 },
+        { label: 'Margen', data: [378000, 360000, 421000, 442000, 465000, 498771],
+          borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.1)', fill: true, tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
+    }
+  });
+
+  // Conversion chart
+  new Chart(document.getElementById('conversionChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Nov','Dic','Ene','Feb','Mar','Abr'],
+      datasets: [
+        { label: 'Aprobadas', data: [42, 38, 51, 47, 54, 58], backgroundColor: '#10b981' },
+        { label: 'Rechazadas', data: [12, 14, 9, 11, 8, 7], backgroundColor: '#ef4444' },
+        { label: 'En proceso', data: [8, 6, 11, 9, 14, 14], backgroundColor: '#f59e0b' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true }, y: { stacked: true } }
+    }
+  });
+
+  // AR aging chart
+  new Chart(document.getElementById('arChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['0-30 días','31-60 días','61-90 días','+90 días'],
+      datasets: [{
+        data: [352400, 173200, 45800, 41400],
+        backgroundColor: ['#10b981','#f59e0b','#fb923c','#ef4444']
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // ABC chart
+  new Chart(document.getElementById('abcChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['A (alto valor)','B (medio)','C (bajo)'],
+      datasets: [{
+        data: [1712400, 321800, 109550],
+        backgroundColor: ['#7c3aed','#a78bfa','#ddd6fe']
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // Pipeline chart
+  new Chart(document.getElementById('pipelineChart'), {
+    type: 'bar',
+    data: {
+      labels: ['DRAFT','SENT','APPROVED','REJECTED','EXPIRED'],
+      datasets: [{
+        label: 'Cotizaciones',
+        data: [4, 10, 58, 7, 3],
+        backgroundColor: ['#9ca3af','#3b82f6','#10b981','#ef4444','#f59e0b']
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: { legend: { display: false } }
+    }
+  });
+</script>
+
+</body>
+</html>

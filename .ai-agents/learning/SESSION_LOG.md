@@ -75,6 +75,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-28 | RBAC — Seeds SQL, Schemas, Auth Service, require_permission, Router /api/usuarios | backend | 4 | [2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md](sessions/2026-04-28_rbac-seeds-schemas-auth-service-usuarios.md) |
 | 2026-04-28 | RBAC — Router Admin (roles/permisos/audit) y Frontend Panel Admin | backend + frontend | 4 | [2026-04-28_rbac-router-admin-y-frontend-admin.md](sessions/2026-04-28_rbac-router-admin-y-frontend-admin.md) |
 | 2026-04-29 | Módulo 16 — Estructura de Navegación: 14 módulos, 50+ rutas, sidebar scrollable | frontend | 5 | [2026-04-29_estructura-navegacion.md](sessions/2026-04-29_estructura-navegacion.md) |
+| 2026-04-30 | Mejora visual del catálogo de productos — vista grid, filtros, badges | frontend | 5 | [2026-04-30_mejora-ui-catalogo-productos.md](sessions/2026-04-30_mejora-ui-catalogo-productos.md) |
 
 ---
 
@@ -82,6 +83,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 19 |
+| Total sesiones | 20 |
 | Errores registrados | 22 |
 | Lecciones documentadas | 25 |

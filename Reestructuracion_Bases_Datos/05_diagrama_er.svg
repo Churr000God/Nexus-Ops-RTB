@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" font-family="Inter, Arial, sans-serif" font-size="11">
+  <defs>
+    <style>
+      .block-title { font-weight: 700; font-size: 14px; }
+      .entity { fill: #ffffff; stroke: #1f2937; stroke-width: 1.5; }
+      .entity-title { font-weight: 700; fill: #1f2937; }
+      .entity-key { fill: #6b7280; font-size: 10px; }
+      .group { fill-opacity: 0.08; stroke: #4b5563; stroke-width: 2; stroke-dasharray: 6,3; }
+      .group-sec { fill: #6366f1; stroke: #4338ca; }
+      .group-cat { fill: #14b8a6; stroke: #0f766e; }
+      .group-cust { fill: #3b82f6; stroke: #1d4ed8; }
+      .group-supp { fill: #f59e0b; stroke: #b45309; }
+      .group-sales { fill: #10b981; stroke: #047857; }
+      .group-purch { fill: #ef4444; stroke: #b91c1c; }
+      .group-inv { fill: #8b5cf6; stroke: #6d28d9; }
+      .group-fact { fill: #ec4899; stroke: #be185d; }
+      .group-label { fill: #1f2937; font-weight: 700; font-size: 13px; }
+      .rel { stroke: #6b7280; stroke-width: 1; fill: none; }
+      .rel-key { stroke: #2563eb; stroke-width: 1.5; fill: none; }
+      .rel-flow { stroke: #059669; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .pk { fill: #b45309; font-weight: 600; font-size: 9px; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#059669"/>
+    </marker>
+  </defs>
+
+  <!-- Título -->
+  <text x="800" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">RTB · Modelo Entidad-Relación (Resumen)</text>
+  <text x="800" y="50" text-anchor="middle" font-size="12" fill="#6b7280">PostgreSQL 14+ · Reemplazo del sistema Notion + n8n</text>
+
+  <!-- BLOQUE: SEGURIDAD -->
+  <rect x="20" y="80" width="280" height="190" rx="8" class="group group-sec"/>
+  <text x="30" y="100" class="group-label">1 · Seguridad y Auditoría</text>
+  <rect x="40" y="115" width="110" height="50" rx="4" class="entity"/>
+  <text x="95" y="132" text-anchor="middle" class="entity-title">users</text>
+  <text x="95" y="148" text-anchor="middle" class="entity-key">user_id (PK)</text>
+  <text x="95" y="160" text-anchor="middle" class="entity-key">email · roles</text>
+  <rect x="170" y="115" width="110" height="50" rx="4" class="entity"/>
+  <text x="225" y="132" text-anchor="middle" class="entity-title">roles</text>
+  <text x="225" y="148" text-anchor="middle" class="entity-key">role_id (PK)</text>
+  <text x="225" y="160" text-anchor="middle" class="entity-key">code · name</text>
+  <rect x="40" y="180" width="240" height="60" rx="4" class="entity"/>
+  <text x="160" y="200" text-anchor="middle" class="entity-title">audit_log</text>
+  <text x="160" y="216" text-anchor="middle" class="entity-key">user_id · entity_type · entity_id</text>
+  <text x="160" y="230" text-anchor="middle" class="entity-key">action · before_data · after_data</text>
+
+  <!-- BLOQUE: CATÁLOGOS -->
+  <rect x="320" y="80" width="540" height="280" rx="8" class="group group-cat"/>
+  <text x="330" y="100" class="group-label">2 · Catálogos y Productos</text>
+
+  <rect x="340" y="115" width="120" height="50" rx="4" class="entity"/>
+  <text x="400" y="132" text-anchor="middle" class="entity-title">brands</text>
+  <text x="400" y="155" text-anchor="middle" class="entity-key">brand_id (PK)</text>
+
+  <rect x="470" y="115" width="120" height="50" rx="4" class="entity"/>
+  <text x="530" y="132" text-anchor="middle" class="entity-title">categories</text>
+  <text x="530" y="148" text-anchor="middle" class="entity-key">category_id (PK)</text>
+  <text x="530" y="160" text-anchor="middle" class="entity-key">parent_id (jerárquica)</text>
+
+  <rect x="600" y="115" width="240" height="50" rx="4" class="entity"/>
+  <text x="720" y="132" text-anchor="middle" class="entity-title">SAT keys (CFDI 4.0)</text>
+  <text x="720" y="148" text-anchor="middle" class="entity-key">sat_product_keys · sat_unit_keys</text>
+  <text x="720" y="160" text-anchor="middle" class="entity-key">sat_tax_regimes · sat_cfdi_uses</text>
+
+  <rect x="340" y="180" width="180" height="80" rx="4" class="entity"/>
+  <text x="430" y="200" text-anchor="middle" class="entity-title">products</text>
+  <text x="430" y="216" text-anchor="middle" class="entity-key">product_id (PK)</text>
+  <text x="430" y="228" text-anchor="middle" class="entity-key">sku · internal_code</text>
+  <text x="430" y="240" text-anchor="middle" class="entity-key">brand · category</text>
+  <text x="430" y="252" text-anchor="middle" class="entity-key">is_configurable · is_assembled</text>
+
+  <rect x="540" y="180" width="160" height="80" rx="4" class="entity"/>
+  <text x="620" y="200" text-anchor="middle" class="entity-title">product_attributes</text>
+  <text x="620" y="216" text-anchor="middle" class="entity-key">attribute_id (PK)</text>
+  <text x="620" y="228" text-anchor="middle" class="entity-key">product_id (FK)</text>
+  <text x="620" y="240" text-anchor="middle" class="entity-key">name · data_type</text>
+  <text x="620" y="252" text-anchor="middle" class="entity-key">+ attribute_options</text>
+
+  <rect x="720" y="180" width="120" height="80" rx="4" class="entity"/>
+  <text x="780" y="200" text-anchor="middle" class="entity-title">bom · bom_items</text>
+  <text x="780" y="220" text-anchor="middle" class="entity-key">product → component</text>
+  <text x="780" y="234" text-anchor="middle" class="entity-key">quantity</text>
+  <text x="780" y="248" text-anchor="middle" class="entity-key">para ensamblados</text>
+
+  <rect x="340" y="280" width="220" height="60" rx="4" class="entity"/>
+  <text x="450" y="300" text-anchor="middle" class="entity-title">product_configurations</text>
+  <text x="450" y="316" text-anchor="middle" class="entity-key">configuration_id · product_id</text>
+  <text x="450" y="328" text-anchor="middle" class="entity-key">attributes (JSONB) · config_hash</text>
+
+  <rect x="580" y="280" width="180" height="60" rx="4" class="entity"/>
+  <text x="670" y="300" text-anchor="middle" class="entity-title">product_prices</text>
+  <text x="670" y="316" text-anchor="middle" class="entity-key">price_id · product_id</text>
+  <text x="670" y="328" text-anchor="middle" class="entity-key">valid_from · valid_to</text>
+
+  <!-- BLOQUE: CLIENTES -->
+  <rect x="880" y="80" width="350" height="280" rx="8" class="group group-cust"/>
+  <text x="890" y="100" class="group-label">3 · Clientes</text>
+
+  <rect x="900" y="115" width="150" height="80" rx="4" class="entity"/>
+  <text x="975" y="132" text-anchor="middle" class="entity-title">customers</text>
+  <text x="975" y="148" text-anchor="middle" class="entity-key">customer_id (PK)</text>
+  <text x="975" y="160" text-anchor="middle" class="entity-key">code · business_name</text>
+  <text x="975" y="172" text-anchor="middle" class="entity-key">payment_terms</text>
+  <text x="975" y="184" text-anchor="middle" class="entity-key">credit_limit</text>
+
+  <rect x="1070" y="115" width="150" height="80" rx="4" class="entity"/>
+  <text x="1145" y="132" text-anchor="middle" class="entity-title">customer_tax_data</text>
+  <text x="1145" y="148" text-anchor="middle" class="entity-key">rfc · legal_name</text>
+  <text x="1145" y="160" text-anchor="middle" class="entity-key">tax_regime (SAT)</text>
+  <text x="1145" y="172" text-anchor="middle" class="entity-key">cfdi_use · zip_code</text>
+
+  <rect x="900" y="210" width="150" height="65" rx="4" class="entity"/>
+  <text x="975" y="228" text-anchor="middle" class="entity-title">customer_addresses</text>
+  <text x="975" y="244" text-anchor="middle" class="entity-key">BILLING · SHIPPING</text>
+  <text x="975" y="258" text-anchor="middle" class="entity-key">multiple x customer</text>
+
+  <rect x="1070" y="210" width="150" height="65" rx="4" class="entity"/>
+  <text x="1145" y="228" text-anchor="middle" class="entity-title">customer_contacts</text>
+  <text x="1145" y="244" text-anchor="middle" class="entity-key">full_name · email</text>
+  <text x="1145" y="258" text-anchor="middle" class="entity-key">phone · is_primary</text>
+
+  <text x="1055" y="320" font-style="italic" fill="#1d4ed8">↓ Reemplazan al "Directorio de Ubicaciones" (Tipo=Cliente)</text>
+
+  <!-- BLOQUE: PROVEEDORES -->
+  <rect x="1250" y="80" width="330" height="280" rx="8" class="group group-supp"/>
+  <text x="1260" y="100" class="group-label">4 · Proveedores</text>
+
+  <rect x="1270" y="115" width="140" height="80" rx="4" class="entity"/>
+  <text x="1340" y="132" text-anchor="middle" class="entity-title">suppliers</text>
+  <text x="1340" y="148" text-anchor="middle" class="entity-key">supplier_id (PK)</text>
+  <text x="1340" y="160" text-anchor="middle" class="entity-key">code · business_name</text>
+  <text x="1340" y="172" text-anchor="middle" class="entity-key">type · payment_terms</text>
+
+  <rect x="1430" y="115" width="140" height="80" rx="4" class="entity"/>
+  <text x="1500" y="132" text-anchor="middle" class="entity-title">supplier_tax_data</text>
+  <text x="1500" y="148" text-anchor="middle" class="entity-key">rfc · legal_name</text>
+  <text x="1500" y="160" text-anchor="middle" class="entity-key">tax_regime · zip</text>
+
+  <rect x="1270" y="210" width="300" height="100" rx="4" class="entity"/>
+  <text x="1420" y="230" text-anchor="middle" class="entity-title">supplier_products (puente)</text>
+  <text x="1420" y="248" text-anchor="middle" class="entity-key">supplier_id ↔ product_id</text>
+  <text x="1420" y="262" text-anchor="middle" class="entity-key">unit_cost · currency · lead_time</text>
+  <text x="1420" y="276" text-anchor="middle" class="entity-key">valid_from · valid_to (histórico)</text>
+  <text x="1420" y="294" text-anchor="middle" class="entity-key" font-style="italic">Reemplaza "Proveedores y Productos"</text>
+
+  <text x="1410" y="340" font-style="italic" fill="#b45309">↑ Separados de clientes (procesos distintos)</text>
+
+  <!-- BLOQUE: VENTAS -->
+  <rect x="20" y="380" width="780" height="240" rx="8" class="group group-sales"/>
+  <text x="30" y="400" class="group-label">5 · Ventas (Cotización → Orden)</text>
+
+  <rect x="40" y="415" width="180" height="100" rx="4" class="entity"/>
+  <text x="130" y="435" text-anchor="middle" class="entity-title">quotes</text>
+  <text x="130" y="451" text-anchor="middle" class="entity-key">quote_id (PK)</text>
+  <text x="130" y="463" text-anchor="middle" class="entity-key">quote_number · status</text>
+  <text x="130" y="475" text-anchor="middle" class="entity-key">DRAFT · SENT · APPROVED</text>
+  <text x="130" y="487" text-anchor="middle" class="entity-key">REJECTED · CANCELLED · EXPIRED</text>
+  <text x="130" y="503" text-anchor="middle" class="entity-key">customer_id · sales_rep_id</text>
+
+  <rect x="240" y="415" width="180" height="100" rx="4" class="entity"/>
+  <text x="330" y="435" text-anchor="middle" class="entity-title">quote_items</text>
+  <text x="330" y="453" text-anchor="middle" class="entity-key">line_number · product</text>
+  <text x="330" y="467" text-anchor="middle" class="entity-key">product_configuration (FK)</text>
+  <text x="330" y="481" text-anchor="middle" class="entity-key">qty · price · cost · taxes</text>
+  <text x="330" y="497" text-anchor="middle" class="entity-key">subtotal · total (calc)</text>
+
+  <rect x="440" y="415" width="180" height="100" rx="4" class="entity"/>
+  <text x="530" y="435" text-anchor="middle" class="entity-title">orders</text>
+  <text x="530" y="453" text-anchor="middle" class="entity-key">order_id · quote_id (1:1)</text>
+  <text x="530" y="467" text-anchor="middle" class="entity-key">status · payment_status</text>
+  <text x="530" y="481" text-anchor="middle" class="entity-key">has_shortage (bool)</text>
+  <text x="530" y="497" text-anchor="middle" class="entity-key">PENDING · SHIPPED · INVOICED</text>
+
+  <rect x="640" y="415" width="140" height="100" rx="4" class="entity"/>
+  <text x="710" y="435" text-anchor="middle" class="entity-title">order_items</text>
+  <text x="710" y="453" text-anchor="middle" class="entity-key">qty_ordered</text>
+  <text x="710" y="467" text-anchor="middle" class="entity-key">qty_packed</text>
+  <text x="710" y="481" text-anchor="middle" class="entity-key">qty_shipped</text>
+  <text x="710" y="495" text-anchor="middle" class="entity-key">qty_invoiced</text>
+
+  <rect x="40" y="535" width="380" height="70" rx="4" class="entity"/>
+  <text x="230" y="555" text-anchor="middle" class="entity-title">quote_status_history (bitácora)</text>
+  <text x="230" y="572" text-anchor="middle" class="entity-key">quote_id · old_status → new_status</text>
+  <text x="230" y="588" text-anchor="middle" class="entity-key">changed_by · reason · changed_at</text>
+
+  <rect x="440" y="535" width="340" height="70" rx="4" class="entity"/>
+  <text x="610" y="555" text-anchor="middle" class="entity-title">order_milestones (Verificador de fechas)</text>
+  <text x="610" y="572" text-anchor="middle" class="entity-key">CREATED · APPROVED · SHIPPED · DELIVERED</text>
+  <text x="610" y="588" text-anchor="middle" class="entity-key">INVOICED · PAID · CANCELLED</text>
+
+  <!-- Flechas de flujo -->
+  <path d="M220,465 L240,465" class="rel-flow"/>
+  <path d="M420,465 L440,465" class="rel-flow"/>
+  <path d="M620,465 L640,465" class="rel-flow"/>
+
+  <!-- BLOQUE: COMPRAS -->
+  <rect x="820" y="380" width="760" height="240" rx="8" class="group group-purch"/>
+  <text x="830" y="400" class="group-label">6 · Compras (Solicitud → OC → Recepción → Factura)</text>
+
+  <rect x="840" y="415" width="170" height="80" rx="4" class="entity"/>
+  <text x="925" y="435" text-anchor="middle" class="entity-title">purchase_requests</text>
+  <text x="925" y="451" text-anchor="middle" class="entity-key">request_id · status</text>
+  <text x="925" y="465" text-anchor="middle" class="entity-key">+ purchase_request_items</text>
+  <text x="925" y="479" text-anchor="middle" class="entity-key">SKU + cantidad necesaria</text>
+
+  <rect x="1030" y="415" width="170" height="80" rx="4" class="entity"/>
+  <text x="1115" y="435" text-anchor="middle" class="entity-title">purchase_orders</text>
+  <text x="1115" y="451" text-anchor="middle" class="entity-key">po_id · po_number (folio)</text>
+  <text x="1115" y="465" text-anchor="middle" class="entity-key">supplier_id · status</text>
+  <text x="1115" y="479" text-anchor="middle" class="entity-key">+ purchase_order_items</text>
+
+  <rect x="1220" y="415" width="170" height="80" rx="4" class="entity"/>
+  <text x="1305" y="435" text-anchor="middle" class="entity-title">supplier_invoices</text>
+  <text x="1305" y="451" text-anchor="middle" class="entity-key">invoice_number · uuid_sat</text>
+  <text x="1305" y="465" text-anchor="middle" class="entity-key">subtotal · iva · envío · seguro</text>
+  <text x="1305" y="479" text-anchor="middle" class="entity-key">payment_status</text>
+
+  <rect x="1410" y="415" width="160" height="80" rx="4" class="entity"/>
+  <text x="1490" y="435" text-anchor="middle" class="entity-title">goods_receipts</text>
+  <text x="1490" y="451" text-anchor="middle" class="entity-key">receipt_number</text>
+  <text x="1490" y="465" text-anchor="middle" class="entity-key">+ goods_receipt_items</text>
+  <text x="1490" y="479" text-anchor="middle" class="entity-key">quantity_received · cost</text>
+
+  <text x="1200" y="540" font-style="italic" fill="#b91c1c">→ goods_receipt_items dispara INSERT en inventory_movements (RECEIPT)</text>
+  <text x="1200" y="560" font-style="italic" fill="#b91c1c">→ purchase_orders.status: DRAFT · SENT · CONFIRMED · RECEIVED · INVOICED · PAID</text>
+
+  <!-- Flujo de compras -->
+  <path d="M1010,455 L1030,455" class="rel-flow"/>
+  <path d="M1200,455 L1220,455" class="rel-flow"/>
+  <path d="M1390,455 L1410,455" class="rel-flow"/>
+
+  <!-- BLOQUE: INVENTARIO -->
+  <rect x="20" y="640" width="780" height="220" rx="8" class="group group-inv"/>
+  <text x="30" y="660" class="group-label">7 · Inventario (fuente de verdad: inventory_movements)</text>
+
+  <rect x="40" y="675" width="240" height="120" rx="4" class="entity" style="stroke-width:3;stroke:#6d28d9"/>
+  <text x="160" y="695" text-anchor="middle" class="entity-title" fill="#6d28d9">★ inventory_movements</text>
+  <text x="160" y="713" text-anchor="middle" class="entity-key">movement_id · product_id</text>
+  <text x="160" y="727" text-anchor="middle" class="entity-key">movement_type:</text>
+  <text x="160" y="741" text-anchor="middle" class="entity-key">RECEIPT · ISSUE</text>
+  <text x="160" y="755" text-anchor="middle" class="entity-key">ADJUSTMENT_IN/OUT</text>
+  <text x="160" y="769" text-anchor="middle" class="entity-key">RETURN_IN/OUT</text>
+  <text x="160" y="783" text-anchor="middle" class="entity-key">source_type + source_id (poly FK)</text>
+
+  <rect x="300" y="675" width="220" height="55" rx="4" class="entity"/>
+  <text x="410" y="694" text-anchor="middle" class="entity-title">v_inventory_current (vista)</text>
+  <text x="410" y="710" text-anchor="middle" class="entity-key">SUM(in) - SUM(out) por SKU</text>
+  <text x="410" y="722" text-anchor="middle" class="entity-key">avg_unit_cost · stock_status</text>
+
+  <rect x="540" y="675" width="240" height="55" rx="4" class="entity"/>
+  <text x="660" y="694" text-anchor="middle" class="entity-title">v_inventory_kpis (vista)</text>
+  <text x="660" y="710" text-anchor="middle" class="entity-key">ABC · días sin movimiento · semáforo</text>
+  <text x="660" y="722" text-anchor="middle" class="entity-key">demanda 90/180 · acción sugerida</text>
+
+  <rect x="300" y="745" width="220" height="55" rx="4" class="entity"/>
+  <text x="410" y="763" text-anchor="middle" class="entity-title">non_conformities</text>
+  <text x="410" y="780" text-anchor="middle" class="entity-key">folio · adjustment_type IN/OUT</text>
+  <text x="410" y="792" text-anchor="middle" class="entity-key">→ inventory_movement_id (FK)</text>
+
+  <rect x="540" y="745" width="240" height="55" rx="4" class="entity"/>
+  <text x="660" y="763" text-anchor="middle" class="entity-title">inventory_snapshots</text>
+  <text x="660" y="780" text-anchor="middle" class="entity-key">cierres mensuales inmutables</text>
+  <text x="660" y="792" text-anchor="middle" class="entity-key">snapshot_date · qty · avg_cost · ABC</text>
+
+  <text x="40" y="825" font-style="italic" fill="#6d28d9">⚡ Reemplaza Gestión de Inventario, Bitácora de Movimientos y elimina las 3 fuentes de verdad</text>
+
+  <!-- BLOQUE: FACTURACIÓN -->
+  <rect x="820" y="640" width="760" height="320" rx="8" class="group group-fact"/>
+  <text x="830" y="660" class="group-label">8 · Facturación (CFDI 4.0 SAT México)</text>
+
+  <rect x="840" y="675" width="220" height="120" rx="4" class="entity"/>
+  <text x="950" y="695" text-anchor="middle" class="entity-title">cfdi (cabecera)</text>
+  <text x="950" y="713" text-anchor="middle" class="entity-key">cfdi_id · uuid (PAC)</text>
+  <text x="950" y="727" text-anchor="middle" class="entity-key">cfdi_type: I · E · P</text>
+  <text x="950" y="741" text-anchor="middle" class="entity-key">issuer/receiver: rfc, regime, zip</text>
+  <text x="950" y="755" text-anchor="middle" class="entity-key">cfdi_use · payment_method (PUE/PPD)</text>
+  <text x="950" y="769" text-anchor="middle" class="entity-key">payment_form · currency · ex_rate</text>
+  <text x="950" y="783" text-anchor="middle" class="entity-key">sello · timbre · status</text>
+
+  <rect x="1080" y="675" width="220" height="120" rx="4" class="entity"/>
+  <text x="1190" y="695" text-anchor="middle" class="entity-title">cfdi_items</text>
+  <text x="1190" y="713" text-anchor="middle" class="entity-key">sat_product_key · sat_unit</text>
+  <text x="1190" y="727" text-anchor="middle" class="entity-key">quantity · unit_price</text>
+  <text x="1190" y="741" text-anchor="middle" class="entity-key">iva · ieps · isr_retention</text>
+  <text x="1190" y="755" text-anchor="middle" class="entity-key">iva_retention · subtotal · total</text>
+  <text x="1190" y="769" text-anchor="middle" class="entity-key">link a order_item</text>
+
+  <rect x="1320" y="675" width="240" height="55" rx="4" class="entity"/>
+  <text x="1440" y="694" text-anchor="middle" class="entity-title">cfdi_credit_notes (NC tipo E)</text>
+  <text x="1440" y="710" text-anchor="middle" class="entity-key">credit_cfdi_id ↔ related_cfdi_id</text>
+  <text x="1440" y="722" text-anchor="middle" class="entity-key">refund_amount · reason</text>
+
+  <rect x="1320" y="745" width="240" height="55" rx="4" class="entity"/>
+  <text x="1440" y="763" text-anchor="middle" class="entity-title">cfdi_payments (CFDI tipo P)</text>
+  <text x="1440" y="780" text-anchor="middle" class="entity-key">complemento de pago PPD</text>
+  <text x="1440" y="792" text-anchor="middle" class="entity-key">partiality · previous · paid · remaining</text>
+
+  <rect x="840" y="810" width="220" height="80" rx="4" class="entity"/>
+  <text x="950" y="830" text-anchor="middle" class="entity-title">payments</text>
+  <text x="950" y="848" text-anchor="middle" class="entity-key">payment_id · customer_id</text>
+  <text x="950" y="862" text-anchor="middle" class="entity-key">amount · payment_form · date</text>
+  <text x="950" y="876" text-anchor="middle" class="entity-key">+ payment_applications (cfdi/order)</text>
+
+  <rect x="1080" y="810" width="220" height="80" rx="4" class="entity"/>
+  <text x="1190" y="830" text-anchor="middle" class="entity-title">operating_expenses</text>
+  <text x="1190" y="848" text-anchor="middle" class="entity-key">concept · category · supplier</text>
+  <text x="1190" y="862" text-anchor="middle" class="entity-key">subtotal · tax · total</text>
+  <text x="1190" y="876" text-anchor="middle" class="entity-key">deductible · payment_method</text>
+
+  <text x="840" y="920" font-style="italic" fill="#be185d">⚡ Módulo CFDI 4.0 nativo: claves SAT, complementos de pago, NC tipo E. Faltante crítico en sistema viejo.</text>
+
+  <!-- Conexión visual de flujo principal -->
+  <path d="M620,465 L620,520 Q620,535 700,535 Q800,535 800,540" class="rel" stroke-dasharray="3,3"/>
+
+  <!-- Pie -->
+  <text x="800" y="1180" text-anchor="middle" font-size="11" fill="#6b7280" font-style="italic">
+    Detalle completo de campos: 03_schema.sql · Vistas y triggers: 04_views_and_triggers.sql · Lógica de negocio: 06_logica_negocio.docx
+  </text>
+</svg>
