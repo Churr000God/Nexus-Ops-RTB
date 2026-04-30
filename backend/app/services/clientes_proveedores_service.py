@@ -18,7 +18,10 @@ from app.models.clientes_proveedores_models import (
     SupplierProductListing,
     SupplierTaxData,
 )
+from app.models.ops_models import Product
 from app.schemas.clientes_proveedores_schema import (
+    CatalogoItemRead,
+    CatalogoListResponse,
     CustomerAddressCreate,
     CustomerAddressRead,
     CustomerContactCreate,
@@ -61,6 +64,8 @@ class ClientesProveedoresService:
         offset: int = 0,
         search: str | None = None,
         solo_activos: bool = True,
+        customer_type: str | None = None,
+        locality: str | None = None,
     ) -> CustomerListResponse:
         stmt = select(CustomerMaster)
         count_stmt = select(func.count()).select_from(CustomerMaster)
@@ -77,6 +82,14 @@ class ClientesProveedoresService:
             )
             stmt = stmt.where(condition)
             count_stmt = count_stmt.where(condition)
+
+        if customer_type:
+            stmt = stmt.where(CustomerMaster.customer_type == customer_type)
+            count_stmt = count_stmt.where(CustomerMaster.customer_type == customer_type)
+
+        if locality:
+            stmt = stmt.where(CustomerMaster.locality == locality)
+            count_stmt = count_stmt.where(CustomerMaster.locality == locality)
 
         total = (await self.db.execute(count_stmt)).scalar_one()
         rows = (
@@ -123,8 +136,17 @@ class ClientesProveedoresService:
         )
 
     async def create_customer(self, data: CustomerCreate) -> CustomerRead:
+        code = data.code.upper()
+        existing = (
+            await self.db.execute(
+                select(CustomerMaster.customer_id).where(CustomerMaster.code == code)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ValueError(f"Ya existe un cliente con el código '{code}'")
+
         customer = CustomerMaster(
-            code=data.code.upper(),
+            code=code,
             business_name=data.business_name,
             customer_type=data.customer_type,
             locality=data.locality,
@@ -413,8 +435,17 @@ class ClientesProveedoresService:
         )
 
     async def create_supplier(self, data: SupplierCreate) -> SupplierRead:
+        code = data.code.upper()
+        existing = (
+            await self.db.execute(
+                select(SupplierMaster.supplier_id).where(SupplierMaster.code == code)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            raise ValueError(f"Ya existe un proveedor con el código '{code}'")
+
         supplier = SupplierMaster(
-            code=data.code.upper(),
+            code=code,
             business_name=data.business_name,
             supplier_type=data.supplier_type,
             locality=data.locality,
@@ -668,3 +699,68 @@ class ClientesProveedoresService:
         await self.db.commit()
         await self.db.refresh(new_listing)
         return SupplierProductRead.model_validate(new_listing)
+
+    async def list_catalogo(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        search: str | None = None,
+        supplier_id: int | None = None,
+        solo_vinculados: bool = False,
+    ) -> CatalogoListResponse:
+        base = (
+            select(SupplierProductListing, SupplierMaster, Product)
+            .join(SupplierMaster, SupplierMaster.supplier_id == SupplierProductListing.supplier_id)
+            .outerjoin(Product, Product.id == SupplierProductListing.product_id)
+            .where(SupplierProductListing.is_current.is_(True))
+        )
+
+        if supplier_id is not None:
+            base = base.where(SupplierProductListing.supplier_id == supplier_id)
+
+        if solo_vinculados:
+            base = base.where(SupplierProductListing.product_id.isnot(None))
+
+        if search:
+            term = f"%{search}%"
+            base = base.where(
+                or_(
+                    SupplierMaster.business_name.ilike(term),
+                    SupplierProductListing.supplier_sku.ilike(term),
+                    Product.name.ilike(term),
+                    Product.sku.ilike(term),
+                )
+            )
+
+        total_q = select(func.count()).select_from(base.subquery())
+        total: int = (await self.db.execute(total_q)).scalar_one()
+
+        rows_q = (
+            base
+            .order_by(SupplierMaster.business_name, Product.name, SupplierProductListing.supplier_sku)
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = (await self.db.execute(rows_q)).all()
+
+        items = [
+            CatalogoItemRead(
+                supplier_product_id=sp.supplier_product_id,
+                supplier_id=sp.supplier_id,
+                supplier_code=s.code,
+                supplier_name=s.business_name,
+                supplier_sku=sp.supplier_sku,
+                product_id=sp.product_id,
+                product_name=p.name if p else None,
+                product_sku=p.sku if p else None,
+                unit_cost=sp.unit_cost,
+                currency=sp.currency,
+                lead_time_days=sp.lead_time_days,
+                moq=sp.moq,
+                is_available=sp.is_available,
+                is_preferred=sp.is_preferred,
+                valid_from=sp.valid_from,
+            )
+            for sp, s, p in rows
+        ]
+        return CatalogoListResponse(total=total, items=items)

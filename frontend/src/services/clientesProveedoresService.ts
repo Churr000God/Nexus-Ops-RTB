@@ -1,5 +1,6 @@
 import { requestJson } from "@/lib/http"
 import type {
+  CatalogoListResponse,
   CustomerAddress,
   CustomerAddressCreate,
   CustomerContact,
@@ -36,6 +37,8 @@ export type CustomerListParams = {
   offset?: number
   search?: string
   solo_activos?: boolean
+  customer_type?: string
+  locality?: string
 }
 
 export type SupplierListParams = {
@@ -46,6 +49,14 @@ export type SupplierListParams = {
   supplier_type?: string
   locality?: string
   is_occasional?: boolean
+}
+
+export type CatalogoParams = {
+  limit?: number
+  offset?: number
+  search?: string
+  supplier_id?: number
+  solo_vinculados?: boolean
 }
 
 export const clientesProveedoresService = {
@@ -75,6 +86,8 @@ export const clientesProveedoresService = {
     if (params.offset != null) qs.set("offset", String(params.offset))
     if (params.search) qs.set("search", params.search)
     if (params.solo_activos != null) qs.set("solo_activos", String(params.solo_activos))
+    if (params.customer_type) qs.set("customer_type", params.customer_type)
+    if (params.locality) qs.set("locality", params.locality)
     const query = qs.toString()
     return requestJson<CustomerListResponse>(
       `/api/clientes${query ? `?${query}` : ""}`,
@@ -284,6 +297,20 @@ export const clientesProveedoresService = {
       body: data,
       token,
     })
+  },
+
+  listCatalogo(token: string | null, params: CatalogoParams = {}, signal?: AbortSignal) {
+    const qs = new URLSearchParams()
+    if (params.limit != null) qs.set("limit", String(params.limit))
+    if (params.offset != null) qs.set("offset", String(params.offset))
+    if (params.search) qs.set("search", params.search)
+    if (params.supplier_id != null) qs.set("supplier_id", String(params.supplier_id))
+    if (params.solo_vinculados != null) qs.set("solo_vinculados", String(params.solo_vinculados))
+    const query = qs.toString()
+    return requestJson<CatalogoListResponse>(
+      `/api/proveedores/catalogo${query ? `?${query}` : ""}`,
+      { token, signal }
+    )
   },
 
   addSupplierProduct(token: string | null, supplierId: number, data: SupplierProductCreate) {

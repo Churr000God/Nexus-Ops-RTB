@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_db, require_permission
 from app.models.user_model import User
 from app.schemas.clientes_proveedores_schema import (
+    CatalogoListResponse,
     CustomerAddressCreate,
     CustomerAddressRead,
     CustomerContactCreate,
@@ -83,11 +84,18 @@ async def list_clientes(
     offset: int = Query(default=0, ge=0),
     search: str | None = Query(default=None, max_length=100),
     solo_activos: bool = Query(default=True),
+    customer_type: str | None = Query(default=None, max_length=20),
+    locality: str | None = Query(default=None, max_length=20),
     svc: ClientesProveedoresService = Depends(_svc),
     _: User = Depends(require_permission("customer.view")),
 ) -> CustomerListResponse:
     return await svc.list_customers(
-        limit=limit, offset=offset, search=search, solo_activos=solo_activos
+        limit=limit,
+        offset=offset,
+        search=search,
+        solo_activos=solo_activos,
+        customer_type=customer_type,
+        locality=locality,
     )
 
 
@@ -114,7 +122,10 @@ async def create_cliente(
     svc: ClientesProveedoresService = Depends(_svc),
     _: User = Depends(require_permission("customer.manage")),
 ) -> CustomerRead:
-    return await svc.create_customer(data)
+    try:
+        return await svc.create_customer(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @clientes_router.patch("/{customer_id}", response_model=CustomerRead)
@@ -303,6 +314,25 @@ async def list_proveedores(
     )
 
 
+@proveedores_router.get("/catalogo", response_model=CatalogoListResponse)
+async def list_catalogo_cross(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=120),
+    supplier_id: int | None = Query(default=None),
+    solo_vinculados: bool = Query(default=False),
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.view")),
+) -> CatalogoListResponse:
+    return await svc.list_catalogo(
+        limit=limit,
+        offset=offset,
+        search=search,
+        supplier_id=supplier_id,
+        solo_vinculados=solo_vinculados,
+    )
+
+
 @proveedores_router.get("/{supplier_id}", response_model=SupplierDetail)
 async def get_proveedor(
     supplier_id: int,
@@ -326,7 +356,10 @@ async def create_proveedor(
     svc: ClientesProveedoresService = Depends(_svc),
     _: User = Depends(require_permission("supplier.manage")),
 ) -> SupplierRead:
-    return await svc.create_supplier(data)
+    try:
+        return await svc.create_supplier(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @proveedores_router.patch("/{supplier_id}", response_model=SupplierRead)
