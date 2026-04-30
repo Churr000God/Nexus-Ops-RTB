@@ -1,5 +1,39 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-30 — Módulo Inventario & Activos — Almacén y Equipos
+
+### Backend
+- `app/schemas/assets_schema.py`: `InventoryCurrentRead` extendido con `theoretical_qty: float | None` y `theoretical_value: float | None`.
+- `app/services/assets_service.py`: `get_inventory_current` actualizado — `LEFT JOIN inventario` para traer stock teórico; calcula `theoretical_value = theoretical_qty × avg_unit_cost`.
+
+### Frontend
+- `src/types/assets.ts`: `InventoryCurrentItem` extendido con `theoretical_qty` y `theoretical_value`.
+- `src/pages/Inventarios.tsx` — reescritura completa de `AlmacenPage`:
+  - Header card blanco (ícono `Warehouse` + título + descripción), igual al patrón de `EquiposPage`.
+  - 5 KPI cards computadas desde las filas cargadas (`useMemo`): Con Stock · Sin Stock · Stock Negativo · Valor Real · Valor Teórico.
+  - Eliminado el MainTab Inventario/Equipos — Equipos sigue siendo página independiente.
+  - Eliminados KPIs antiguos, `DateRangePicker`, modales de reporte y botones de CSV/email.
+  - Columnas nuevas en tabla: Stock Teórico · Valor Real · Valor Teórico.
+  - `maxHeight="calc(100vh - 430px)"` para scroll independiente de la página.
+  - Import corregido: `@/stores/authStore` (con **s**).
+- `src/pages/EquiposPage.tsx`:
+  - Header card blanco añadido (ícono `ClipboardList` + "Gestión de Equipos" en texto oscuro).
+  - `token` pasado a todos los métodos de `assetsService` desde `useAuthStore`.
+  - Import corregido: `@/stores/authStore`.
+  - Tabla principal: `maxHeight="calc(100vh - 320px)"`.
+  - Panel de detalle (componentes/historial): `maxHeight="300px"`.
+- `src/components/common/DataTable.tsx`: scroll horizontal y vertical unificados en un solo contenedor — cuando se pasa `maxHeight`, ambos ejes son independientes de la página (`overflow-x-auto overflow-y-auto` en el mismo div).
+
+### Paleta de colores
+- Contenedores de sección: `bg-slate-800/60 border-slate-700` (en lugar de `bg-white/5 border-white/10`).
+- Selects de filtro: `bg-slate-800 border-slate-600`.
+- KPI card "Valor Teórico": tono `violet` (`bg-violet-500/10 border-violet-500/30 text-violet-300`).
+
+### Documentación
+- `estructura_proyecto/14_modulo_inventario_almacen.md`: nuevo documento — arquitectura completa del módulo, endpoints, schemas, componentes y paleta de colores.
+
+---
+
 ## 2026-04-29 — Admin CFDI: Configuración Fiscal y Series y Folios
 
 ### Backend

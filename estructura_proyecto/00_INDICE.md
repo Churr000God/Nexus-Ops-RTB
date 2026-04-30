@@ -23,6 +23,8 @@
 | 11 | [11_bitacora_cambios.md](11_bitacora_cambios.md) | Bitácora de cambios por sesión |
 | 12 | [12_modulo_usuarios_admin.md](12_modulo_usuarios_admin.md) | Módulo de gestión de usuarios y roles — schema BD, flujos, guards, pantallas |
 | 13 | [13_modulo_cfdi_admin.md](13_modulo_cfdi_admin.md) | Admin CFDI — Configuración Fiscal del Emisor y gestión de Series y Folios |
+| 14 | [14_modulo_clientes_proveedores.md](14_modulo_clientes_proveedores.md) | Módulo Clientes & Proveedores — maestro, contactos, direcciones, catálogo cross |
+| 15 | [15_modulo_inventario_almacen.md](15_modulo_inventario_almacen.md) | Módulo Inventario & Activos — Almacén (stock real/teórico, KPI cards) y Equipos |
 
 ---
 
