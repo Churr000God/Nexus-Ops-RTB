@@ -1,4 +1,4 @@
-# Módulo 14 — Clientes y Proveedores (Directorio Maestro)
+# Módulo 15 — Clientes y Proveedores (Directorio Maestro)
 
 **Migración:** 0014  
 **Fecha de implementación inicial:** 2026-04-28  

@@ -1,5 +1,45 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-29 — Clientes y Proveedores: edición completa + scroll independiente + fix 401
+
+### Importación de datos
+- `backend/scripts/seed_clientes.py` (nuevo): importación idempotente de 125 clientes desde `data/csv/Directorio_Clientes_Proveedores.csv` (Tipo="CLIENTE"); mapea siglas→code, categoria→locality, TPP→payment_terms_days; inserta tax_data si RFC válido y contacts si hay nombre.
+
+### Backend — nuevos endpoints
+- `PUT /api/clientes/{id}/addresses/{addr_id}` — actualizar dirección de cliente
+- `DELETE /api/clientes/{id}/addresses/{addr_id}` — eliminar dirección de cliente
+- `PUT /api/clientes/{id}/contacts/{c_id}` — actualizar contacto de cliente
+- `PUT /api/proveedores/{id}/addresses/{addr_id}` — actualizar dirección de proveedor
+- `DELETE /api/proveedores/{id}/addresses/{addr_id}` — eliminar dirección de proveedor
+- `PUT /api/proveedores/{id}/contacts/{c_id}` — actualizar contacto de proveedor
+
+### Frontend — Clientes.tsx
+- Pestaña **Direcciones**: CRUD de direcciones DELIVERY/OTHER con `AddressInlineForm` reutilizable
+- Pestaña **Contactos**: edición inline (Pencil + Trash2) con formulario desplegable
+- Modal **Editar cliente**: nombre comercial, tipo, localidad, días de crédito, límite, moneda, notas
+- Panel sticky: `overflow-hidden` en contenedor flex para scroll independiente
+
+### Frontend — ProveedoresMaestro.tsx
+- Pestaña **Direcciones**: CRUD tipo PICKUP/OTHER con `SupplierAddressInlineForm`
+- Pestaña **Contactos**: edición inline con Pencil + formulario desplegable
+- Panel sticky: mismo fix de `overflow-hidden`
+
+### Frontend — tipos y servicio
+- `types/clientesProveedores.ts`: añadidos `CustomerAddressCreate`, `CustomerContactCreate`, `SupplierAddressCreate`, `SupplierContactCreate`
+- `services/clientesProveedoresService.ts`: 8 nuevos métodos para CRUD de direcciones y contactos
+
+### Fix — 401 en inventario/equipos
+- `services/assetsService.ts`: todos los métodos reciben `token: string | null` y lo pasan a `requestJson`
+- `pages/Inventarios.tsx` + `pages/EquiposPage.tsx`: leen `useAuthStore` y pasan token
+
+### Fix — scroll independiente tabla vs pestaña
+- `components/layout/AppShell.tsx`: `main` cambia de `min-h-screen` a `h-screen overflow-hidden`; div interior de `min-h-[calc(100vh-64px)]` a `h-full overflow-auto`. Con `min-h`, los hijos con `h-full` resolvían a `auto` y los scrollbars internos nunca activaban.
+
+### Documentación
+- `estructura_proyecto/14_modulo_clientes_proveedores.md`: módulo 15 — arquitectura completa, endpoints, permisos RBAC, seed CSV, frontend, patrón SCD Type 2 y diagrama de scroll.
+
+---
+
 ## 2026-04-30 — Módulo Inventario & Activos — Almacén y Equipos
 
 ### Backend
