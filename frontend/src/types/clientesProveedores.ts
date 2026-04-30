@@ -250,6 +250,29 @@ export type SupplierListResponse = {
   items: SupplierRead[]
 }
 
+export type CatalogoItem = {
+  supplier_product_id: number
+  supplier_id: number
+  supplier_code: string
+  supplier_name: string
+  supplier_sku: string | null
+  product_id: string | null
+  product_name: string | null
+  product_sku: string | null
+  unit_cost: string
+  currency: string
+  lead_time_days: number | null
+  moq: string | null
+  is_available: boolean
+  is_preferred: boolean
+  valid_from: string
+}
+
+export type CatalogoListResponse = {
+  total: number
+  items: CatalogoItem[]
+}
+
 export type SupplierCreate = {
   code: string
   business_name: string

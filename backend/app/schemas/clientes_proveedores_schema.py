@@ -329,6 +329,31 @@ class SupplierProductRead(BaseModel):
     created_at: datetime
 
 
+class CatalogoItemRead(BaseModel):
+    """Vista cruzada: producto × proveedor (para /proveedores/catalogo)."""
+
+    supplier_product_id: int
+    supplier_id: int
+    supplier_code: str
+    supplier_name: str
+    supplier_sku: str | None
+    product_id: UUID | None
+    product_name: str | None
+    product_sku: str | None
+    unit_cost: Decimal
+    currency: str
+    lead_time_days: int | None
+    moq: Decimal | None
+    is_available: bool
+    is_preferred: bool
+    valid_from: date
+
+
+class CatalogoListResponse(BaseModel):
+    total: int
+    items: list[CatalogoItemRead]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Proveedores — cabecera
 # ─────────────────────────────────────────────────────────────────────────────
