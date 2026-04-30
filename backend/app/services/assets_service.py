@@ -220,12 +220,18 @@ class AssetService:
             params["stock_status"] = stock_status
         where = ("WHERE " + " AND ".join(filters)) if filters else ""
         sql = text(f"""
-            SELECT product_id, sku, name, is_saleable, category,
-                   quantity_on_hand, avg_unit_cost, total_value,
-                   min_stock, stock_status
-            FROM v_inventory_current
+            SELECT
+                vc.product_id, vc.sku, vc.name, vc.is_saleable, vc.category,
+                vc.quantity_on_hand, vc.avg_unit_cost, vc.total_value,
+                vc.min_stock, vc.stock_status,
+                i.theoretical_qty,
+                CASE WHEN i.theoretical_qty IS NOT NULL
+                     THEN i.theoretical_qty * vc.avg_unit_cost
+                     ELSE NULL END AS theoretical_value
+            FROM v_inventory_current vc
+            LEFT JOIN inventario i ON i.product_id = vc.product_id
             {where}
-            ORDER BY total_value DESC
+            ORDER BY vc.total_value DESC
             LIMIT :limit OFFSET :offset
         """)
         rows = (await self.db.execute(sql, params)).mappings().all()

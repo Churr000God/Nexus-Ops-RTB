@@ -39,8 +39,11 @@ export function DataTable<T>({
           {toolbar}
         </div>
       ) : null}
-      <div className="overflow-x-auto">
-        <div style={maxHeight ? { maxHeight } : undefined} className={cn(maxHeight ? "overflow-y-auto" : "")}>
+      <div
+        style={maxHeight ? { maxHeight } : undefined}
+        className={cn("overflow-x-auto", maxHeight ? "overflow-y-auto" : "")}
+      >
+        <div>
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-[hsl(var(--background))]/95 backdrop-blur">
             <tr>

@@ -218,6 +218,7 @@ function AssetDetailPanel({ asset }: { asset: AssetRead }) {
             columns={COMP_COLS}
             rows={components ?? []}
             rowKey={(r) => r.asset_component_id}
+            maxHeight="300px"
             emptyLabel={
               compStatus === "loading" || compStatus === "idle"
                 ? "Cargando…"
@@ -231,6 +232,7 @@ function AssetDetailPanel({ asset }: { asset: AssetRead }) {
             columns={HIST_COLS}
             rows={history ?? []}
             rowKey={(r) => r.history_id}
+            maxHeight="300px"
             emptyLabel={
               histStatus === "loading" || histStatus === "idle"
                 ? "Cargando…"
@@ -343,6 +345,7 @@ export default function EquiposPage() {
         columns={ASSET_COLS}
         rows={data ?? []}
         rowKey={(r) => r.id}
+        maxHeight="calc(100vh - 320px)"
         emptyLabel={
           status === "loading"
             ? "Cargando…"

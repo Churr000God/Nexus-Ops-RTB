@@ -143,7 +143,7 @@ class InventorySnapshotRead(BaseModel):
 # ── KPI inventario (actualizado con vistas nuevas) ───────────────────────────
 
 class InventoryCurrentRead(BaseModel):
-    """Fila de v_inventory_current."""
+    """Fila de v_inventory_current con stock teórico desde tabla inventario."""
 
     product_id: UUID
     sku: str | None
@@ -151,8 +151,10 @@ class InventoryCurrentRead(BaseModel):
     is_saleable: bool
     category: str | None
     quantity_on_hand: float
+    theoretical_qty: float | None = None
     avg_unit_cost: float
     total_value: float
+    theoretical_value: float | None = None
     min_stock: float | None
     stock_status: str
 

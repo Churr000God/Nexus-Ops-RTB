@@ -5,8 +5,10 @@ export type InventoryCurrentItem = {
   is_saleable: boolean
   category: string | null
   quantity_on_hand: number
+  theoretical_qty: number | null
   avg_unit_cost: number | null
   total_value: number | null
+  theoretical_value: number | null
   min_stock: number | null
   stock_status: "OK" | "BELOW_MIN" | "OUT" | null
 }
