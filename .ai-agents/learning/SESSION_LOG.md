@@ -77,6 +77,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-29 | Módulo 16 — Estructura de Navegación: 14 módulos, 50+ rutas, sidebar scrollable | frontend | 5 | [2026-04-29_estructura-navegacion.md](sessions/2026-04-29_estructura-navegacion.md) |
 | 2026-04-30 | Mejora visual del catálogo de productos — vista grid, filtros, badges | frontend | 5 | [2026-04-30_mejora-ui-catalogo-productos.md](sessions/2026-04-30_mejora-ui-catalogo-productos.md) |
 | 2026-04-30 | Mejora de formularios y panel de información de producto | frontend | 5 | [2026-04-30_mejora-formularios-y-panel-producto.md](sessions/2026-04-30_mejora-formularios-y-panel-producto.md) |
+| 2026-04-30 | Mejora de diseño visual de Almacén y Equipos (Inventario & Activos) | frontend | 5 | [2026-04-30_mejora-diseno-almacen-equipos.md](sessions/2026-04-30_mejora-diseno-almacen-equipos.md) |
 
 ---
 
@@ -84,6 +85,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 21 |
+| Total sesiones | 22 |
 | Errores registrados | 22 |
-| Lecciones documentadas | 25 |
+| Lecciones documentadas | 27 |

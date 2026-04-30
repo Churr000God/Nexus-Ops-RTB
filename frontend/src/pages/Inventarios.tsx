@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useState } from "react"
-import { Package, TrendingDown, TrendingUp, Warehouse } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  BoxesIcon,
+  Download,
+  FileText,
+  Mail,
+  Package,
+  TrendingDown,
+  TrendingUp,
+  Warehouse,
+} from "lucide-react"
+import { toast } from "sonner"
 
+import { AlmacenEmailReportModal } from "@/components/common/AlmacenEmailReportModal"
+import { AlmacenReportModal } from "@/components/common/AlmacenReportModal"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { KpiCard } from "@/components/common/KpiCard"
+import { StatusBadge } from "@/components/common/StatusBadge"
+import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
+import { useFilters } from "@/hooks/useFilters"
+import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
+import { inventarioService } from "@/services/inventarioService"
 import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
 import type { InventoryCurrentItem } from "@/types/assets"
@@ -23,18 +43,18 @@ const STOCK_STATUS_LABELS: Record<string, string> = {
 }
 
 const STOCK_STATUS_COLORS: Record<string, string> = {
-  OK: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-  BELOW_MIN: "border-amber-500/30 bg-amber-500/10 text-amber-400",
-  OUT: "border-red-500/30 bg-red-500/10 text-red-400",
+  OK: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+  BELOW_MIN: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+  OUT: "border-red-500/30 bg-red-500/10 text-red-600",
 }
 
 function StockBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="text-slate-500">—</span>
+  if (!status) return <span className="text-muted-foreground">—</span>
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-        STOCK_STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-400",
+        STOCK_STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
       )}
     >
       {STOCK_STATUS_LABELS[status] ?? status}
@@ -42,88 +62,36 @@ function StockBadge({ status }: { status: string | null }) {
   )
 }
 
-// ── KPI card ──────────────────────────────────────────────────────────────────
-
-type KpiTone = "green" | "red" | "amber" | "blue" | "violet" | "neutral"
-
-const KPI_TONE: Record<KpiTone, string> = {
-  green:   "border-emerald-500/30 bg-emerald-500/10",
-  red:     "border-red-500/30    bg-red-500/10",
-  amber:   "border-amber-500/30  bg-amber-500/10",
-  blue:    "border-blue-500/30   bg-blue-500/10",
-  violet:  "border-violet-500/30 bg-violet-500/10",
-  neutral: "border-slate-500/30  bg-slate-500/10",
-}
-
-const KPI_ICON_TONE: Record<KpiTone, string> = {
-  green:   "text-emerald-400",
-  red:     "text-red-400",
-  amber:   "text-amber-400",
-  blue:    "text-blue-400",
-  violet:  "text-violet-400",
-  neutral: "text-slate-400",
-}
-
-const KPI_VALUE_TONE: Record<KpiTone, string> = {
-  green:   "text-emerald-300",
-  red:     "text-red-300",
-  amber:   "text-amber-300",
-  blue:    "text-blue-300",
-  violet:  "text-violet-300",
-  neutral: "text-slate-300",
-}
-
-function KpiCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  tone = "neutral",
-}: {
-  title: string
-  value: string
-  description?: string
-  icon: React.ElementType
-  tone?: KpiTone
-}) {
-  return (
-    <div className={cn("rounded-xl border p-4", KPI_TONE[tone])}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon className={cn("h-4 w-4", KPI_ICON_TONE[tone])} aria-hidden="true" />
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</p>
-      </div>
-      <p className={cn("text-xl font-bold", KPI_VALUE_TONE[tone])}>{value}</p>
-      {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
-    </div>
-  )
-}
-
 // ── Table columns ─────────────────────────────────────────────────────────────
 
 const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
-  { key: "sku",            header: "SKU",              cell: (r) => r.sku ?? "—" },
-  { key: "name",           header: "Nombre",           cell: (r) => r.name },
-  { key: "category",       header: "Categoría",        cell: (r) => r.category ?? "—" },
-  { key: "quantity_on_hand", header: "Stock Real",     cell: (r) => fmtQty(r.quantity_on_hand) },
+  { key: "sku", header: "SKU", cell: (r) => r.sku ?? "—" },
+  { key: "name", header: "Nombre", cell: (r) => r.name },
+  { key: "category", header: "Categoría", cell: (r) => r.category ?? "—" },
+  {
+    key: "quantity_on_hand",
+    header: "Stock Real",
+    cell: (r) => fmtQty(r.quantity_on_hand),
+  },
   {
     key: "theoretical_qty",
     header: "Stock Teórico",
-    cell: (r) => r.theoretical_qty != null ? fmtQty(r.theoretical_qty) : "—",
+    cell: (r) => (r.theoretical_qty != null ? fmtQty(r.theoretical_qty) : "—"),
   },
   {
     key: "avg_unit_cost",
     header: "Costo Prom.",
-    cell: (r) => r.avg_unit_cost != null ? fmt.format(r.avg_unit_cost) : "—",
+    cell: (r) => (r.avg_unit_cost != null ? fmt.format(r.avg_unit_cost) : "—"),
   },
   {
     key: "total_value",
     header: "Valor Real",
-    cell: (r) => r.total_value != null ? fmt.format(r.total_value) : "—",
+    cell: (r) => (r.total_value != null ? fmt.format(r.total_value) : "—"),
   },
   {
     key: "theoretical_value",
     header: "Valor Teórico",
-    cell: (r) => r.theoretical_value != null ? fmt.format(r.theoretical_value) : "—",
+    cell: (r) => (r.theoretical_value != null ? fmt.format(r.theoretical_value) : "—"),
   },
   {
     key: "stock_status",
@@ -138,13 +106,18 @@ type StockTab = "vendible" | "interno"
 
 export function AlmacenPage() {
   const token = useAuthStore((s) => s.accessToken)
+  const { startDate, endDate } = useFilters()
   const [stockTab, setStockTab] = useState<StockTab>("vendible")
   const [filterStatus, setFilterStatus] = useState("")
+  const [reportModalOpen, setReportModalOpen] = useState(false)
+  const [emailModalOpen, setEmailModalOpen] = useState(false)
 
   const PAGE_SIZE = 100
   const [page, setPage] = useState(0)
 
-  useEffect(() => { setPage(0) }, [stockTab, filterStatus])
+  useEffect(() => {
+    setPage(0)
+  }, [stockTab, filterStatus])
 
   const kpisFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
@@ -154,20 +127,28 @@ export function AlmacenPage() {
 
   const vendibleFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getVendible(token, {
-        stock_status: filterStatus || undefined,
-        limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
-      }, signal),
+      assetsService.getVendible(
+        token,
+        {
+          stock_status: filterStatus || undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        },
+        signal,
+      ),
     [token, filterStatus, page],
   )
   const internoFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getInterno(token, {
-        stock_status: filterStatus || undefined,
-        limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
-      }, signal),
+      assetsService.getInterno(
+        token,
+        {
+          stock_status: filterStatus || undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        },
+        signal,
+      ),
     [token, filterStatus, page],
   )
 
@@ -178,86 +159,155 @@ export function AlmacenPage() {
     enabled: stockTab === "interno",
   })
 
-  const rows = stockTab === "vendible" ? (vendible ?? []) : (interno ?? [])
+  const rows = stockTab === "vendible" ? vendible ?? [] : interno ?? []
   const tableStatus = stockTab === "vendible" ? vendibleStatus : internoStatus
 
-  const tabKpis = stockTab === "vendible"
-    ? {
-        conStock: kpisV2?.con_stock_vendible ?? 0,
-        sinStock: kpisV2?.sin_stock_vendible ?? 0,
-        stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
-        montoReal: kpisV2?.valor_total_vendible ?? 0,
-        total: kpisV2?.total_vendible ?? 0,
-      }
-    : {
-        conStock: kpisV2?.con_stock_interno ?? 0,
-        sinStock: kpisV2?.sin_stock_interno ?? 0,
-        stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
-        montoReal: kpisV2?.valor_total_interno ?? 0,
-        total: kpisV2?.total_interno ?? 0,
-      }
+  const tabKpis =
+    stockTab === "vendible"
+      ? {
+          conStock: kpisV2?.con_stock_vendible ?? 0,
+          sinStock: kpisV2?.sin_stock_vendible ?? 0,
+          stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
+          montoReal: kpisV2?.valor_total_vendible ?? 0,
+          total: kpisV2?.total_vendible ?? 0,
+        }
+      : {
+          conStock: kpisV2?.con_stock_interno ?? 0,
+          sinStock: kpisV2?.sin_stock_interno ?? 0,
+          stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
+          montoReal: kpisV2?.valor_total_interno ?? 0,
+          total: kpisV2?.total_interno ?? 0,
+        }
+
   const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Control de Almacén</h1>
-            <p className="text-sm text-gray-500">
-              Stock en tiempo real desde movimientos de inventario · Costo promedio ponderado
-            </p>
+      <section className="surface-card">
+        <div className="panel-header p-5 md:p-6">
+          <div className="min-w-0 flex-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <StatusBadge variant="success">En vivo</StatusBadge>
+              <StatusBadge variant="info">Movimientos acumulados</StatusBadge>
+            </div>
+            <div className="flex items-center gap-3">
+              <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight text-foreground">
+                  Control de Almacén
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Stock en tiempo real desde movimientos de inventario · Costo promedio ponderado
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 xl:min-w-[200px]">
+            <Button type="button" variant="outline" onClick={() => setReportModalOpen(true)}>
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Reporte
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                toast.info("Generando CSV, espera un momento…")
+                try {
+                  const result = await inventarioService.downloadAlmacenCsv(token ?? "", {
+                    startDate,
+                    endDate,
+                    sections: ["kpis", "valor", "alertas", "dormidos"],
+                  })
+                  const url = URL.createObjectURL(result.blob)
+                  const a = document.createElement("a")
+                  a.href = url
+                  a.download = result.filename
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  toast.success("CSV descargado correctamente")
+                } catch {
+                  toast.error("Error al descargar el CSV")
+                }
+              }}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              CSV
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setEmailModalOpen(true)}>
+              <Mail className="h-4 w-4" aria-hidden="true" />
+              Email
+            </Button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <KpiCard
+          title="Valor Total"
+          value={formatCurrencyMXN(kpisV2?.valor_total_real ?? 0)}
+          description="Costo promedio × stock real (vendible + interno)"
+          icon={TrendingUp}
+          tone="blue"
+        />
         <KpiCard
           title="Con Stock"
-          value={String(tabKpis.conStock)}
+          value={formatNumber(tabKpis.conStock)}
           description="SKUs con cantidad > 0"
           icon={Package}
           tone="green"
         />
         <KpiCard
           title="Sin Stock"
-          value={String(tabKpis.sinStock)}
+          value={formatNumber(tabKpis.sinStock)}
           description="SKUs con cantidad = 0"
-          icon={Package}
-          tone="amber"
+          icon={BoxesIcon}
+          tone="neutral"
         />
         <KpiCard
           title="Stock Negativo"
-          value={String(tabKpis.stockNegativo)}
-          description="SKUs con cantidad < 0"
+          value={formatNumber(tabKpis.stockNegativo)}
+          description="Salidas sin entrada registrada"
           icon={TrendingDown}
           tone="red"
+          badge={tabKpis.stockNegativo > 0 ? { label: "Revisar", variant: "warning" } : undefined}
         />
         <KpiCard
-          title="Valor Real"
-          value={fmt.format(tabKpis.montoReal)}
-          description="Costo prom. × stock real"
-          icon={TrendingUp}
-          tone="blue"
+          title="Bajo Mínimo"
+          value={formatNumber(kpisV2?.productos_below_min ?? 0)}
+          description="SKUs por debajo del stock mínimo"
+          icon={AlertTriangle}
+          tone="orange"
+          badge={
+            (kpisV2?.productos_below_min ?? 0) > 0
+              ? { label: "Atención", variant: "warning" }
+              : undefined
+          }
+        />
+        <KpiCard
+          title="Sin Stock Total"
+          value={formatNumber(kpisV2?.productos_out_of_stock ?? 0)}
+          description="SKUs agotados en ambos inventarios"
+          icon={ArrowLeftRight}
+          tone="purple"
         />
       </div>
 
       {/* Tab strip + filtro */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1">
+        <div className="flex gap-1 rounded-[var(--radius-md)] bg-secondary p-1">
           {(["vendible", "interno"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
               onClick={() => setStockTab(tab)}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                "rounded-[10px] px-4 py-2 text-sm font-medium transition-all",
                 stockTab === tab
-                  ? "bg-[hsl(var(--primary))] text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700/50",
+                  ? "bg-primary text-primary-foreground shadow-soft-sm"
+                  : "text-secondary-foreground hover:bg-secondary-foreground/10",
               )}
             >
               {tab === "vendible" ? "Inventario Vendible" : "Inventario Interno"}
@@ -266,7 +316,7 @@ export function AlmacenPage() {
         </div>
 
         <select
-          className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary"
+          className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
         >
@@ -282,7 +332,7 @@ export function AlmacenPage() {
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => r.product_id}
-        maxHeight="calc(100vh - 430px)"
+        maxHeight="calc(100vh - 540px)"
         emptyLabel={
           tableStatus === "loading" || tableStatus === "idle"
             ? "Cargando…"
@@ -297,6 +347,19 @@ export function AlmacenPage() {
         total={tabKpis.total}
         pageSize={PAGE_SIZE}
         onPage={setPage}
+      />
+
+      <AlmacenReportModal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        startDate={startDate}
+        endDate={endDate}
+      />
+      <AlmacenEmailReportModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        startDate={startDate}
+        endDate={endDate}
       />
     </div>
   )
@@ -326,23 +389,25 @@ function Pagination({
         Mostrando {start}–{end} de {total} productos
       </span>
       <div className="flex items-center gap-1">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => onPage(page - 1)}
           disabled={page === 0}
-          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
         >
           ← Anterior
-        </button>
-        <span className="px-2">
+        </Button>
+        <span className="px-3 text-sm font-medium text-foreground">
           {page + 1} / {totalPages}
         </span>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => onPage(page + 1)}
           disabled={page >= totalPages - 1}
-          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Siguiente →
-        </button>
+        </Button>
       </div>
     </div>
   )
