@@ -108,8 +108,8 @@ export function AppShell({ userEmail, onLogout }: AppShellProps) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[240px] bg-[#1a1d21] md:block">
         <Sidebar />
       </aside>
-      <main className="min-h-screen pt-16 md:pl-[240px]">
-        <div className="min-h-[calc(100vh-64px)] px-4 py-5 md:px-6 md:py-6">
+      <main className="h-screen overflow-hidden pt-16 md:pl-[240px]">
+        <div className="h-full overflow-auto px-4 py-5 md:px-6 md:py-6">
           <Outlet />
         </div>
       </main>
