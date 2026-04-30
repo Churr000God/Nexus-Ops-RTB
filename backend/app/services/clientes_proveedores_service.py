@@ -222,6 +222,21 @@ class ClientesProveedoresService:
         await self.db.refresh(addr)
         return CustomerAddressRead.model_validate(addr)
 
+    async def delete_customer_address(self, customer_id: int, address_id: int) -> bool:
+        addr = (
+            await self.db.execute(
+                select(CustomerAddress).where(
+                    CustomerAddress.address_id == address_id,
+                    CustomerAddress.customer_id == customer_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if addr is None:
+            return False
+        await self.db.delete(addr)
+        await self.db.commit()
+        return True
+
     async def add_customer_contact(
         self, customer_id: int, data: CustomerContactCreate
     ) -> CustomerContactRead:
@@ -421,6 +436,21 @@ class ClientesProveedoresService:
         await self.db.commit()
         await self.db.refresh(addr)
         return SupplierAddressRead.model_validate(addr)
+
+    async def delete_supplier_address(self, supplier_id: int, address_id: int) -> bool:
+        addr = (
+            await self.db.execute(
+                select(SupplierAddress).where(
+                    SupplierAddress.address_id == address_id,
+                    SupplierAddress.supplier_id == supplier_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if addr is None:
+            return False
+        await self.db.delete(addr)
+        await self.db.commit()
+        return True
 
     async def add_supplier_contact(
         self, supplier_id: int, data: SupplierContactCreate

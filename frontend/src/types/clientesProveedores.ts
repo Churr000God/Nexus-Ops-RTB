@@ -55,6 +55,20 @@ export type CustomerAddress = {
   is_default: boolean
 }
 
+export type CustomerAddressCreate = {
+  address_type: "DELIVERY" | "OTHER"
+  label?: string | null
+  street: string
+  exterior_number?: string | null
+  interior_number?: string | null
+  neighborhood?: string | null
+  city?: string | null
+  state?: string | null
+  country?: string
+  zip_code?: string | null
+  is_default?: boolean
+}
+
 export type CustomerContact = {
   contact_id: number
   customer_id: number
@@ -149,6 +163,20 @@ export type SupplierAddress = {
   country: string
   zip_code: string | null
   is_default: boolean
+}
+
+export type SupplierAddressCreate = {
+  address_type: "PICKUP" | "OTHER"
+  label?: string | null
+  street: string
+  exterior_number?: string | null
+  interior_number?: string | null
+  neighborhood?: string | null
+  city?: string | null
+  state?: string | null
+  country?: string
+  zip_code?: string | null
+  is_default?: boolean
 }
 
 export type SupplierContact = {

@@ -1,5 +1,7 @@
 import { requestJson } from "@/lib/http"
 import type {
+  CustomerAddress,
+  CustomerAddressCreate,
   CustomerContact,
   CustomerCreate,
   CustomerDetail,
@@ -12,6 +14,8 @@ import type {
   SATProductKey,
   SATTaxRegime,
   SATUnitKey,
+  SupplierAddress,
+  SupplierAddressCreate,
   SupplierContact,
   SupplierCreate,
   SupplierDetail,
@@ -113,6 +117,21 @@ export const clientesProveedoresService = {
     })
   },
 
+  addCustomerAddress(token: string | null, customerId: number, data: CustomerAddressCreate) {
+    return requestJson<CustomerAddress>(`/api/clientes/${customerId}/addresses`, {
+      method: "POST",
+      body: data,
+      token,
+    })
+  },
+
+  deleteCustomerAddress(token: string | null, customerId: number, addressId: number) {
+    return requestJson<void>(`/api/clientes/${customerId}/addresses/${addressId}`, {
+      method: "DELETE",
+      token,
+    })
+  },
+
   addCustomerContact(
     token: string | null,
     customerId: number,
@@ -176,6 +195,21 @@ export const clientesProveedoresService = {
     return requestJson<SupplierTaxData>(`/api/proveedores/${supplierId}/tax-data`, {
       method: "POST",
       body: data,
+      token,
+    })
+  },
+
+  addSupplierAddress(token: string | null, supplierId: number, data: SupplierAddressCreate) {
+    return requestJson<SupplierAddress>(`/api/proveedores/${supplierId}/addresses`, {
+      method: "POST",
+      body: data,
+      token,
+    })
+  },
+
+  deleteSupplierAddress(token: string | null, supplierId: number, addressId: number) {
+    return requestJson<void>(`/api/proveedores/${supplierId}/addresses/${addressId}`, {
+      method: "DELETE",
       token,
     })
   },

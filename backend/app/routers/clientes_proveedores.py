@@ -186,6 +186,27 @@ async def add_address(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Clientes — direcciones (delete)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@clientes_router.delete(
+    "/{customer_id}/addresses/{address_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_customer_address(
+    customer_id: int,
+    address_id: int,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("customer.manage")),
+) -> Response:
+    deleted = await svc.delete_customer_address(customer_id, address_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dirección no encontrada")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clientes — contactos
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -366,6 +387,27 @@ async def update_supplier_tax_data(
             status_code=status.HTTP_404_NOT_FOUND, detail="Datos fiscales no encontrados"
         )
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Proveedores — direcciones (delete)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@proveedores_router.delete(
+    "/{supplier_id}/addresses/{address_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_supplier_address(
+    supplier_id: int,
+    address_id: int,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.manage")),
+) -> Response:
+    deleted = await svc.delete_supplier_address(supplier_id, address_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dirección no encontrada")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { Building2, CheckCircle2, Pencil, Plus, Search, X, XCircle } from "lucide-react"
+import { Building2, CheckCircle2, MapPin, Pencil, Plus, Search, Trash2, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
@@ -10,6 +10,8 @@ import { usePermission } from "@/hooks/usePermission"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
 import { useAuthStore } from "@/stores/authStore"
 import type {
+  CustomerAddress,
+  CustomerAddressCreate,
   CustomerDetail,
   CustomerRead,
   CustomerTaxDataCreate,
@@ -62,7 +64,7 @@ const inputCls =
 
 // ─── Customer detail panel ────────────────────────────────────────────────
 
-type Tab = "fiscal" | "contactos"
+type Tab = "fiscal" | "direcciones" | "contactos"
 
 type DetailPanelProps = {
   detail: CustomerDetail
@@ -116,6 +118,70 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
       onUpdated()
     } catch {
       toast.error("Error al actualizar datos fiscales")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const [showAddressForm, setShowAddressForm] = useState(false)
+  const [addressForm, setAddressForm] = useState<CustomerAddressCreate>({
+    address_type: "DELIVERY",
+    label: "",
+    street: "",
+    exterior_number: "",
+    interior_number: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    country: "México",
+    zip_code: "",
+    is_default: false,
+  })
+
+  async function handleAddAddress() {
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.addCustomerAddress(token, detail.customer_id, {
+        ...addressForm,
+        label: addressForm.label || null,
+        exterior_number: addressForm.exterior_number || null,
+        interior_number: addressForm.interior_number || null,
+        neighborhood: addressForm.neighborhood || null,
+        city: addressForm.city || null,
+        state: addressForm.state || null,
+        zip_code: addressForm.zip_code || null,
+      })
+      toast.success("Dirección agregada")
+      setShowAddressForm(false)
+      setAddressForm({
+        address_type: "DELIVERY",
+        label: "",
+        street: "",
+        exterior_number: "",
+        interior_number: "",
+        neighborhood: "",
+        city: "",
+        state: "",
+        country: "México",
+        zip_code: "",
+        is_default: false,
+      })
+      onUpdated()
+    } catch {
+      toast.error("Error al guardar dirección")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteAddress(addressId: number) {
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.deleteCustomerAddress(token, detail.customer_id, addressId)
+      toast.success("Dirección eliminada")
+      onUpdated()
+    } catch {
+      toast.error("Error al eliminar dirección")
     } finally {
       setSubmitting(false)
     }
@@ -242,6 +308,7 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
         {(
           [
             ["fiscal", "Datos Fiscales"],
+            ["direcciones", "Direcciones"],
             ["contactos", "Contactos"],
           ] as [Tab, string][]
         ).map(([key, label]) => (
@@ -398,6 +465,177 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
                 className="gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" /> Agregar RFC
+              </Button>
+            )}
+          </>
+        )}
+
+        {tab === "direcciones" && (
+          <>
+            {detail.addresses.length === 0 && !showAddressForm && (
+              <p className="text-sm text-muted-foreground">Sin direcciones registradas.</p>
+            )}
+            {detail.addresses.map((addr: CustomerAddress) => (
+              <div
+                key={addr.address_id}
+                className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-400">
+                        <MapPin className="h-3 w-3" />
+                        {addr.address_type === "DELIVERY" ? "Entrega" : "Otra"}
+                      </span>
+                      {addr.is_default && (
+                        <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          Principal
+                        </span>
+                      )}
+                      {addr.label && (
+                        <span className="text-xs font-medium">{addr.label}</span>
+                      )}
+                    </div>
+                    <p className="text-sm">
+                      {addr.street}
+                      {addr.exterior_number && ` #${addr.exterior_number}`}
+                      {addr.interior_number && ` Int. ${addr.interior_number}`}
+                    </p>
+                    {(addr.neighborhood || addr.city || addr.state) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[addr.neighborhood, addr.city, addr.state].filter(Boolean).join(", ")}
+                      </p>
+                    )}
+                    {addr.zip_code && (
+                      <p className="text-xs text-muted-foreground">CP: {addr.zip_code} — {addr.country}</p>
+                    )}
+                  </div>
+                  {canManage && (
+                    <button
+                      onClick={() => handleDeleteAddress(addr.address_id)}
+                      disabled={submitting}
+                      className="rounded p-1 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {showAddressForm && (
+              <div className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Agregar dirección
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Tipo</label>
+                    <select
+                      className={inputCls}
+                      value={addressForm.address_type}
+                      onChange={(e) =>
+                        setAddressForm((p) => ({ ...p, address_type: e.target.value as "DELIVERY" | "OTHER" }))
+                      }
+                    >
+                      <option value="DELIVERY">Entrega</option>
+                      <option value="OTHER">Otra</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-muted-foreground">Etiqueta</label>
+                    <input
+                      className={inputCls}
+                      placeholder="Ej. Bodega Norte"
+                      value={addressForm.label ?? ""}
+                      onChange={(e) => setAddressForm((p) => ({ ...p, label: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <input
+                  className={inputCls}
+                  placeholder="Calle *"
+                  value={addressForm.street}
+                  onChange={(e) => setAddressForm((p) => ({ ...p, street: e.target.value }))}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="No. exterior"
+                    value={addressForm.exterior_number ?? ""}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, exterior_number: e.target.value }))}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="No. interior"
+                    value={addressForm.interior_number ?? ""}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, interior_number: e.target.value }))}
+                  />
+                </div>
+                <input
+                  className={inputCls}
+                  placeholder="Colonia"
+                  value={addressForm.neighborhood ?? ""}
+                  onChange={(e) => setAddressForm((p) => ({ ...p, neighborhood: e.target.value }))}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Ciudad"
+                    value={addressForm.city ?? ""}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, city: e.target.value }))}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="Estado"
+                    value={addressForm.state ?? ""}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, state: e.target.value }))}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className={inputCls}
+                    placeholder="CP"
+                    value={addressForm.zip_code ?? ""}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, zip_code: e.target.value }))}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="País"
+                    value={addressForm.country ?? "México"}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, country: e.target.value }))}
+                  />
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={addressForm.is_default ?? false}
+                    onChange={(e) => setAddressForm((p) => ({ ...p, is_default: e.target.checked }))}
+                    className="h-4 w-4"
+                  />
+                  Dirección principal
+                </label>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleAddAddress}
+                    disabled={submitting || !addressForm.street}
+                  >
+                    Guardar
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowAddressForm(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+            {canManage && !showAddressForm && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddressForm(true)}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" /> Agregar dirección
               </Button>
             )}
           </>
