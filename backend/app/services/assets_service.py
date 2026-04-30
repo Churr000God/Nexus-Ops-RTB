@@ -207,9 +207,17 @@ class AssetService:
         self,
         is_saleable: bool | None = None,
         stock_status: str | None = None,
+        search: str | None = None,
+        category: str | None = None,
+        sort_by: str = "total_value",
+        sort_order: str = "desc",
         limit: int = 200,
         offset: int = 0,
     ) -> list[InventoryCurrentRead]:
+        allowed_sort = {"sku", "name", "category", "quantity_on_hand", "avg_unit_cost", "total_value", "stock_status"}
+        order_col = sort_by if sort_by in allowed_sort else "total_value"
+        order_dir = "DESC" if sort_order.lower() == "desc" else "ASC"
+
         filters = []
         params: dict = {"limit": limit, "offset": offset}
         if is_saleable is not None:
@@ -218,6 +226,12 @@ class AssetService:
         if stock_status:
             filters.append("stock_status = :stock_status")
             params["stock_status"] = stock_status
+        if search:
+            filters.append("(sku ILIKE :search OR name ILIKE :search)")
+            params["search"] = f"%{search}%"
+        if category:
+            filters.append("category ILIKE :category")
+            params["category"] = f"%{category}%"
         where = ("WHERE " + " AND ".join(filters)) if filters else ""
         sql = text(f"""
             SELECT
@@ -231,7 +245,7 @@ class AssetService:
             FROM v_inventory_current vc
             LEFT JOIN inventario i ON i.product_id = vc.product_id
             {where}
-            ORDER BY vc.total_value DESC
+            ORDER BY {order_col} {order_dir}
             LIMIT :limit OFFSET :offset
         """)
         rows = (await self.db.execute(sql, params)).mappings().all()

@@ -30,7 +30,15 @@ export const assetsService = {
 
   getVendible(
     token: string | null,
-    params: { stock_status?: string; limit?: number; offset?: number } = {},
+    params: {
+      stock_status?: string
+      search?: string
+      category?: string
+      sort_by?: string
+      sort_order?: string
+      limit?: number
+      offset?: number
+    } = {},
     signal?: AbortSignal,
   ): Promise<InventoryCurrentItem[]> {
     return requestJson(withQuery("/api/inventario/vendible", params), { token, signal })
@@ -38,7 +46,15 @@ export const assetsService = {
 
   getInterno(
     token: string | null,
-    params: { stock_status?: string; limit?: number; offset?: number } = {},
+    params: {
+      stock_status?: string
+      search?: string
+      category?: string
+      sort_by?: string
+      sort_order?: string
+      limit?: number
+      offset?: number
+    } = {},
     signal?: AbortSignal,
   ): Promise<InventoryCurrentItem[]> {
     return requestJson(withQuery("/api/inventario/interno", params), { token, signal })

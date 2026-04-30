@@ -165,24 +165,46 @@ async def inventory_kpi_summary(
 @inventory_router.get("/vendible", response_model=list[InventoryCurrentRead])
 async def inventory_vendible(
     stock_status: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    sort_by: str = Query(default="total_value"),
+    sort_order: str = Query(default="desc"),
     limit: int = Query(default=2000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[InventoryCurrentRead]:
     return await AssetService(db).get_inventory_current(
-        is_saleable=True, stock_status=stock_status, limit=limit, offset=offset
+        is_saleable=True,
+        stock_status=stock_status,
+        search=search,
+        category=category,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
     )
 
 
 @inventory_router.get("/interno", response_model=list[InventoryCurrentRead])
 async def inventory_interno(
     stock_status: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    sort_by: str = Query(default="total_value"),
+    sort_order: str = Query(default="desc"),
     limit: int = Query(default=2000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[InventoryCurrentRead]:
     return await AssetService(db).get_inventory_current(
-        is_saleable=False, stock_status=stock_status, limit=limit, offset=offset
+        is_saleable=False,
+        stock_status=stock_status,
+        search=search,
+        category=category,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
     )

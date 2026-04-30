@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useState } from "react"
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowLeftRight,
+  ArrowUp,
   BoxesIcon,
   Package,
+  Search,
   TrendingDown,
   TrendingUp,
   Warehouse,
+  X,
 } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { KpiCard } from "@/components/common/KpiCard"
 import { StatusBadge } from "@/components/common/StatusBadge"
+import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
@@ -52,6 +57,18 @@ function StockBadge({ status }: { status: string | null }) {
     </span>
   )
 }
+
+// ── Sort options ──────────────────────────────────────────────────────────────
+
+const SORT_OPTIONS = [
+  { value: "total_value", label: "Valor Total" },
+  { value: "quantity_on_hand", label: "Stock Real" },
+  { value: "name", label: "Nombre" },
+  { value: "sku", label: "SKU" },
+  { value: "category", label: "Categoría" },
+  { value: "avg_unit_cost", label: "Costo Prom." },
+  { value: "stock_status", label: "Estado" },
+]
 
 // ── Table columns ─────────────────────────────────────────────────────────────
 
@@ -96,13 +113,25 @@ const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
 export default function EquiposPage() {
   const token = useAuthStore((s) => s.accessToken)
   const [filterStatus, setFilterStatus] = useState("")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("")
+  const [sortBy, setSortBy] = useState("total_value")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
   const PAGE_SIZE = 100
   const [page, setPage] = useState(0)
 
+  // Debounce búsqueda
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  // Reset página al cambiar filtros
   useEffect(() => {
     setPage(0)
-  }, [filterStatus])
+  }, [filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder])
 
   const kpisFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
@@ -116,12 +145,16 @@ export default function EquiposPage() {
         token,
         {
           stock_status: filterStatus || undefined,
+          search: debouncedSearch || undefined,
+          category: categoryFilter || undefined,
+          sort_by: sortBy,
+          sort_order: sortOrder,
           limit: PAGE_SIZE,
           offset: page * PAGE_SIZE,
         },
         signal,
       ),
-    [token, filterStatus, page],
+    [token, filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, page],
   )
 
   const { data: interno, status: tableStatus } = useApi(internoFetcher)
@@ -137,6 +170,18 @@ export default function EquiposPage() {
   }
 
   const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
+
+  const hasActiveFilters = filterStatus || debouncedSearch || categoryFilter
+
+  const clearFilters = () => {
+    setFilterStatus("")
+    setSearchQuery("")
+    setDebouncedSearch("")
+    setCategoryFilter("")
+    setSortBy("total_value")
+    setSortOrder("desc")
+    setPage(0)
+  }
 
   return (
     <div className="space-y-6">
@@ -215,19 +260,88 @@ export default function EquiposPage() {
         />
       </div>
 
-      {/* Filtro */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">Inventario Interno</h2>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="">Todos los estados</option>
-          <option value="OK">OK</option>
-          <option value="BELOW_MIN">Bajo mínimo</option>
-          <option value="OUT">Sin stock</option>
-        </select>
+      {/* Toolbar: búsqueda, filtros y ordenamiento */}
+      <div className="surface-card p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Búsqueda */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Buscar por SKU o nombre..."
+              className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro categoría */}
+          <div className="relative min-w-[180px]">
+            <input
+              type="text"
+              placeholder="Filtrar categoría..."
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            />
+          </div>
+
+          {/* Filtro estado */}
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">Todos los estados</option>
+            <option value="OK">OK</option>
+            <option value="BELOW_MIN">Bajo mínimo</option>
+            <option value="OUT">Sin stock</option>
+          </select>
+
+          {/* Ordenamiento */}
+          <div className="flex items-center gap-1">
+            <select
+              className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent"
+              title={sortOrder === "asc" ? "Ascendente" : "Descendente"}
+            >
+              {sortOrder === "asc" ? (
+                <ArrowUp className="h-4 w-4" />
+              ) : (
+                <ArrowDown className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+
+          {/* Limpiar filtros */}
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
+              <X className="h-3.5 w-3.5" />
+              Limpiar
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabla */}
@@ -235,7 +349,7 @@ export default function EquiposPage() {
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => r.product_id}
-        maxHeight="calc(100vh - 520px)"
+        maxHeight="calc(100vh - 560px)"
         emptyLabel={
           tableStatus === "loading" || tableStatus === "idle"
             ? "Cargando…"
