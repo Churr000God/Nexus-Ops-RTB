@@ -102,12 +102,9 @@ const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type StockTab = "vendible" | "interno"
-
 export function AlmacenPage() {
   const token = useAuthStore((s) => s.accessToken)
   const { startDate, endDate } = useFilters()
-  const [stockTab, setStockTab] = useState<StockTab>("vendible")
   const [filterStatus, setFilterStatus] = useState("")
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [emailModalOpen, setEmailModalOpen] = useState(false)
@@ -117,7 +114,7 @@ export function AlmacenPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [stockTab, filterStatus])
+  }, [filterStatus])
 
   const kpisFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
@@ -138,46 +135,19 @@ export function AlmacenPage() {
       ),
     [token, filterStatus, page],
   )
-  const internoFetcher = useCallback(
-    (signal: AbortSignal) =>
-      assetsService.getInterno(
-        token,
-        {
-          stock_status: filterStatus || undefined,
-          limit: PAGE_SIZE,
-          offset: page * PAGE_SIZE,
-        },
-        signal,
-      ),
-    [token, filterStatus, page],
-  )
 
-  const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher, {
-    enabled: stockTab === "vendible",
-  })
-  const { data: interno, status: internoStatus } = useApi(internoFetcher, {
-    enabled: stockTab === "interno",
-  })
+  const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher)
 
-  const rows = stockTab === "vendible" ? vendible ?? [] : interno ?? []
-  const tableStatus = stockTab === "vendible" ? vendibleStatus : internoStatus
+  const rows = vendible ?? []
+  const tableStatus = vendibleStatus
 
-  const tabKpis =
-    stockTab === "vendible"
-      ? {
-          conStock: kpisV2?.con_stock_vendible ?? 0,
-          sinStock: kpisV2?.sin_stock_vendible ?? 0,
-          stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
-          montoReal: kpisV2?.valor_total_vendible ?? 0,
-          total: kpisV2?.total_vendible ?? 0,
-        }
-      : {
-          conStock: kpisV2?.con_stock_interno ?? 0,
-          sinStock: kpisV2?.sin_stock_interno ?? 0,
-          stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
-          montoReal: kpisV2?.valor_total_interno ?? 0,
-          total: kpisV2?.total_interno ?? 0,
-        }
+  const tabKpis = {
+    conStock: kpisV2?.con_stock_vendible ?? 0,
+    sinStock: kpisV2?.sin_stock_vendible ?? 0,
+    stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
+    montoReal: kpisV2?.valor_total_vendible ?? 0,
+    total: kpisV2?.total_vendible ?? 0,
+  }
 
   const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
 
@@ -189,7 +159,7 @@ export function AlmacenPage() {
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <StatusBadge variant="success">En vivo</StatusBadge>
-              <StatusBadge variant="info">Movimientos acumulados</StatusBadge>
+              <StatusBadge variant="info">Productos vendibles</StatusBadge>
             </div>
             <div className="flex items-center gap-3">
               <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
@@ -247,8 +217,8 @@ export function AlmacenPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           title="Valor Total"
-          value={formatCurrencyMXN(kpisV2?.valor_total_real ?? 0)}
-          description="Costo promedio × stock real (vendible + interno)"
+          value={formatCurrencyMXN(tabKpis.montoReal)}
+          description="Costo promedio × stock real (vendible)"
           icon={TrendingUp}
           tone="blue"
         />
@@ -289,32 +259,15 @@ export function AlmacenPage() {
         <KpiCard
           title="Sin Stock Total"
           value={formatNumber(kpisV2?.productos_out_of_stock ?? 0)}
-          description="SKUs agotados en ambos inventarios"
+          description="SKUs agotados en inventario vendible"
           icon={ArrowLeftRight}
           tone="purple"
         />
       </div>
 
-      {/* Tab strip + filtro */}
+      {/* Filtro */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-1 rounded-[var(--radius-md)] bg-secondary p-1">
-          {(["vendible", "interno"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setStockTab(tab)}
-              className={cn(
-                "rounded-[10px] px-4 py-2 text-sm font-medium transition-all",
-                stockTab === tab
-                  ? "bg-primary text-primary-foreground shadow-soft-sm"
-                  : "text-secondary-foreground hover:bg-secondary-foreground/10",
-              )}
-            >
-              {tab === "vendible" ? "Inventario Vendible" : "Inventario Interno"}
-            </button>
-          ))}
-        </div>
-
+        <h2 className="text-sm font-semibold text-foreground">Inventario Vendible</h2>
         <select
           className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={filterStatus}
@@ -332,7 +285,7 @@ export function AlmacenPage() {
         columns={COLUMNS}
         rows={rows}
         rowKey={(r) => r.product_id}
-        maxHeight="calc(100vh - 540px)"
+        maxHeight="calc(100vh - 520px)"
         emptyLabel={
           tableStatus === "loading" || tableStatus === "idle"
             ? "Cargando…"

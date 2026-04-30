@@ -1,331 +1,161 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
+  AlertTriangle,
+  ArrowLeftRight,
   BoxesIcon,
-  ClipboardList,
-  History,
-  Laptop,
   Package,
+  TrendingDown,
   TrendingUp,
-  Wrench,
+  Warehouse,
 } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { KpiCard } from "@/components/common/KpiCard"
-import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/common/StatusBadge"
 import { useApi } from "@/hooks/useApi"
 import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
 import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
-import type {
-  AssetComponentDetail,
-  AssetComponentHistoryItem,
-  AssetRead,
-} from "@/types/assets"
+import type { InventoryCurrentItem } from "@/types/assets"
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" })
-const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString("es-MX") : "—"
-const fmtDateTime = (d: string) =>
-  new Date(d).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })
+const fmtQty = (n: number) =>
+  new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 }).format(n)
 
-// ── Status / type labels ──────────────────────────────────────────────────────
+// ── Stock badge ───────────────────────────────────────────────────────────────
 
-const ASSET_TYPE_LABELS: Record<string, string> = {
-  COMPUTER: "Computadora",
-  LAPTOP: "Laptop",
-  PRINTER: "Impresora",
-  MACHINE: "Maquinaria",
-  VEHICLE: "Vehículo",
-  TOOL: "Herramienta",
-  OTHER: "Otro",
+const STOCK_STATUS_LABELS: Record<string, string> = {
+  OK: "OK",
+  BELOW_MIN: "Bajo mínimo",
+  OUT: "Sin stock",
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  ACTIVE:     "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
-  IN_REPAIR:  "border-amber-500/30  bg-amber-500/10  text-amber-600",
-  IDLE:       "border-slate-500/30  bg-slate-500/10  text-slate-500",
-  RETIRED:    "border-red-500/30    bg-red-500/10    text-red-600",
-  DISMANTLED: "border-slate-500/30  bg-slate-500/10  text-slate-400",
+const STOCK_STATUS_COLORS: Record<string, string> = {
+  OK: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+  BELOW_MIN: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+  OUT: "border-red-500/30 bg-red-500/10 text-red-600",
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "Activo",
-  IN_REPAIR: "En reparación",
-  IDLE: "Inactivo",
-  RETIRED: "Retirado",
-  DISMANTLED: "Desmantelado",
-}
-
-const OP_COLORS: Record<string, string> = {
-  INSTALL: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
-  REMOVE:  "border-red-500/30    bg-red-500/10    text-red-600",
-  REPLACE: "border-blue-500/30   bg-blue-500/10   text-blue-600",
-}
-
-const OP_LABELS: Record<string, string> = {
-  INSTALL: "Instalación",
-  REMOVE: "Retiro",
-  REPLACE: "Reemplazo",
-}
-
-function StatusBadge({ status }: { status: string }) {
+function StockBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-muted-foreground">—</span>
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-        STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
+        STOCK_STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
       )}
     >
-      {STATUS_LABELS[status] ?? status}
+      {STOCK_STATUS_LABELS[status] ?? status}
     </span>
   )
 }
 
-// ── Asset columns ─────────────────────────────────────────────────────────────
+// ── Table columns ─────────────────────────────────────────────────────────────
 
-const ASSET_COLS: DataTableColumn<AssetRead>[] = [
-  { key: "asset_code", header: "Código", cell: (r) => r.asset_code },
-  {
-    key: "asset_type",
-    header: "Tipo",
-    cell: (r) => ASSET_TYPE_LABELS[r.asset_type] ?? r.asset_type,
-  },
+const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
+  { key: "sku", header: "SKU", cell: (r) => r.sku ?? "—" },
   { key: "name", header: "Nombre", cell: (r) => r.name },
-  { key: "location", header: "Ubicación", cell: (r) => r.location ?? "—" },
+  { key: "category", header: "Categoría", cell: (r) => r.category ?? "—" },
   {
-    key: "status",
+    key: "quantity_on_hand",
+    header: "Stock Real",
+    cell: (r) => fmtQty(r.quantity_on_hand),
+  },
+  {
+    key: "theoretical_qty",
+    header: "Stock Teórico",
+    cell: (r) => (r.theoretical_qty != null ? fmtQty(r.theoretical_qty) : "—"),
+  },
+  {
+    key: "avg_unit_cost",
+    header: "Costo Prom.",
+    cell: (r) => (r.avg_unit_cost != null ? fmt.format(r.avg_unit_cost) : "—"),
+  },
+  {
+    key: "total_value",
+    header: "Valor Real",
+    cell: (r) => (r.total_value != null ? fmt.format(r.total_value) : "—"),
+  },
+  {
+    key: "theoretical_value",
+    header: "Valor Teórico",
+    cell: (r) => (r.theoretical_value != null ? fmt.format(r.theoretical_value) : "—"),
+  },
+  {
+    key: "stock_status",
     header: "Estado",
-    cell: (r) => <StatusBadge status={r.status} />,
+    cell: (r) => <StockBadge status={r.stock_status ?? null} />,
   },
-  {
-    key: "purchase_cost",
-    header: "Costo Compra",
-    cell: (r) => (r.purchase_cost != null ? fmt.format(r.purchase_cost) : "—"),
-  },
-  { key: "purchase_date", header: "Fecha Compra", cell: (r) => fmtDate(r.purchase_date) },
 ]
-
-// ── Component columns ─────────────────────────────────────────────────────────
-
-const COMP_COLS: DataTableColumn<AssetComponentDetail>[] = [
-  { key: "component_sku", header: "SKU", cell: (r) => r.component_sku ?? "—" },
-  { key: "component_name", header: "Componente", cell: (r) => r.component_name ?? "—" },
-  { key: "quantity", header: "Cantidad", cell: (r) => String(r.quantity) },
-  { key: "serial_number", header: "Serie", cell: (r) => r.serial_number ?? "—" },
-  {
-    key: "installed_at",
-    header: "Instalado",
-    cell: (r) => fmtDateTime(r.installed_at),
-  },
-  { key: "installed_by_email", header: "Por", cell: (r) => r.installed_by_email ?? "—" },
-  { key: "notes", header: "Notas", cell: (r) => r.notes ?? "—" },
-]
-
-// ── History columns ───────────────────────────────────────────────────────────
-
-const HIST_COLS: DataTableColumn<AssetComponentHistoryItem>[] = [
-  {
-    key: "occurred_at",
-    header: "Fecha",
-    cell: (r) => fmtDateTime(r.occurred_at),
-  },
-  {
-    key: "operation",
-    header: "Operación",
-    cell: (r) => (
-      <span
-        className={cn(
-          "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-          OP_COLORS[r.operation] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
-        )}
-      >
-        {OP_LABELS[r.operation] ?? r.operation}
-      </span>
-    ),
-  },
-  { key: "component_sku", header: "SKU", cell: (r) => r.component_sku ?? "—" },
-  { key: "component_name", header: "Componente", cell: (r) => r.component_name ?? "—" },
-  { key: "quantity", header: "Cant.", cell: (r) => (r.quantity != null ? String(r.quantity) : "—") },
-  { key: "serial_number", header: "Serie", cell: (r) => r.serial_number ?? "—" },
-  { key: "performed_by", header: "Usuario", cell: (r) => r.performed_by ?? "—" },
-  { key: "reason", header: "Razón", cell: (r) => r.reason ?? "—" },
-  { key: "notes", header: "Notas", cell: (r) => r.notes ?? "—" },
-]
-
-// ── Asset detail panel ────────────────────────────────────────────────────────
-
-type DetailTab = "componentes" | "historial"
-
-function AssetDetailPanel({ asset }: { asset: AssetRead }) {
-  const token = useAuthStore((s) => s.accessToken)
-  const [detailTab, setDetailTab] = useState<DetailTab>("componentes")
-
-  const compFetcher = useCallback(
-    (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
-    [token, asset.id],
-  )
-  const histFetcher = useCallback(
-    (signal: AbortSignal) =>
-      assetsService.getHistory(token, asset.id, { limit: 200 }, signal),
-    [token, asset.id],
-  )
-
-  const { data: components, status: compStatus } = useApi(compFetcher, {
-    enabled: detailTab === "componentes",
-  })
-  const { data: history, status: histStatus } = useApi(histFetcher, {
-    enabled: detailTab === "historial",
-  })
-
-  return (
-    <div className="mt-4 surface-card">
-      {/* Detail header */}
-      <div className="flex items-center justify-between border-b px-5 py-3">
-        <div className="flex items-center gap-3">
-          <Laptop className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span className="text-sm font-semibold text-foreground">
-            {asset.asset_code} — {asset.name}
-          </span>
-          <StatusBadge status={asset.status} />
-        </div>
-        <div className="flex gap-1 rounded-[var(--radius-md)] bg-secondary p-1">
-          <button
-            type="button"
-            onClick={() => setDetailTab("componentes")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-sm font-medium transition-all",
-              detailTab === "componentes"
-                ? "bg-primary text-primary-foreground shadow-soft-sm"
-                : "text-secondary-foreground hover:bg-secondary-foreground/10",
-            )}
-          >
-            <Package className="h-3.5 w-3.5" aria-hidden="true" />
-            Componentes
-          </button>
-          <button
-            type="button"
-            onClick={() => setDetailTab("historial")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-sm font-medium transition-all",
-              detailTab === "historial"
-                ? "bg-primary text-primary-foreground shadow-soft-sm"
-                : "text-secondary-foreground hover:bg-secondary-foreground/10",
-            )}
-          >
-            <History className="h-3.5 w-3.5" aria-hidden="true" />
-            Historial
-          </button>
-        </div>
-      </div>
-
-      {/* Detail content */}
-      <div className="p-1">
-        {detailTab === "componentes" ? (
-          <DataTable
-            columns={COMP_COLS}
-            rows={components ?? []}
-            rowKey={(r) => r.asset_component_id}
-            maxHeight="300px"
-            emptyLabel={
-              compStatus === "loading" || compStatus === "idle"
-                ? "Cargando…"
-                : compStatus === "error"
-                  ? "Error al cargar componentes"
-                  : "Sin componentes instalados"
-            }
-          />
-        ) : (
-          <DataTable
-            columns={HIST_COLS}
-            rows={history ?? []}
-            rowKey={(r) => r.history_id}
-            maxHeight="300px"
-            emptyLabel={
-              histStatus === "loading" || histStatus === "idle"
-                ? "Cargando…"
-                : histStatus === "error"
-                  ? "Error al cargar historial"
-                  : "Sin historial registrado"
-            }
-          />
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const ASSET_TYPES = [
-  { value: "COMPUTER", label: "Computadora" },
-  { value: "LAPTOP", label: "Laptop" },
-  { value: "PRINTER", label: "Impresora" },
-  { value: "MACHINE", label: "Maquinaria" },
-  { value: "VEHICLE", label: "Vehículo" },
-  { value: "TOOL", label: "Herramienta" },
-  { value: "OTHER", label: "Otro" },
-]
-
-const ASSET_STATUSES = [
-  { value: "ACTIVE", label: "Activo" },
-  { value: "IN_REPAIR", label: "En reparación" },
-  { value: "IDLE", label: "Inactivo" },
-  { value: "RETIRED", label: "Retirado" },
-  { value: "DISMANTLED", label: "Desmantelado" },
-]
-
 export default function EquiposPage() {
   const token = useAuthStore((s) => s.accessToken)
-  const [filterType, setFilterType] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  const [selectedAsset, setSelectedAsset] = useState<AssetRead | null>(null)
 
-  const fetcher = useCallback(
+  const PAGE_SIZE = 100
+  const [page, setPage] = useState(0)
+
+  useEffect(() => {
+    setPage(0)
+  }, [filterStatus])
+
+  const kpisFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
+    [token],
+  )
+  const { data: kpisV2 } = useApi(kpisFetcher)
+
+  const internoFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.listAssets(
+      assetsService.getInterno(
         token,
         {
-          asset_type: filterType || undefined,
-          status: filterStatus || undefined,
-          limit: 200,
+          stock_status: filterStatus || undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
         },
         signal,
       ),
-    [token, filterType, filterStatus],
+    [token, filterStatus, page],
   )
-  const { data, status } = useApi(fetcher)
 
-  const assets = data ?? []
+  const { data: interno, status: tableStatus } = useApi(internoFetcher)
 
-  const kpis = useMemo(() => {
-    const total = assets.length
-    const active = assets.filter((a) => a.status === "ACTIVE").length
-    const inRepair = assets.filter((a) => a.status === "IN_REPAIR").length
-    const totalValue = assets.reduce((sum, a) => sum + (a.purchase_cost ?? 0), 0)
-    return { total, active, inRepair, totalValue }
-  }, [assets])
+  const rows = interno ?? []
 
-  const handleRowClick = (row: AssetRead) => {
-    setSelectedAsset((prev) => (prev?.id === row.id ? null : row))
+  const tabKpis = {
+    conStock: kpisV2?.con_stock_interno ?? 0,
+    sinStock: kpisV2?.sin_stock_interno ?? 0,
+    stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
+    montoReal: kpisV2?.valor_total_interno ?? 0,
+    total: kpisV2?.total_interno ?? 0,
   }
+
+  const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
+      {/* Header */}
       <section className="surface-card">
         <div className="panel-header p-5 md:p-6">
           <div className="min-w-0 flex-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <StatusBadge variant="success">En vivo</StatusBadge>
+              <StatusBadge variant="info">Productos no vendibles</StatusBadge>
+            </div>
             <div className="flex items-center gap-3">
-              <ClipboardList className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
+              <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
               <div>
                 <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                  Gestión de Equipos
+                  Inventario Interno
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Activos físicos registrados, componentes e historial
+                  Productos internos y equipos no vendibles · Stock en tiempo real
                 </p>
               </div>
             </div>
@@ -334,111 +164,139 @@ export default function EquiposPage() {
       </section>
 
       {/* KPI cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          title="Total Equipos"
-          value={formatNumber(kpis.total)}
-          description="Equipos registrados en el sistema"
-          icon={BoxesIcon}
+          title="Valor Total"
+          value={formatCurrencyMXN(tabKpis.montoReal)}
+          description="Costo promedio × stock real (interno)"
+          icon={TrendingUp}
           tone="blue"
         />
         <KpiCard
-          title="Activos"
-          value={formatNumber(kpis.active)}
-          description="En operación actualmente"
-          icon={Laptop}
+          title="Con Stock"
+          value={formatNumber(tabKpis.conStock)}
+          description="SKUs con cantidad > 0"
+          icon={Package}
           tone="green"
-          badge={
-            kpis.total > 0
-              ? { label: `${Math.round((kpis.active / kpis.total) * 100)}%`, variant: "info" }
-              : undefined
-          }
         />
         <KpiCard
-          title="En Reparación"
-          value={formatNumber(kpis.inRepair)}
-          description="Equipos con mantenimiento en curso"
-          icon={Wrench}
+          title="Sin Stock"
+          value={formatNumber(tabKpis.sinStock)}
+          description="SKUs con cantidad = 0"
+          icon={BoxesIcon}
+          tone="neutral"
+        />
+        <KpiCard
+          title="Stock Negativo"
+          value={formatNumber(tabKpis.stockNegativo)}
+          description="Salidas sin entrada registrada"
+          icon={TrendingDown}
+          tone="red"
+          badge={tabKpis.stockNegativo > 0 ? { label: "Revisar", variant: "warning" } : undefined}
+        />
+        <KpiCard
+          title="Bajo Mínimo"
+          value={formatNumber(kpisV2?.productos_below_min ?? 0)}
+          description="SKUs por debajo del stock mínimo"
+          icon={AlertTriangle}
           tone="orange"
           badge={
-            kpis.inRepair > 0
+            (kpisV2?.productos_below_min ?? 0) > 0
               ? { label: "Atención", variant: "warning" }
               : undefined
           }
         />
         <KpiCard
-          title="Valor Total"
-          value={formatCurrencyMXN(kpis.totalValue)}
-          description="Costo de adquisición acumulado"
-          icon={TrendingUp}
-          tone="neutral"
+          title="Sin Stock Total"
+          value={formatNumber(kpisV2?.productos_out_of_stock ?? 0)}
+          description="SKUs agotados en inventario interno"
+          icon={ArrowLeftRight}
+          tone="purple"
         />
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          value={filterType}
-          onChange={(e) => {
-            setFilterType(e.target.value)
-            setSelectedAsset(null)
-          }}
-        >
-          <option value="">Todos los tipos</option>
-          {ASSET_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-
+      {/* Filtro */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-foreground">Inventario Interno</h2>
         <select
           className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           value={filterStatus}
-          onChange={(e) => {
-            setFilterStatus(e.target.value)
-            setSelectedAsset(null)
-          }}
+          onChange={(e) => setFilterStatus(e.target.value)}
         >
           <option value="">Todos los estados</option>
-          {ASSET_STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
+          <option value="OK">OK</option>
+          <option value="BELOW_MIN">Bajo mínimo</option>
+          <option value="OUT">Sin stock</option>
         </select>
-
-        {selectedAsset && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelectedAsset(null)}
-          >
-            Cerrar detalle
-          </Button>
-        )}
       </div>
 
-      {/* Assets table */}
+      {/* Tabla */}
       <DataTable
-        columns={ASSET_COLS}
-        rows={assets}
-        rowKey={(r) => r.id}
-        maxHeight="calc(100vh - 480px)"
+        columns={COLUMNS}
+        rows={rows}
+        rowKey={(r) => r.product_id}
+        maxHeight="calc(100vh - 520px)"
         emptyLabel={
-          status === "loading"
+          tableStatus === "loading" || tableStatus === "idle"
             ? "Cargando…"
-            : status === "error"
-              ? "Error al cargar equipos"
-              : "Sin equipos registrados"
+            : tableStatus === "error"
+              ? "Error al cargar inventario"
+              : "Sin productos"
         }
-        onRowClick={handleRowClick}
-        selectedRowKey={selectedAsset?.id}
       />
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={tabKpis.total}
+        pageSize={PAGE_SIZE}
+        onPage={setPage}
+      />
+    </div>
+  )
+}
 
-      {/* Selected asset detail */}
-      {selectedAsset && <AssetDetailPanel key={selectedAsset.id} asset={selectedAsset} />}
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number
+  totalPages: number
+  total: number
+  pageSize: number
+  onPage: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+  const start = page * pageSize + 1
+  const end = Math.min((page + 1) * pageSize, total)
+  return (
+    <div className="flex items-center justify-between gap-4 px-1 py-2 text-sm text-muted-foreground">
+      <span>
+        Mostrando {start}–{end} de {total} productos
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page === 0}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ← Anterior
+        </button>
+        <span className="px-2">
+          {page + 1} / {totalPages}
+        </span>
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Siguiente →
+        </button>
+      </div>
     </div>
   )
 }
