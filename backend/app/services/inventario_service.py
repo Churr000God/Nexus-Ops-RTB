@@ -102,16 +102,25 @@ class InventarioService:
         ]
 
     async def rebuild_from_products(self) -> RebuildResult:
-        """Borra todos los registros de inventario y crea uno por producto del catálogo."""
-        await self.db.execute(text("DELETE FROM inventario"))
+        """Inserta en inventario los productos que aún no tienen registro, sin tocar los existentes."""
+        total_row = (await self.db.execute(text("SELECT COUNT(*) FROM productos"))).scalar_one()
+        existing_row = (
+            await self.db.execute(
+                text("SELECT COUNT(*) FROM inventario WHERE product_id IS NOT NULL")
+            )
+        ).scalar_one()
         result = await self.db.execute(
             text(
                 """
-                INSERT INTO inventario (id, product_id, internal_code)
-                SELECT gen_random_uuid(), id, internal_code
-                FROM productos
+                INSERT INTO inventario (id, product_id, internal_code, updated_on)
+                SELECT gen_random_uuid(), p.id, p.internal_code, NOW()
+                FROM productos p
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM inventario i WHERE i.product_id = p.id
+                )
                 """
             )
         )
         await self.db.commit()
-        return RebuildResult(created=result.rowcount)
+        created = result.rowcount
+        return RebuildResult(created=created, already_existed=int(total_row) - created)

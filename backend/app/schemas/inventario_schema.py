@@ -26,3 +26,4 @@ class InventarioProductoResponse(BaseModel):
 
 class RebuildResult(BaseModel):
     created: int
+    already_existed: int

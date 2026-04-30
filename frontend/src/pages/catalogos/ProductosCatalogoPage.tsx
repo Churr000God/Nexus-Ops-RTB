@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
+import { ApiError } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { inventarioService } from "@/services/inventarioService"
 import { productosService } from "@/services/productosService"
@@ -854,7 +855,7 @@ function ProductGridCard({
     >
       <CardContent className="p-0">
         {/* Image */}
-        <div className="relative h-40 w-full bg-accent/30 rounded-t-[var(--radius-lg)] overflow-hidden">
+        <div className="relative h-32 sm:h-36 md:h-40 w-full bg-accent/30 rounded-t-[var(--radius-lg)] overflow-hidden">
           {product.image_url ? (
             <img
               src={product.image_url}
@@ -864,19 +865,18 @@ function ProductGridCard({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Package className="h-10 w-10 text-muted-foreground/40" />
+              <Package className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground/40" />
             </div>
           )}
-          <div className="absolute top-2 right-2">
+          {/* Badges — stacked vertically to avoid overlap on narrow cards */}
+          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
             <StatusChip status={product.status} />
-          </div>
-          <div className="absolute top-2 left-2">
             <SaleableChip isSaleable={product.is_saleable} />
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-3">
+        <div className="p-3 sm:p-4 space-y-2.5 sm:space-y-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold leading-tight">{product.name}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground font-mono">
@@ -884,7 +884,7 @@ function ProductGridCard({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {product.category && (
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                 {product.category}
@@ -897,7 +897,7 @@ function ProductGridCard({
             )}
           </div>
 
-          <div className="flex items-end justify-between pt-1">
+          <div className="flex items-end justify-between pt-0.5 sm:pt-1">
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Precio</p>
               <p className="text-sm font-semibold tabular-nums text-foreground">
@@ -921,7 +921,7 @@ function ProductGridCard({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 title="Ver imagen"
-                className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="rounded p-1 sm:p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <ImageIcon className="h-3.5 w-3.5" />
               </a>
@@ -933,21 +933,21 @@ function ProductGridCard({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 title="Ficha técnica"
-                className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="rounded p-1 sm:p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <FileText className="h-3.5 w-3.5" />
               </a>
             )}
             <button
               onClick={onEdit}
-              className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="rounded p-1 sm:p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title="Editar"
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onDelete}
-              className="rounded p-1.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-400"
+              className="rounded p-1 sm:p-1.5 text-muted-foreground hover:bg-red-500/15 hover:text-red-400"
               title="Eliminar"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -1389,7 +1389,7 @@ export function ProductosCatalogoPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
                   {rows.map((product) => (
                     <ProductGridCard
                       key={product.id}

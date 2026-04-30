@@ -111,7 +111,17 @@ async def delete_producto(
     svc: ProductosService = Depends(_svc),
     _: User = Depends(get_current_user),
 ) -> Response:
-    deleted = await svc.delete_product(product_id)
+    try:
+        deleted = await svc.delete_product(product_id)
+    except ValueError as exc:
+        msg = str(exc)
+        if msg.startswith("has_movements:"):
+            count = msg.split(":")[1]
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El producto tiene {count} movimiento(s) de inventario y no puede eliminarse. Puedes desactivarlo.",
+            )
+        raise
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

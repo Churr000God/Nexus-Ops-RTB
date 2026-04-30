@@ -10,7 +10,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.ops_models import Product, Category, Brand, InventoryItem
+from app.models.ops_models import Product, Category, Brand, InventoryItem, InventoryMovement
 from app.models.productos_pricing_models import (
     BOM,
     BOMItem,
@@ -361,6 +361,13 @@ class ProductosService:
         product = result.scalar_one_or_none()
         if product is None:
             return False
+        movements = (
+            await self.db.execute(
+                select(func.count()).where(InventoryMovement.product_id == product_id)
+            )
+        ).scalar_one()
+        if movements > 0:
+            raise ValueError(f"has_movements:{movements}")
         await self.db.delete(product)
         await self.db.commit()
         return True

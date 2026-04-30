@@ -43,6 +43,13 @@ En la sesion anterior se mejoro el catalogo en general (vista grid, filtros, bad
   - El filtro se aplica en el frontend sobre la lista de productos ya cargados.
   - Contador de filtros activos actualizado.
 
+- **Responsive en tarjetas de productos (Grid view):**
+  - Badges `StatusChip` y `SaleableChip` ahora se apilan verticalmente (`flex-col`) en la esquina superior derecha, evitando que se superpongan en tarjetas estrechas.
+  - Grid ajustado: `grid-cols-2` desde mobile (en lugar de 1), `gap-3` en mobile y `gap-4` en sm+.
+  - Altura de imagen responsive: `h-32 sm:h-36 md:h-40`.
+  - Padding y espaciado del contenido adaptados (`p-3 sm:p-4`, `space-y-2.5 sm:space-y-3`).
+  - Icono placeholder responsive (`h-8 w-8 sm:h-10 sm:w-10`).
+
 ## Decisiones Tomadas
 - Se mantuvo la logica de estado y validaciones existente para no introducir regresiones.
 - Se usaron componentes internos (`SectionCard`, `DetailSection`, etc.) en lugar de crear archivos separados porque solo se usan en esta pagina.
