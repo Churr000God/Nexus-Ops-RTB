@@ -50,6 +50,13 @@ En la sesion anterior se mejoro el catalogo en general (vista grid, filtros, bad
   - Padding y espaciado del contenido adaptados (`p-3 sm:p-4`, `space-y-2.5 sm:space-y-3`).
   - Icono placeholder responsive (`h-8 w-8 sm:h-10 sm:w-10`).
 
+- **Tabla y panel de detalle con igual altura:**
+  - Cuando se despliega el panel lateral de detalle, el layout usa `items-stretch` (default de flexbox) para que ambos hijos tengan la misma altura.
+  - El contenedor de la tabla y el del panel tienen `h-full overflow-hidden`.
+  - El `DataTable` recibe `maxHeight="100%"` cuando hay panel abierto, ocupando todo el alto disponible.
+  - El panel de detalle tiene `overflow-y-auto` interno para scrollear si su contenido es mas largo que la tabla.
+  - La vista grid tambien se adapta: usa `h-full` cuando hay panel seleccionado.
+
 ## Decisiones Tomadas
 - Se mantuvo la logica de estado y validaciones existente para no introducir regresiones.
 - Se usaron componentes internos (`SectionCard`, `DetailSection`, etc.) en lugar de crear archivos separados porque solo se usan en esta pagina.

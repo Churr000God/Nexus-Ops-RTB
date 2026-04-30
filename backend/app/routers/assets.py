@@ -165,7 +165,7 @@ async def inventory_kpi_summary(
 @inventory_router.get("/vendible", response_model=list[InventoryCurrentRead])
 async def inventory_vendible(
     stock_status: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=2000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -178,7 +178,7 @@ async def inventory_vendible(
 @inventory_router.get("/interno", response_model=list[InventoryCurrentRead])
 async def inventory_interno(
     stock_status: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=2000, ge=1, le=5000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),

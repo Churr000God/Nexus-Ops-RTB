@@ -202,6 +202,7 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
     moving_avg_months: existing?.moving_avg_months ?? 6,
   })
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
   const flatCats = flattenCategories(categories)
 
   function set<K extends keyof typeof form>(key: K, val: (typeof form)[K]) {
@@ -215,12 +216,13 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setFormError(null)
     if (!form.name.trim()) {
-      toast.error("El nombre es requerido")
+      setFormError("El nombre es requerido")
       return
     }
     if (!isEdit && !form.sku?.trim()) {
-      toast.error("El SKU es requerido para crear un producto")
+      setFormError("El SKU es requerido para crear un producto")
       return
     }
     setSubmitting(true)
@@ -264,7 +266,12 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
       onSaved()
       onClose()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al guardar")
+      if (err instanceof ApiError && err.status === 409) {
+        const detail = (err.details as Record<string, unknown>)?.detail
+        setFormError(typeof detail === "string" ? detail : "Ya existe un producto con ese nombre o SKU.")
+      } else {
+        setFormError(err instanceof Error ? err.message : "Error al guardar")
+      }
     } finally {
       setSubmitting(false)
     }
@@ -570,6 +577,11 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
             </div>
           </fieldset>
 
+          {formError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formError}
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Cancelar
@@ -720,20 +732,74 @@ function DeleteConfirmModal({
   onClose: () => void
   onDeleted: () => void
 }) {
-  const [deleting, setDeleting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [conflictMsg, setConflictMsg] = useState<string | null>(null)
 
   async function handleDelete() {
-    setDeleting(true)
+    setLoading(true)
     try {
       await productosService.deleteProduct(token, product.id)
       toast.success("Producto eliminado")
       onDeleted()
       onClose()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al eliminar")
+      if (err instanceof ApiError && err.status === 409) {
+        const detail = (err.details as Record<string, unknown>)?.detail
+        setConflictMsg(typeof detail === "string" ? detail : "El producto tiene movimientos de inventario.")
+      } else {
+        toast.error(err instanceof Error ? err.message : "Error al eliminar")
+      }
     } finally {
-      setDeleting(false)
+      setLoading(false)
     }
+  }
+
+  async function handleDeactivate() {
+    setLoading(true)
+    try {
+      await productosService.updateProduct(token, product.id, {
+        is_active: false,
+        status: "Dado de Baja",
+      })
+      toast.success("Producto dado de baja correctamente")
+      onDeleted()
+      onClose()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al desactivar")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (conflictMsg) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-10 surface-card w-full max-w-sm space-y-4 p-6">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-base font-semibold">No se puede eliminar</p>
+              <p className="mt-1 text-sm text-muted-foreground">{conflictMsg}</p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            ¿Deseas <strong className="text-foreground">darlo de baja</strong> en su lugar? El producto quedará inactivo y no aparecerá en cotizaciones nuevas.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeactivate} disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Dar de baja
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -747,11 +813,11 @@ function DeleteConfirmModal({
           puede deshacer.
         </p>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={deleting}>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-            {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Eliminar
           </Button>
         </div>
@@ -764,12 +830,10 @@ function DeleteConfirmModal({
 
 function RebuildInventarioModal({
   token,
-  totalProducts,
   onClose,
   onDone,
 }: {
   token: string | null
-  totalProducts: number
   onClose: () => void
   onDone: () => void
 }) {
@@ -779,11 +843,17 @@ function RebuildInventarioModal({
     setRebuilding(true)
     try {
       const result = await inventarioService.rebuildFromProducts(token!)
-      toast.success(`Inventario reconstruido: ${result.created} registros creados`)
+      if (result.created === 0) {
+        toast.success(`Todo al día — ${result.already_existed} productos ya tenían registro`)
+      } else {
+        toast.success(
+          `Completado: ${result.created} nuevo(s) · ${result.already_existed} ya existían`
+        )
+      }
       onDone()
       onClose()
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Error al reconstruir inventario")
+      toast.error(err instanceof Error ? err.message : "Error al sincronizar inventario")
     } finally {
       setRebuilding(false)
     }
@@ -794,21 +864,21 @@ function RebuildInventarioModal({
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 surface-card w-full max-w-md space-y-4 p-6">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/15">
+            <RefreshCw className="h-4 w-4 text-blue-400" />
           </div>
           <div>
-            <p className="text-base font-semibold">Reconstruir inventario desde catálogo</p>
+            <p className="text-base font-semibold">Completar inventario faltante</p>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Esta operación borrará{" "}
-              <strong className="text-foreground">todos los registros actuales de inventario</strong>{" "}
-              y creará uno nuevo por cada producto del catálogo ({totalProducts} productos).
+              Solo se crearán registros para los productos del catálogo que{" "}
+              <strong className="text-foreground">aún no tengan entrada en inventario</strong>.
+              Los registros existentes no se tocan.
             </p>
           </div>
         </div>
         <ul className="space-y-1 rounded-lg border border-border bg-accent/20 p-3 text-xs text-muted-foreground">
-          <li>• Los registros nuevos tendrán stock en 0 y sin costo</li>
-          <li>• Los movimientos históricos de inventario no se eliminan</li>
+          <li>• Los registros existentes (stock, costo, clasificación) no se modifican</li>
+          <li>• Los nuevos registros inician con stock 0 y sin costo asignado</li>
           <li>• Vendibles → aparecen en Inventario de productos</li>
           <li>• Internos → aparecen en Equipos e inventario interno</li>
         </ul>
@@ -816,13 +886,13 @@ function RebuildInventarioModal({
           <Button variant="outline" onClick={onClose} disabled={rebuilding}>
             Cancelar
           </Button>
-          <Button variant="destructive" onClick={handleRebuild} disabled={rebuilding}>
+          <Button onClick={handleRebuild} disabled={rebuilding}>
             {rebuilding ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
-            Reconstruir inventario
+            Sincronizar
           </Button>
         </div>
       </div>
@@ -1354,8 +1424,8 @@ export function ProductosCatalogoPage() {
       </div>
 
       {/* Content area */}
-      <div className={cn("flex min-h-0 flex-1 gap-4", selectedProduct ? "items-start" : "")}>
-        <div className={cn("flex-1 min-w-0", selectedProduct ? "max-w-[calc(100%-320px)]" : "")}>
+      <div className="flex min-h-0 flex-1 gap-4">
+        <div className={cn("flex-1 min-w-0 h-full overflow-hidden", selectedProduct ? "max-w-[calc(100%-320px)]" : "")}>
           {viewMode === "table" ? (
             <DataTable
               columns={COLUMNS}
@@ -1372,11 +1442,11 @@ export function ProductosCatalogoPage() {
                 setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
               }
               selectedRowKey={selectedProduct?.id}
-              maxHeight="calc(100vh - 380px)"
+              maxHeight={selectedProduct ? "100%" : "calc(100vh - 380px)"}
             />
           ) : (
             /* Grid view */
-            <div className="overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 380px)" }}>
+            <div className={cn("overflow-y-auto pr-1", selectedProduct ? "h-full" : "")} style={selectedProduct ? undefined : { maxHeight: "calc(100vh - 380px)" }}>
               {rows.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <Package className="h-10 w-10 mb-3 opacity-40" />
@@ -1417,14 +1487,16 @@ export function ProductosCatalogoPage() {
         </div>
 
         {selectedProduct && (
-          <div className="w-[300px] shrink-0">
-            <ProductDetailPanel
-              product={selectedProduct}
-              onClose={() => setSelectedProduct(null)}
-              onEdit={() => {
-                setActiveModal({ type: "edit", product: selectedProduct })
-              }}
-            />
+          <div className="w-[300px] shrink-0 h-full overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              <ProductDetailPanel
+                product={selectedProduct}
+                onClose={() => setSelectedProduct(null)}
+                onEdit={() => {
+                  setActiveModal({ type: "edit", product: selectedProduct })
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1459,7 +1531,6 @@ export function ProductosCatalogoPage() {
       {activeModal?.type === "rebuild" && (
         <RebuildInventarioModal
           token={token}
-          totalProducts={total}
           onClose={() => setActiveModal(null)}
           onDone={() => refresh()}
         />

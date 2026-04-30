@@ -143,12 +143,12 @@ export function AlmacenPage() {
 
   const vendibleFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getVendible(token, { stock_status: filterStatus || undefined, limit: 500 }, signal),
+      assetsService.getVendible(token, { stock_status: filterStatus || undefined, limit: 2000 }, signal),
     [token, filterStatus],
   )
   const internoFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getInterno(token, { stock_status: filterStatus || undefined, limit: 500 }, signal),
+      assetsService.getInterno(token, { stock_status: filterStatus || undefined, limit: 2000 }, signal),
     [token, filterStatus],
   )
 

@@ -316,9 +316,31 @@ class ProductosService:
             active_contract_count=contract_count,
         )
 
+    # ── Uniqueness helpers ────────────────────────────────────────────────────
+
+    async def _assert_name_unique(self, name: str, exclude_id: UUID | None = None) -> None:
+        stmt = select(func.count()).where(
+            func.lower(func.trim(Product.name)) == name.strip().lower()
+        )
+        if exclude_id:
+            stmt = stmt.where(Product.id != exclude_id)
+        count = (await self.db.execute(stmt)).scalar_one()
+        if count > 0:
+            raise ValueError(f"duplicate_name:{name.strip()}")
+
+    async def _assert_sku_unique(self, sku: str) -> None:
+        stmt = select(func.count()).where(
+            func.lower(Product.sku) == sku.strip().lower()
+        )
+        count = (await self.db.execute(stmt)).scalar_one()
+        if count > 0:
+            raise ValueError(f"duplicate_sku:{sku.strip()}")
+
     # ── Create / Update product ───────────────────────────────────────────────
 
     async def create_product(self, data: ProductCreate) -> ProductRead:
+        await self._assert_name_unique(data.name)
+        await self._assert_sku_unique(data.sku)
         product = Product(
             sku=data.sku,
             internal_code=data.internal_code,
@@ -381,6 +403,9 @@ class ProductosService:
         product = result.scalar_one_or_none()
         if product is None:
             return None
+
+        if data.name is not None:
+            await self._assert_name_unique(data.name, exclude_id=product_id)
 
         for field, value in data.model_dump(exclude_unset=True).items():
             if field == "package_size" and value is not None:

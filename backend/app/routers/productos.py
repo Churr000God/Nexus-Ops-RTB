@@ -43,6 +43,22 @@ def _svc(db: AsyncSession = Depends(get_db)) -> ProductosService:
     return ProductosService(db)
 
 
+def _raise_duplicate_409(msg: str) -> None:
+    if msg.startswith("duplicate_name:"):
+        value = msg.split(":", 1)[1]
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ya existe un producto con el nombre «{value}». Elige un nombre diferente.",
+        )
+    if msg.startswith("duplicate_sku:"):
+        value = msg.split(":", 1)[1]
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El SKU «{value}» ya está registrado en otro producto.",
+        )
+    raise ValueError(msg)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Products
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,7 +105,10 @@ async def create_producto(
     svc: ProductosService = Depends(_svc),
     _: User = Depends(get_current_user),
 ) -> ProductRead:
-    return await svc.create_product(data)
+    try:
+        return await svc.create_product(data)
+    except ValueError as exc:
+        _raise_duplicate_409(str(exc))
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
@@ -99,7 +118,10 @@ async def update_producto(
     svc: ProductosService = Depends(_svc),
     _: User = Depends(get_current_user),
 ) -> ProductRead:
-    result = await svc.update_product(product_id, data)
+    try:
+        result = await svc.update_product(product_id, data)
+    except ValueError as exc:
+        _raise_duplicate_409(str(exc))
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
     return result
