@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
+  AlertTriangle,
   Banknote,
   Boxes,
   Building2,
@@ -15,9 +16,12 @@ import {
   Package,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
+  ShoppingCart,
   Tag,
   Trash2,
+  Warehouse,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -30,6 +34,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
 import { cn } from "@/lib/utils"
+import { inventarioService } from "@/services/inventarioService"
 import { productosService } from "@/services/productosService"
 import { useAuthStore } from "@/stores/authStore"
 import type { BrandRead, CategoryRead, ProductCreate, ProductRead, ProductUpdate } from "@/types/productos"
@@ -132,6 +137,23 @@ function StatusChip({ status }: { status: string | null }) {
   )
 }
 
+function SaleableChip({ isSaleable }: { isSaleable: boolean }) {
+  if (isSaleable) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-semibold text-violet-400">
+        <ShoppingCart className="h-3 w-3" />
+        Vendible
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-400">
+      <Warehouse className="h-3 w-3" />
+      Interno
+    </span>
+  )
+}
+
 function flattenCategories(nodes: CategoryRead[], depth = 0): { id: string; label: string }[] {
   return nodes.flatMap((n) => [
     { id: n.id, label: "  ".repeat(depth) + n.name },
@@ -150,87 +172,6 @@ interface ProductFormProps {
   brands: BrandRead[]
   onClose: () => void
   onSaved: () => void
-}
-
-function SectionCard({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: React.ElementType
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-accent/30 p-4 space-y-3">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="h-4 w-4" />
-        <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Label({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-      {children}
-      {required && <span className="text-red-400">*</span>}
-    </label>
-  )
-}
-
-function SelectField({
-  value,
-  onChange,
-  placeholder,
-  children,
-}: {
-  value: string
-  onChange: (val: string) => void
-  placeholder: string
-  children: React.ReactNode
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring hover:border-muted-foreground/30 transition-colors"
-    >
-      <option value="">{placeholder}</option>
-      {children}
-    </select>
-  )
-}
-
-function SwitchField({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean
-  onChange: (v: boolean) => void
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200",
-        checked ? "bg-primary" : "bg-muted-foreground/30",
-      )}
-    >
-      <span
-        className={cn(
-          "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200",
-          checked ? "translate-x-4" : "translate-x-0",
-        )}
-      />
-      <span className="sr-only">{label}</span>
-    </button>
-  )
 }
 
 function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }: ProductFormProps) {
@@ -253,6 +194,7 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
     unit_price: existing?.unit_price ?? null,
     purchase_cost_parts: existing?.purchase_cost_parts ?? null,
     purchase_cost_ariba: existing?.purchase_cost_ariba ?? null,
+    is_saleable: existing?.is_saleable ?? true,
     is_configurable: existing?.is_configurable ?? false,
     is_assembled: existing?.is_assembled ?? false,
     pricing_strategy: existing?.pricing_strategy ?? "MOVING_AVG",
@@ -306,6 +248,7 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
           unit_price: payload.unit_price,
           purchase_cost_parts: payload.purchase_cost_parts,
           purchase_cost_ariba: payload.purchase_cost_ariba,
+          is_saleable: payload.is_saleable,
           is_configurable: payload.is_configurable,
           is_assembled: payload.is_assembled,
           pricing_strategy: payload.pricing_strategy,
@@ -327,48 +270,49 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-8">
+    <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 surface-card w-full max-w-2xl mb-10 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-border bg-accent/20 px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] bg-primary/10 text-primary">
-              <Package className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-base font-semibold">
-                {isEdit ? "Editar producto" : "Nuevo producto"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {isEdit ? `SKU: ${existing?.sku ?? "—"}` : "Completa los datos del catálogo maestro"}
-              </p>
-            </div>
+      <div className="relative z-10 h-full overflow-y-auto flex items-start justify-center p-4 pt-10">
+        <div className="relative z-10 surface-card w-full max-w-2xl space-y-5 p-6 mb-10">
+          {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-base font-semibold">
+              {isEdit ? "Editar producto" : "Nuevo producto"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {isEdit ? `SKU: ${existing?.sku ?? "—"}` : "Datos del catálogo maestro"}
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="mt-0.5 shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Identificación */}
-          <SectionCard icon={Tag} title="Identificación">
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Identificación
+            </legend>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label required={!isEdit}>SKU</Label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  SKU {!isEdit && <span className="text-red-400">*</span>}
+                </label>
                 <Input
                   value={form.sku ?? ""}
                   onChange={(e) => set("sku", e.target.value)}
                   placeholder="Ej. SH-1154"
                   disabled={isEdit}
-                  className={cn(isEdit && "opacity-60 bg-accent/30")}
+                  className={isEdit ? "opacity-60" : ""}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Código interno</Label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Código interno</label>
                 <Input
                   value={form.internal_code ?? ""}
                   onChange={(e) => set("internal_code", e.target.value)}
@@ -376,87 +320,151 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label required>Nombre</Label>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Nombre <span className="text-red-400">*</span>
+              </label>
               <Input
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
-                placeholder="Nombre comercial del producto"
+                placeholder="Nombre del producto"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Descripción</Label>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Descripción</label>
               <textarea
                 value={form.description ?? ""}
                 onChange={(e) => set("description", e.target.value)}
                 rows={3}
-                placeholder="Descripción técnica o comercial del producto"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+                placeholder="Descripción técnica del producto"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
-          </SectionCard>
+          </fieldset>
 
           {/* Clasificación */}
-          <SectionCard icon={FolderOpen} title="Clasificación">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Categoría</Label>
-                <SelectField
-                  value={form.category_id ?? ""}
-                  onChange={(v) => set("category_id", v || null)}
-                  placeholder="— Sin categoría —"
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Clasificación
+            </legend>
+
+            {/* Tipo de inventario */}
+            <div className="rounded-lg border border-border bg-accent/20 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Tipo de inventario</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => set("is_saleable", true)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold transition-colors",
+                    form.is_saleable
+                      ? "border-violet-500/50 bg-violet-500/15 text-violet-400"
+                      : "border-border text-muted-foreground hover:bg-accent",
+                  )}
                 >
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                  Vendible
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set("is_saleable", false)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold transition-colors",
+                    !form.is_saleable
+                      ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-400"
+                      : "border-border text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <Warehouse className="h-3.5 w-3.5" />
+                  Interno / Equipo
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {form.is_saleable
+                  ? "Aparece en Inventario de productos vendibles"
+                  : "Aparece en Inventario de equipos e internos"}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <FolderOpen className="h-3 w-3" /> Categoría
+                  </span>
+                </label>
+                <select
+                  value={form.category_id ?? ""}
+                  onChange={(e) => set("category_id", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— Sin categoría —</option>
                   {flatCats.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.label}
                     </option>
                   ))}
-                </SelectField>
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Marca</Label>
-                <SelectField
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Building2 className="h-3 w-3" /> Marca
+                  </span>
+                </label>
+                <select
                   value={form.brand_id ?? ""}
-                  onChange={(v) => set("brand_id", v || null)}
-                  placeholder="— Sin marca —"
+                  onChange={(e) => set("brand_id", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <option value="">— Sin marca —</option>
                   {brands.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name}
                     </option>
                   ))}
-                </SelectField>
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <SelectField
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Tag className="h-3 w-3" /> Status
+                  </span>
+                </label>
+                <select
                   value={form.status ?? ""}
-                  onChange={(v) => set("status", v || null)}
-                  placeholder="— Selecciona status —"
+                  onChange={(e) => set("status", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <option value="">— Sin status —</option>
                   {STATUS_OPTIONS.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
-                </SelectField>
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Tipo de venta</Label>
-                <SelectField
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Boxes className="h-3 w-3" /> Tipo de venta
+                  </span>
+                </label>
+                <select
                   value={form.sale_type ?? ""}
-                  onChange={(v) => set("sale_type", v || null)}
-                  placeholder="— Selecciona tipo —"
+                  onChange={(e) => set("sale_type", e.target.value || null)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <option value="">— Sin tipo —</option>
                   {SALE_TYPE_OPTIONS.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
-                </SelectField>
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Tamaño paquete</Label>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Tamaño paquete</label>
                 <Input
                   type="number"
                   min={1}
@@ -465,159 +473,107 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
                   placeholder="Ej. 1, 6, 12"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Ubicación almacén</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={form.warehouse_location ?? ""}
-                    onChange={(e) => set("warehouse_location", e.target.value)}
-                    placeholder="Ej. A-03-04"
-                    className="pl-8"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Ubicación almacén
+                  </span>
+                </label>
+                <Input
+                  value={form.warehouse_location ?? ""}
+                  onChange={(e) => set("warehouse_location", e.target.value)}
+                  placeholder="Ej. A-03-04"
+                />
               </div>
             </div>
-          </SectionCard>
+          </fieldset>
 
           {/* Precios */}
-          <SectionCard icon={Banknote} title="Precios y costos">
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Banknote className="h-3.5 w-3.5" /> Precios y costos
+              </span>
+            </legend>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label>Precio unitario</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    value={form.unit_price ?? ""}
-                    onChange={(e) => set("unit_price", numOrNull(e.target.value))}
-                    placeholder="0.00"
-                    className="pl-6"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Precio unitario</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.unit_price ?? ""}
+                  onChange={(e) => set("unit_price", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
               </div>
-              <div className="space-y-1.5">
-                <Label>Costo refacciones</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    value={form.purchase_cost_parts ?? ""}
-                    onChange={(e) => set("purchase_cost_parts", numOrNull(e.target.value))}
-                    placeholder="0.00"
-                    className="pl-6"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Costo refacciones</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.purchase_cost_parts ?? ""}
+                  onChange={(e) => set("purchase_cost_parts", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
               </div>
-              <div className="space-y-1.5">
-                <Label>Costo Ariba</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.0001"
-                    value={form.purchase_cost_ariba ?? ""}
-                    onChange={(e) => set("purchase_cost_ariba", numOrNull(e.target.value))}
-                    placeholder="0.00"
-                    className="pl-6"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Costo Ariba</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.0001"
+                  value={form.purchase_cost_ariba ?? ""}
+                  onChange={(e) => set("purchase_cost_ariba", numOrNull(e.target.value))}
+                  placeholder="0.00"
+                />
               </div>
             </div>
-          </SectionCard>
+          </fieldset>
 
           {/* Adjuntos / URLs */}
-          <SectionCard icon={ImageIcon} title="Imagen y documentos">
-            <div className="space-y-1.5">
-              <Label>URL de imagen</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="url"
-                  value={form.image_url ?? ""}
-                  onChange={(e) => set("image_url", e.target.value)}
-                  placeholder="https://example.com/imagen-producto.jpg"
-                  className="flex-1"
+          <fieldset className="space-y-3">
+            <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Imagen y documentos
+            </legend>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <ImageIcon className="h-3 w-3" /> URL de imagen
+              </label>
+              <Input
+                type="url"
+                value={form.image_url ?? ""}
+                onChange={(e) => set("image_url", e.target.value)}
+                placeholder="https://example.com/imagen-producto.jpg"
+              />
+              {form.image_url && (
+                <img
+                  src={form.image_url}
+                  alt="preview"
+                  className="mt-2 h-24 w-24 rounded border border-border object-cover"
+                  onError={(e) => (e.currentTarget.style.display = "none")}
                 />
-                {form.image_url && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => set("image_url", "")}
-                    title="Limpiar imagen"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-              {form.image_url ? (
-                <div className="mt-2 inline-block rounded-[var(--radius-md)] border border-border bg-background p-2">
-                  <img
-                    src={form.image_url}
-                    alt="Vista previa"
-                    className="h-32 w-32 rounded-md object-cover"
-                    onError={(e) => {
-                      const target = e.currentTarget
-                      target.style.display = "none"
-                      target.parentElement!.innerHTML = `<div class="flex h-32 w-32 items-center justify-center text-muted-foreground text-xs">Error al cargar</div>`
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="mt-2 flex h-32 w-32 flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-border bg-accent/20 text-muted-foreground">
-                  <ImageIcon className="h-8 w-8 mb-1 opacity-40" />
-                  <span className="text-[10px]">Sin imagen</span>
-                </div>
               )}
             </div>
-            <div className="space-y-1.5">
-              <Label>URL ficha técnica / documento</Label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="url"
-                  value={form.datasheet_url ?? ""}
-                  onChange={(e) => set("datasheet_url", e.target.value)}
-                  placeholder="https://example.com/ficha-tecnica.pdf"
-                  className="pl-8"
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <FileText className="h-3 w-3" /> URL ficha técnica / documento
+              </label>
+              <Input
+                type="url"
+                value={form.datasheet_url ?? ""}
+                onChange={(e) => set("datasheet_url", e.target.value)}
+                placeholder="https://example.com/ficha-tecnica.pdf"
+              />
             </div>
-          </SectionCard>
+          </fieldset>
 
-          {/* Atributos adicionales */}
-          <SectionCard icon={Boxes} title="Atributos adicionales">
-            <div className="flex flex-wrap gap-6">
-              <div className="flex items-center gap-3">
-                <SwitchField
-                  checked={!!form.is_configurable}
-                  onChange={(v) => set("is_configurable", v)}
-                  label="Configurable"
-                />
-                <span className="text-sm text-muted-foreground">Producto configurable</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <SwitchField
-                  checked={!!form.is_assembled}
-                  onChange={(v) => set("is_assembled", v)}
-                  label="Ensamblado"
-                />
-                <span className="text-sm text-muted-foreground">Producto ensamblado</span>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+          <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={submitting} size="lg">
+            <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEdit ? "Guardar cambios" : "Crear producto"}
             </Button>
@@ -625,39 +581,11 @@ function ProductFormModal({ mode, token, categories, brands, onClose, onSaved }:
         </form>
       </div>
     </div>
+  </div>
   )
 }
 
 // ── Detail panel ──────────────────────────────────────────────────────────────
-
-function DetailSection({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: React.ElementType
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="space-y-2.5">
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider">{title}</span>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 text-xs py-1 border-b border-border/50 last:border-0">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className="font-medium truncate text-right">{value}</span>
-    </div>
-  )
-}
 
 function ProductDetailPanel({
   product,
@@ -669,139 +597,112 @@ function ProductDetailPanel({
   onEdit: () => void
 }) {
   return (
-    <div className="surface-card border-white/70 overflow-hidden">
-      {/* Image header */}
-      <div className="relative h-48 w-full bg-accent/30">
-        {product.image_url ? (
-          <img
-            src={product.image_url}
-            alt={product.name}
-            className="h-full w-full object-contain p-4"
-            onError={(e) => (e.currentTarget.style.display = "none")}
-          />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground/50">
-            <Package className="h-12 w-12 mb-2" />
-            <span className="text-xs">Sin imagen</span>
-          </div>
-        )}
-        <div className="absolute top-3 left-3">
-          <StatusChip status={product.status} />
+    <div className="surface-card border-white/70 space-y-4 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{product.name}</p>
+          <p className="text-xs text-muted-foreground">
+            SKU: {product.sku ?? "—"} · {product.internal_code ?? "Sin cód. interno"}
+          </p>
         </div>
-        <div className="absolute top-3 right-3 flex gap-1">
-          <Button size="sm" variant="secondary" className="h-8 gap-1 text-xs" onClick={onEdit}>
-            <Pencil className="h-3 w-3" />
+        <div className="flex shrink-0 gap-1">
+          <Button size="sm" variant="outline" onClick={onEdit}>
+            <Pencil className="h-3 w-3 mr-1" />
             Editar
           </Button>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-background hover:text-foreground transition-colors"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="space-y-4 p-5">
-        {/* Title */}
-        <div className="space-y-1">
-          <h3 className="text-base font-semibold leading-tight">{product.name}</h3>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span className="font-mono">{product.sku ?? "Sin SKU"}</span>
-            {product.internal_code && (
-              <>
-                <span className="text-border">·</span>
-                <span>{product.internal_code}</span>
-              </>
-            )}
-          </div>
+      {product.image_url && (
+        <div className="rounded-lg border border-border bg-background/50 overflow-hidden">
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="h-44 w-full object-contain"
+            onError={(e) => (e.currentTarget.style.display = "none")}
+          />
         </div>
+      )}
 
-        {/* Badges */}
-        <div className="flex flex-wrap gap-2">
-          {product.category && (
-            <Badge variant="secondary" className="text-[11px]">
-              <FolderOpen className="h-3 w-3 mr-1" />
-              {product.category}
-            </Badge>
-          )}
-          {product.brand && (
-            <Badge variant="outline" className="text-[11px]">
-              <Building2 className="h-3 w-3 mr-1" />
-              {product.brand}
-            </Badge>
-          )}
-          {product.sale_type && (
-            <Badge variant="outline" className="text-[11px]">
-              <Tag className="h-3 w-3 mr-1" />
-              {product.sale_type}
-            </Badge>
-          )}
-        </div>
-
-        {/* Description */}
-        {product.description && (
-          <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-primary/30 pl-3">
-            {product.description}
-          </p>
+      <div className="flex flex-wrap gap-2">
+        {product.status && <StatusChip status={product.status} />}
+        <SaleableChip isSaleable={product.is_saleable} />
+        {product.category && (
+          <Badge variant="secondary" className="text-[11px]">
+            {product.category}
+          </Badge>
         )}
-
-        {/* Info general */}
-        <DetailSection icon={FolderOpen} title="Información general">
-          <DetailRow label="Categoría" value={product.category ?? "—"} />
-          <DetailRow label="Marca" value={product.brand ?? "—"} />
-          <DetailRow label="Tipo venta" value={product.sale_type ?? "—"} />
-          <DetailRow label="Ubicación" value={product.warehouse_location ?? "—"} />
-        </DetailSection>
-
-        {/* Precios */}
-        <DetailSection icon={Banknote} title="Precios y costos">
-          <DetailRow label="Precio unitario" value={fmtPrice(product.unit_price)} />
-          <DetailRow label="Precio sugerido" value={fmtPrice(product.suggested_price)} />
-          <DetailRow label="Costo refacciones" value={fmtPrice(product.purchase_cost_parts)} />
-          <DetailRow label="Costo Ariba" value={fmtPrice(product.purchase_cost_ariba)} />
-        </DetailSection>
-
-        {/* Demanda */}
-        <DetailSection icon={Boxes} title="Demanda e inventario">
-          <DetailRow label="Demanda 90 días" value={product.demand_90_days?.toString() ?? "—"} />
-          <DetailRow label="Demanda 180 días" value={product.demand_180_days?.toString() ?? "—"} />
-          <DetailRow label="Total venta acum." value={fmtPrice(product.total_accumulated_sales)} />
-          <DetailRow label="Última salida" value={product.last_outbound_date ?? "—"} />
-        </DetailSection>
-
-        {/* Links */}
-        {(product.image_url || product.datasheet_url) && (
-          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-            {product.image_url && (
-              <a
-                href={product.image_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-              >
-                <ImageIcon className="h-3.5 w-3.5 text-primary" />
-                Ver imagen
-                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-              </a>
-            )}
-            {product.datasheet_url && (
-              <a
-                href={product.datasheet_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-accent/30 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
-              >
-                <FileText className="h-3.5 w-3.5 text-primary" />
-                Ficha técnica
-                <ExternalLink className="h-3 w-3 text-muted-foreground" />
-              </a>
-            )}
-          </div>
+        {product.brand && (
+          <Badge variant="outline" className="text-[11px]">
+            {product.brand}
+          </Badge>
         )}
       </div>
+
+      {product.description && (
+        <p className="text-sm text-muted-foreground leading-relaxed">{product.description}</p>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
+        <Row label="Tipo inventario" value={product.is_saleable ? "Vendible" : "Interno / Equipo"} />
+        <Row label="Tipo venta" value={product.sale_type ?? "—"} />
+        <Row label="Categoría" value={product.category ?? "—"} />
+        <Row label="Marca" value={product.brand ?? "—"} />
+        <Row label="Ubicación" value={product.warehouse_location ?? "—"} />
+        <Row label="Precio unit." value={fmtPrice(product.unit_price)} />
+        <Row label="Precio sugerido" value={fmtPrice(product.suggested_price)} />
+        <Row label="Costo ref." value={fmtPrice(product.purchase_cost_parts)} />
+        <Row label="Costo Ariba" value={fmtPrice(product.purchase_cost_ariba)} />
+        <Row label="Demanda 90d" value={product.demand_90_days?.toString() ?? "—"} />
+        <Row label="Demanda 180d" value={product.demand_180_days?.toString() ?? "—"} />
+        <Row label="Total venta acum." value={fmtPrice(product.total_accumulated_sales)} />
+        <Row label="Última salida" value={product.last_outbound_date ?? "—"} />
+      </div>
+
+      {(product.image_url || product.datasheet_url) && (
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+          {product.image_url && (
+            <a
+              href={product.image_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <ImageIcon className="h-3 w-3" />
+              Ver imagen
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {product.datasheet_url && (
+            <a
+              href={product.datasheet_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <FileText className="h-3 w-3" />
+              Ficha técnica
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium truncate">{value}</span>
+    </>
   )
 }
 
@@ -836,26 +737,91 @@ function DeleteConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 surface-card w-full max-w-sm overflow-hidden">
-        <div className="flex flex-col items-center p-6 pb-4 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-400 mb-3">
-            <Trash2 className="h-6 w-6" />
-          </div>
-          <p className="text-base font-semibold">Eliminar producto</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            ¿Estás seguro de eliminar{" "}
-            <span className="font-medium text-foreground">{product.name}</span>?
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">Esta acción no se puede deshacer.</p>
-        </div>
-        <div className="flex justify-end gap-2 p-4 pt-0">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 surface-card w-full max-w-sm space-y-4 p-6">
+        <p className="text-base font-semibold">Eliminar producto</p>
+        <p className="text-sm text-muted-foreground">
+          ¿Estás seguro de eliminar{" "}
+          <span className="font-medium text-foreground">{product.name}</span>? Esta acción no se
+          puede deshacer.
+        </p>
+        <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={deleting}>
             Cancelar
           </Button>
           <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
             {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Eliminar
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Rebuild inventory confirmation ────────────────────────────────────────────
+
+function RebuildInventarioModal({
+  token,
+  totalProducts,
+  onClose,
+  onDone,
+}: {
+  token: string | null
+  totalProducts: number
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [rebuilding, setRebuilding] = useState(false)
+
+  async function handleRebuild() {
+    setRebuilding(true)
+    try {
+      const result = await inventarioService.rebuildFromProducts(token!)
+      toast.success(`Inventario reconstruido: ${result.created} registros creados`)
+      onDone()
+      onClose()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al reconstruir inventario")
+    } finally {
+      setRebuilding(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 surface-card w-full max-w-md space-y-4 p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-base font-semibold">Reconstruir inventario desde catálogo</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Esta operación borrará{" "}
+              <strong className="text-foreground">todos los registros actuales de inventario</strong>{" "}
+              y creará uno nuevo por cada producto del catálogo ({totalProducts} productos).
+            </p>
+          </div>
+        </div>
+        <ul className="space-y-1 rounded-lg border border-border bg-accent/20 p-3 text-xs text-muted-foreground">
+          <li>• Los registros nuevos tendrán stock en 0 y sin costo</li>
+          <li>• Los movimientos históricos de inventario no se eliminan</li>
+          <li>• Vendibles → aparecen en Inventario de productos</li>
+          <li>• Internos → aparecen en Equipos e inventario interno</li>
+        </ul>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={rebuilding}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" onClick={handleRebuild} disabled={rebuilding}>
+            {rebuilding ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Reconstruir inventario
           </Button>
         </div>
       </div>
@@ -903,6 +869,9 @@ function ProductGridCard({
           )}
           <div className="absolute top-2 right-2">
             <StatusChip status={product.status} />
+          </div>
+          <div className="absolute top-2 left-2">
+            <SaleableChip isSaleable={product.is_saleable} />
           </div>
         </div>
 
@@ -996,6 +965,7 @@ type ActiveModal =
   | { type: "create" }
   | { type: "edit"; product: ProductRead }
   | { type: "delete"; product: ProductRead }
+  | { type: "rebuild" }
 
 export function ProductosCatalogoPage() {
   const token = useAuthStore((s) => s.accessToken)
@@ -1005,6 +975,7 @@ export function ProductosCatalogoPage() {
   const [filterStatus, setFilterStatus] = useState<"activos" | "todos">("activos")
   const [filterCategory, setFilterCategory] = useState<string>("")
   const [filterBrand, setFilterBrand] = useState<string>("")
+  const [filterSaleable, setFilterSaleable] = useState<"todos" | "vendibles" | "internos">("todos")
   const [viewMode, setViewMode] = useState<ViewMode>("table")
   const [selectedProduct, setSelectedProduct] = useState<ProductRead | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null)
@@ -1049,8 +1020,13 @@ export function ProductosCatalogoPage() {
   const { data: categories } = useApi(categoriesFetcher)
   const { data: brands } = useApi(brandsFetcher)
 
-  const rows = productsData?.items ?? []
-  const total = productsData?.total ?? 0
+  const rawRows = productsData?.items ?? []
+  const rows = rawRows.filter((r) => {
+    if (filterSaleable === "vendibles") return r.is_saleable
+    if (filterSaleable === "internos") return !r.is_saleable
+    return true
+  })
+  const total = rows.length
   const isLoading = productsStatus === "loading"
 
   const flatCats = flattenCategories(categories ?? [])
@@ -1059,6 +1035,7 @@ export function ProductosCatalogoPage() {
     filterStatus !== "activos",
     !!filterCategory,
     !!filterBrand,
+    filterSaleable !== "todos",
   ].filter(Boolean).length
 
   const COLUMNS: DataTableColumn<ProductRead>[] = [
@@ -1095,6 +1072,12 @@ export function ProductosCatalogoPage() {
           </div>
         </div>
       ),
+    },
+    {
+      key: "is_saleable",
+      header: "Tipo",
+      className: "w-[110px]",
+      cell: (r) => <SaleableChip isSaleable={r.is_saleable} />,
     },
     {
       key: "category",
@@ -1202,6 +1185,7 @@ export function ProductosCatalogoPage() {
     setFilterStatus("activos")
     setFilterCategory("")
     setFilterBrand("")
+    setFilterSaleable("todos")
     setSearch("")
   }
 
@@ -1228,10 +1212,20 @@ export function ProductosCatalogoPage() {
               SKU · marcas · categorías · precios · fichas técnicas
             </p>
           </div>
-          <Button onClick={() => setActiveModal({ type: "create" })} className="shrink-0">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo producto
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setActiveModal({ type: "rebuild" })}
+              title="Reconstruir inventario desde el catálogo"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Sincronizar inventario
+            </Button>
+            <Button onClick={() => setActiveModal({ type: "create" })}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo producto
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -1337,6 +1331,17 @@ export function ProductosCatalogoPage() {
             ))}
           </select>
 
+          {/* Saleable filter */}
+          <select
+            value={filterSaleable}
+            onChange={(e) => setFilterSaleable(e.target.value as typeof filterSaleable)}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="todos">Todos los tipos</option>
+            <option value="vendibles">Vendibles</option>
+            <option value="internos">Internos / Equipo</option>
+          </select>
+
           {activeFiltersCount > 0 && (
             <button
               onClick={clearFilters}
@@ -1359,7 +1364,7 @@ export function ProductosCatalogoPage() {
               emptyLabel={
                 isLoading
                   ? "Cargando productos…"
-                  : debouncedSearch || filterCategory || filterBrand
+                  : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
                     ? `Sin resultados para los filtros aplicados`
                     : "No hay productos en el catálogo"
               }
@@ -1378,7 +1383,7 @@ export function ProductosCatalogoPage() {
                   <p className="text-sm">
                     {isLoading
                       ? "Cargando productos…"
-                      : debouncedSearch || filterCategory || filterBrand
+                      : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
                         ? "Sin resultados para los filtros aplicados"
                         : "No hay productos en el catálogo"}
                   </p>
@@ -1448,6 +1453,15 @@ export function ProductosCatalogoPage() {
             refresh()
             if (selectedProduct?.id === activeModal.product.id) setSelectedProduct(null)
           }}
+        />
+      )}
+
+      {activeModal?.type === "rebuild" && (
+        <RebuildInventarioModal
+          token={token}
+          totalProducts={total}
+          onClose={() => setActiveModal(null)}
+          onDone={() => refresh()}
         />
       )}
     </div>

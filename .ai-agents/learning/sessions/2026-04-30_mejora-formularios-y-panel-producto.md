@@ -21,6 +21,7 @@ En la sesion anterior se mejoro el catalogo en general (vista grid, filtros, bad
   - Inputs de precio con prefijo `$` y iconos en ubicacion/ficha tecnica.
   - Switches visuales para "Producto configurable" y "Producto ensamblado".
   - Boton de submit mas grande (`size="lg"`).
+  - **Fix de overlay al scroll:** reestructurado el modal para que el overlay `absolute` cubra un contenedor `fixed` padre, y el scroll ocurra en un contenedor intermedio con `h-full overflow-y-auto`. Esto evita que el fondo oscuro se desplace al hacer scroll vertical.
 
 - **ProductDetailPanel (menu de informacion):**
   - Header con imagen/placeholder a tamaño completo (192px) y overlay de estado flotante.
@@ -30,11 +31,17 @@ En la sesion anterior se mejoro el catalogo en general (vista grid, filtros, bad
   - Secciones agrupadas con `DetailSection`: "Informacion general", "Precios y costos", "Demanda e inventario".
   - `DetailRow` con separador sutil y alineacion mejorada.
   - Links de documentos como botones con borde y fondo sutil.
+  - `SaleableChip` visible en el header de badges y en la fila "Tipo inventario".
 
 - **DeleteConfirmModal:**
   - Icono de Trash2 en circulo rojo centrado en la parte superior.
   - Texto centrado y mejor jerarquia.
   - Overlay con `backdrop-blur`.
+
+- **Filtro por tipo de inventario (`is_saleable`):**
+  - Agregado select en la toolbar para filtrar por "Todos los tipos", "Vendibles" e "Internos / Equipo".
+  - El filtro se aplica en el frontend sobre la lista de productos ya cargados.
+  - Contador de filtros activos actualizado.
 
 ## Decisiones Tomadas
 - Se mantuvo la logica de estado y validaciones existente para no introducir regresiones.
