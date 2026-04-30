@@ -1425,7 +1425,7 @@ export function ProductosCatalogoPage() {
 
       {/* Content area */}
       <div className="flex min-h-0 flex-1 gap-4">
-        <div className={cn("flex-1 min-w-0 h-full overflow-hidden", selectedProduct ? "max-w-[calc(100%-320px)]" : "")}>
+        <div className="flex-1 min-w-0 h-full overflow-hidden">
           {viewMode === "table" ? (
             <DataTable
               columns={COLUMNS}
@@ -1442,7 +1442,8 @@ export function ProductosCatalogoPage() {
                 setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
               }
               selectedRowKey={selectedProduct?.id}
-              maxHeight={selectedProduct ? "100%" : "calc(100vh - 380px)"}
+              maxHeight={selectedProduct ? undefined : "calc(100vh - 380px)"}
+              fillHeight={!!selectedProduct}
             />
           ) : (
             /* Grid view */

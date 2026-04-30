@@ -19,6 +19,7 @@ type DataTableProps<T> = {
   className?: string
   toolbar?: ReactNode
   maxHeight?: string
+  fillHeight?: boolean
 }
 
 export function DataTable<T>({
@@ -31,17 +32,21 @@ export function DataTable<T>({
   className,
   toolbar,
   maxHeight,
+  fillHeight,
 }: DataTableProps<T>) {
   return (
-    <div className={cn("surface-card overflow-hidden border-white/70", className)}>
+    <div className={cn("surface-card overflow-hidden border-white/70", fillHeight && "h-full flex flex-col", className)}>
       {toolbar ? (
         <div className="flex flex-col gap-3 border-b bg-background/80 px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
           {toolbar}
         </div>
       ) : null}
       <div
-        style={maxHeight ? { maxHeight } : undefined}
-        className={cn("overflow-x-auto", maxHeight ? "overflow-y-auto" : "")}
+        style={maxHeight && !fillHeight ? { maxHeight } : undefined}
+        className={cn(
+          "overflow-x-auto",
+          fillHeight ? "flex-1 overflow-y-auto" : maxHeight ? "overflow-y-auto" : ""
+        )}
       >
         <div>
           <table className="w-full border-collapse text-sm">
