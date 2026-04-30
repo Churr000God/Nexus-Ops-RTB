@@ -22,3 +22,7 @@ class InventarioProductoResponse(BaseModel):
     monto_real: float
     monto_teorico: float
     abc_classification: str | None = None
+
+
+class RebuildResult(BaseModel):
+    created: int

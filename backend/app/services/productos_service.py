@@ -10,7 +10,7 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.ops_models import Product, Category, Brand
+from app.models.ops_models import Product, Category, Brand, InventoryItem
 from app.models.productos_pricing_models import (
     BOM,
     BOMItem,
@@ -337,6 +337,7 @@ class ProductosService:
             unit_price=float(data.unit_price) if data.unit_price is not None else None,
             purchase_cost_parts=float(data.purchase_cost_parts) if data.purchase_cost_parts is not None else None,
             purchase_cost_ariba=float(data.purchase_cost_ariba) if data.purchase_cost_ariba is not None else None,
+            is_saleable=data.is_saleable,
             is_configurable=data.is_configurable,
             is_assembled=data.is_assembled,
             pricing_strategy=data.pricing_strategy,
@@ -344,6 +345,11 @@ class ProductosService:
         )
         self.db.add(product)
         await self.db.flush()
+        inv = InventoryItem(
+            product_id=product.id,
+            internal_code=product.internal_code,
+        )
+        self.db.add(inv)
         await self.db.commit()
         await self.db.refresh(product)
         return ProductRead.model_validate(product)

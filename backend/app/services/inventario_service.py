@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse
+from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse, RebuildResult
 
 # inventario.unit_cost is the primary cost source (populated by sync or trigger).
 # proveedor_productos.avg_price is used as fallback when inventario.unit_cost is NULL.
@@ -100,3 +100,18 @@ class InventarioService:
             )
             for r in rows
         ]
+
+    async def rebuild_from_products(self) -> RebuildResult:
+        """Borra todos los registros de inventario y crea uno por producto del catálogo."""
+        await self.db.execute(text("DELETE FROM inventario"))
+        result = await self.db.execute(
+            text(
+                """
+                INSERT INTO inventario (id, product_id, internal_code)
+                SELECT gen_random_uuid(), id, internal_code
+                FROM productos
+                """
+            )
+        )
+        await self.db.commit()
+        return RebuildResult(created=result.rowcount)

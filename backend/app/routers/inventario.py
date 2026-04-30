@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
-from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse
+from app.schemas.inventario_schema import InventarioKpiResponse, InventarioProductoResponse, RebuildResult
 from app.services.inventario_service import InventarioService
 
 router = APIRouter(prefix="/api/inventario", tags=["inventario"])
@@ -30,3 +30,11 @@ async def inventario_productos(
     return await InventarioService(db).get_productos(
         limit=limit, offset=offset, solo_con_stock=solo_con_stock
     )
+
+
+@router.post("/rebuild-from-products", response_model=RebuildResult)
+async def rebuild_inventario(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> RebuildResult:
+    return await InventarioService(db).rebuild_from_products()

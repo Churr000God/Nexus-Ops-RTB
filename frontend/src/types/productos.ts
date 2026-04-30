@@ -18,6 +18,7 @@ export interface ProductRead {
   unit_price_base: number | null
   purchase_cost_parts: number | null
   purchase_cost_ariba: number | null
+  is_saleable: boolean
   is_configurable: boolean
   is_assembled: boolean
   pricing_strategy: string
@@ -61,6 +62,7 @@ export type ProductCreate = {
   unit_price?: number | null
   purchase_cost_parts?: number | null
   purchase_cost_ariba?: number | null
+  is_saleable?: boolean
   is_configurable?: boolean
   is_assembled?: boolean
   pricing_strategy?: string
@@ -81,6 +83,7 @@ export type ProductUpdate = {
   unit_price?: number | null
   purchase_cost_parts?: number | null
   purchase_cost_ariba?: number | null
+  is_saleable?: boolean | null
   is_configurable?: boolean | null
   is_assembled?: boolean | null
   pricing_strategy?: string | null

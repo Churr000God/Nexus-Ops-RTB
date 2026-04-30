@@ -91,5 +91,12 @@ export const inventarioService = {
       token,
     })
   },
+
+  rebuildFromProducts(token: string) {
+    return requestJson<{ created: number }>("/api/inventario/rebuild-from-products", {
+      method: "POST",
+      token,
+    })
+  },
 }
 

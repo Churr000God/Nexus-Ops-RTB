@@ -223,6 +223,7 @@ class ProductRead(BaseModel):
     unit_price_base: Decimal | None = None
     purchase_cost_parts: Decimal | None = None
     purchase_cost_ariba: Decimal | None = None
+    is_saleable: bool = True
     is_configurable: bool
     is_assembled: bool
     pricing_strategy: str
@@ -268,6 +269,7 @@ class ProductCreate(BaseModel):
     unit_price: Decimal | None = None
     purchase_cost_parts: Decimal | None = None
     purchase_cost_ariba: Decimal | None = None
+    is_saleable: bool = True
     is_configurable: bool = False
     is_assembled: bool = False
     pricing_strategy: str = Field(
@@ -292,6 +294,7 @@ class ProductUpdate(BaseModel):
     unit_price: Decimal | None = None
     purchase_cost_parts: Decimal | None = None
     purchase_cost_ariba: Decimal | None = None
+    is_saleable: bool | None = None
     is_configurable: bool | None = None
     is_assembled: bool | None = None
     pricing_strategy: str | None = Field(
