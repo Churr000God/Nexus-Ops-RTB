@@ -1,13 +1,30 @@
-import React, { useCallback, useState } from "react"
-import { Building2, CheckCircle2, MapPin, Pencil, Plus, Search, Trash2, X, XCircle } from "lucide-react"
+import React, { useCallback, useMemo, useState } from "react"
+import {
+  Building2,
+  CheckCircle2,
+  LayoutGrid,
+  List,
+  MapPin,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { EmptyState } from "@/components/common/EmptyState"
+import { KpiCard } from "@/components/common/KpiCard"
+import { ViewToggle } from "@/components/common/ViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
+import { ApiError } from "@/lib/http"
 import { useAuthStore } from "@/stores/authStore"
 import type {
   CustomerAddress,
@@ -1084,8 +1101,12 @@ function NewCustomerModal({ token, onClose, onCreated }: NewCustomerModalProps) 
       toast.success("Cliente creado")
       onCreated()
       onClose()
-    } catch {
-      toast.error("Error al crear cliente")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast.error(err.message)
+      } else {
+        toast.error("Error al crear cliente")
+      }
     } finally {
       setSubmitting(false)
     }
@@ -1212,6 +1233,9 @@ export function ClientesPage() {
 
   const [search, setSearch] = useState("")
   const [soloActivos, setSoloActivos] = useState(true)
+  const [customerTypeFilter, setCustomerTypeFilter] = useState("")
+  const [localityFilter, setLocalityFilter] = useState("")
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CustomerDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -1222,13 +1246,29 @@ export function ClientesPage() {
     (signal: AbortSignal) =>
       clientesProveedoresService.listCustomers(
         token,
-        { search: search || undefined, solo_activos: soloActivos, limit: 200 },
+        {
+          search: search || undefined,
+          solo_activos: soloActivos,
+          customer_type: customerTypeFilter || undefined,
+          locality: localityFilter || undefined,
+          limit: 200,
+        },
         signal
       ),
-    [token, search, soloActivos]
+    [token, search, soloActivos, customerTypeFilter, localityFilter]
   )
 
   const { data, status, error, refetch } = useApi(fetchCustomers, { enabled: canView })
+
+  const kpi = useMemo(() => {
+    const items = data?.items ?? []
+    const total = items.length
+    const activos = items.filter((c) => c.is_active).length
+    const inactivos = total - activos
+    const empresas = items.filter((c) => c.customer_type === "COMPANY").length
+    const locales = items.filter((c) => c.locality === "LOCAL").length
+    return { total, activos, inactivos, empresas, locales }
+  }, [data])
 
   async function loadDetail(id: number) {
     setSelectedId(id)
@@ -1314,6 +1354,7 @@ export function ClientesPage() {
   }
 
   const panelOpen = selectedId !== null
+  const filteredItems = data?.items ?? []
 
   return (
     <div className="flex h-full flex-col">
@@ -1328,19 +1369,63 @@ export function ClientesPage() {
             <p className="text-sm text-muted-foreground">Directorio maestro de clientes</p>
           </div>
         </div>
-        {canManage && (
-          <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nuevo cliente
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <ViewToggle
+            options={[
+              { value: "table", label: "Tabla", icon: List },
+              { value: "grid", label: "Tarjetas", icon: LayoutGrid },
+            ]}
+            active={viewMode}
+            onChange={setViewMode}
+          />
+          {canManage && (
+            <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nuevo cliente
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 border-b bg-muted/20 px-6 py-4 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiCard
+          label="Total clientes"
+          value={String(kpi.total)}
+          icon={Users}
+          tone="blue"
+        />
+        <KpiCard
+          label="Activos"
+          value={String(kpi.activos)}
+          icon={CheckCircle2}
+          tone="green"
+        />
+        <KpiCard
+          label="Inactivos"
+          value={String(kpi.inactivos)}
+          icon={XCircle}
+          tone="red"
+        />
+        <KpiCard
+          label="Empresas"
+          value={String(kpi.empresas)}
+          icon={Building2}
+          tone="purple"
+        />
+        <KpiCard
+          label="Nacionales"
+          value={String(kpi.locales)}
+          icon={MapPin}
+          tone="orange"
+        />
       </div>
 
       {/* Content area */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Table area */}
+        {/* Main area */}
         <div
           className={cn(
-            "flex min-w-0 flex-1 flex-col gap-4 overflow-auto p-6 transition-all duration-200",
+            "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden p-6 transition-all duration-200",
             panelOpen && "lg:max-w-[calc(100%-420px)]"
           )}
         >
@@ -1350,65 +1435,131 @@ export function ClientesPage() {
               <AlertDescription>{error.message}</AlertDescription>
             </Alert>
           )}
-          <DataTable
-            columns={columns}
-            rows={data?.items ?? []}
-            rowKey={(c) => String(c.customer_id)}
-            onRowClick={handleRowClick}
-            emptyLabel={
-              status === "loading" ? "Cargando clientes…" : "No hay clientes registrados"
-            }
-            toolbar={
-              <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="relative max-w-xs flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    className="w-full rounded-[var(--radius-md)] border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    placeholder="Buscar cliente…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+
+          {/* Toolbar */}
+          <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative max-w-xs flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="w-full rounded-[var(--radius-md)] border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                placeholder="Buscar cliente…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={customerTypeFilter}
+                onChange={(e) => setCustomerTypeFilter(e.target.value)}
+              >
+                <option value="">Todos los tipos</option>
+                <option value="COMPANY">Empresa</option>
+                <option value="PERSON">Persona</option>
+              </select>
+              <select
+                className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={localityFilter}
+                onChange={(e) => setLocalityFilter(e.target.value)}
+              >
+                <option value="">Todas las localidades</option>
+                <option value="LOCAL">Nacional</option>
+                <option value="FOREIGN">Extranjero</option>
+              </select>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={soloActivos}
+                  onChange={(e) => setSoloActivos(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Solo activos
+              </label>
+              <span className="text-sm text-muted-foreground">
+                {data != null && `${data.total} cliente${data.total !== 1 ? "s" : ""}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+            {viewMode === "table" ? (
+              <DataTable
+                columns={columns}
+                rows={filteredItems}
+                rowKey={(c) => String(c.customer_id)}
+                onRowClick={handleRowClick}
+                selectedRowKey={selectedId != null ? String(selectedId) : undefined}
+                emptyLabel={
+                  status === "loading" ? "Cargando clientes…" : "No hay clientes registrados"
+                }
+                fillHeight
+              />
+            ) : (
+              <div className="h-full overflow-y-auto pr-1">
+                {filteredItems.length === 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title={status === "loading" ? "Cargando clientes…" : "No hay clientes registrados"}
+                    description="Ajusta los filtros o crea un nuevo cliente."
                   />
-                </div>
-                <div className="flex items-center gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={soloActivos}
-                      onChange={(e) => setSoloActivos(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Solo activos
-                  </label>
-                  <span className="text-sm text-muted-foreground">
-                    {data != null &&
-                      `${data.total} cliente${data.total !== 1 ? "s" : ""}`}
-                  </span>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {filteredItems.map((c) => (
+                      <div
+                        key={c.customer_id}
+                        onClick={() => handleRowClick(c)}
+                        className={cn(
+                          "surface-card surface-card-hover cursor-pointer space-y-3 border-white/70 p-5 transition-all",
+                          selectedId === c.customer_id && "ring-1 ring-primary/40"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">{c.business_name}</p>
+                            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{c.code}</p>
+                          </div>
+                          <StatusBadge active={c.is_active} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <TypeBadge type={c.customer_type} />
+                          <LocalityBadge locality={c.locality} />
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{c.currency}</span>
+                          <span>{c.payment_terms_days > 0 ? `${c.payment_terms_days}d plazo` : "Contado"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            }
-          />
+            )}
+          </div>
         </div>
 
         {/* Detail panel */}
         {panelOpen && (
-          <div className="hidden w-[420px] shrink-0 border-l bg-background lg:flex lg:flex-col">
-            {detailLoading || !detail ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                {detailLoading ? "Cargando detalle…" : "Sin datos"}
-              </div>
-            ) : (
-              <CustomerDetailPanel
-                detail={detail}
-                canManage={canManage}
-                token={token}
-                onClose={() => {
-                  setSelectedId(null)
-                  setDetail(null)
-                }}
-                onUpdated={handleDetailUpdated}
-                onEdit={() => setShowEditModal(true)}
-              />
-            )}
+          <div className="hidden w-[420px] shrink-0 h-full overflow-hidden border-l bg-background lg:flex lg:flex-col">
+            <div className="h-full overflow-y-auto">
+              {detailLoading || !detail ? (
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  {detailLoading ? "Cargando detalle…" : "Sin datos"}
+                </div>
+              ) : (
+                <CustomerDetailPanel
+                  detail={detail}
+                  canManage={canManage}
+                  token={token}
+                  onClose={() => {
+                    setSelectedId(null)
+                    setDetail(null)
+                  }}
+                  onUpdated={handleDetailUpdated}
+                  onEdit={() => setShowEditModal(true)}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

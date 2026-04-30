@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useMemo, useState } from "react"
 import {
   CheckCircle2,
   DollarSign,
+  LayoutGrid,
+  List,
   MapPin,
   Package,
   Pencil,
@@ -10,17 +12,22 @@ import {
   Star,
   Trash2,
   Truck,
+  Users,
   X,
   XCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { EmptyState } from "@/components/common/EmptyState"
+import { KpiCard } from "@/components/common/KpiCard"
+import { ViewToggle } from "@/components/common/ViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
+import { ApiError } from "@/lib/http"
 import { useAuthStore } from "@/stores/authStore"
 import type {
   SupplierAddress,
@@ -1362,8 +1369,12 @@ function NewSupplierModal({ token, onClose, onCreated }: NewSupplierModalProps) 
       toast.success("Proveedor creado")
       onCreated()
       onClose()
-    } catch {
-      toast.error("Error al crear proveedor")
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast.error(err.message)
+      } else {
+        toast.error("Error al crear proveedor")
+      }
     } finally {
       setSubmitting(false)
     }
@@ -1502,6 +1513,7 @@ export function ProveedoresMaestroPage() {
   const [soloActivos, setSoloActivos] = useState(true)
   const [supplierType, setSupplierType] = useState("")
   const [locality, setLocality] = useState("")
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<SupplierDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -1525,6 +1537,17 @@ export function ProveedoresMaestroPage() {
   )
 
   const { data, status, error, refetch } = useApi(fetchSuppliers, { enabled: canView })
+
+  const kpi = useMemo(() => {
+    const items = data?.items ?? []
+    const total = items.length
+    const activos = items.filter((s) => s.is_active).length
+    const inactivos = total - activos
+    const bienes = items.filter((s) => s.supplier_type === "GOODS").length
+    const servicios = items.filter((s) => s.supplier_type === "SERVICES").length
+    const ocasionales = items.filter((s) => s.is_occasional).length
+    return { total, activos, inactivos, bienes, servicios, ocasionales }
+  }, [data])
 
   async function loadDetail(id: number) {
     setSelectedId(id)
@@ -1605,6 +1628,7 @@ export function ProveedoresMaestroPage() {
   }
 
   const panelOpen = selectedId !== null
+  const filteredItems = data?.items ?? []
 
   return (
     <div className="flex h-full flex-col">
@@ -1619,19 +1643,69 @@ export function ProveedoresMaestroPage() {
             <p className="text-sm text-muted-foreground">Directorio maestro de proveedores</p>
           </div>
         </div>
-        {canManage && (
-          <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" /> Nuevo proveedor
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <ViewToggle
+            options={[
+              { value: "table", label: "Tabla", icon: List },
+              { value: "grid", label: "Tarjetas", icon: LayoutGrid },
+            ]}
+            active={viewMode}
+            onChange={setViewMode}
+          />
+          {canManage && (
+            <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nuevo proveedor
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 border-b bg-muted/20 px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+        <KpiCard
+          label="Total proveedores"
+          value={String(kpi.total)}
+          icon={Users}
+          tone="blue"
+        />
+        <KpiCard
+          label="Activos"
+          value={String(kpi.activos)}
+          icon={CheckCircle2}
+          tone="green"
+        />
+        <KpiCard
+          label="Inactivos"
+          value={String(kpi.inactivos)}
+          icon={XCircle}
+          tone="red"
+        />
+        <KpiCard
+          label="Bienes"
+          value={String(kpi.bienes)}
+          icon={Package}
+          tone="purple"
+        />
+        <KpiCard
+          label="Servicios"
+          value={String(kpi.servicios)}
+          icon={Truck}
+          tone="orange"
+        />
+        <KpiCard
+          label="Ocasionales"
+          value={String(kpi.ocasionales)}
+          icon={Star}
+          tone="neutral"
+        />
       </div>
 
       {/* Content area */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Table area */}
+        {/* Main area */}
         <div
           className={cn(
-            "flex min-w-0 flex-1 flex-col gap-4 overflow-auto p-6 transition-all duration-200",
+            "flex min-w-0 flex-1 flex-col gap-4 overflow-hidden p-6 transition-all duration-200",
             panelOpen && "lg:max-w-[calc(100%-420px)]"
           )}
         >
@@ -1641,86 +1715,139 @@ export function ProveedoresMaestroPage() {
               <AlertDescription>{error.message}</AlertDescription>
             </Alert>
           )}
-          <DataTable
-            columns={columns}
-            rows={data?.items ?? []}
-            rowKey={(s) => String(s.supplier_id)}
-            onRowClick={handleRowClick}
-            emptyLabel={
-              status === "loading"
-                ? "Cargando proveedores…"
-                : "No hay proveedores registrados"
-            }
-            toolbar={
-              <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="relative max-w-xs flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    className="w-full rounded-[var(--radius-md)] border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    placeholder="Buscar proveedor…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+
+          {/* Toolbar */}
+          <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative max-w-xs flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                className="w-full rounded-[var(--radius-md)] border bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                placeholder="Buscar proveedor…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={supplierType}
+                onChange={(e) => setSupplierType(e.target.value)}
+              >
+                <option value="">Todos los tipos</option>
+                <option value="GOODS">Bienes</option>
+                <option value="SERVICES">Servicios</option>
+                <option value="BOTH">Mixto</option>
+              </select>
+              <select
+                className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={locality}
+                onChange={(e) => setLocality(e.target.value)}
+              >
+                <option value="">Todas las localidades</option>
+                <option value="LOCAL">Nacional</option>
+                <option value="FOREIGN">Extranjero</option>
+              </select>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={soloActivos}
+                  onChange={(e) => setSoloActivos(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Solo activos
+              </label>
+              <span className="text-sm text-muted-foreground">
+                {data != null && `${data.total} proveedor${data.total !== 1 ? "es" : ""}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 min-w-0 overflow-hidden">
+            {viewMode === "table" ? (
+              <DataTable
+                columns={columns}
+                rows={filteredItems}
+                rowKey={(s) => String(s.supplier_id)}
+                onRowClick={handleRowClick}
+                selectedRowKey={selectedId != null ? String(selectedId) : undefined}
+                emptyLabel={
+                  status === "loading"
+                    ? "Cargando proveedores…"
+                    : "No hay proveedores registrados"
+                }
+                fillHeight
+              />
+            ) : (
+              <div className="h-full overflow-y-auto pr-1">
+                {filteredItems.length === 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title={status === "loading" ? "Cargando proveedores…" : "No hay proveedores registrados"}
+                    description="Ajusta los filtros o crea un nuevo proveedor."
                   />
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <select
-                    className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    value={supplierType}
-                    onChange={(e) => setSupplierType(e.target.value)}
-                  >
-                    <option value="">Todos los tipos</option>
-                    <option value="GOODS">Bienes</option>
-                    <option value="SERVICES">Servicios</option>
-                    <option value="BOTH">Mixto</option>
-                  </select>
-                  <select
-                    className="rounded-[var(--radius-md)] border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    value={locality}
-                    onChange={(e) => setLocality(e.target.value)}
-                  >
-                    <option value="">Todas las localidades</option>
-                    <option value="LOCAL">Nacional</option>
-                    <option value="FOREIGN">Extranjero</option>
-                  </select>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={soloActivos}
-                      onChange={(e) => setSoloActivos(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Solo activos
-                  </label>
-                  <span className="text-sm text-muted-foreground">
-                    {data != null &&
-                      `${data.total} proveedor${data.total !== 1 ? "es" : ""}`}
-                  </span>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {filteredItems.map((s) => (
+                      <div
+                        key={s.supplier_id}
+                        onClick={() => handleRowClick(s)}
+                        className={cn(
+                          "surface-card surface-card-hover cursor-pointer space-y-3 border-white/70 p-5 transition-all",
+                          selectedId === s.supplier_id && "ring-1 ring-primary/40"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">{s.business_name}</p>
+                            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">{s.code}</p>
+                          </div>
+                          <StatusBadge active={s.is_active} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <SupplierTypeBadge type={s.supplier_type} />
+                          <LocalityBadge locality={s.locality} />
+                          {s.is_occasional && (
+                            <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400">
+                              Ocasional
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{s.currency}</span>
+                          <span>{s.payment_terms_days > 0 ? `${s.payment_terms_days}d plazo` : "Inmediato"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            }
-          />
+            )}
+          </div>
         </div>
 
         {/* Detail panel */}
         {panelOpen && (
-          <div className="hidden w-[420px] shrink-0 border-l bg-background lg:flex lg:flex-col">
-            {detailLoading || !detail ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-                {detailLoading ? "Cargando detalle…" : "Sin datos"}
-              </div>
-            ) : (
-              <SupplierDetailPanel
-                detail={detail}
-                canManage={canManage}
-                token={token}
-                onClose={() => {
-                  setSelectedId(null)
-                  setDetail(null)
-                }}
-                onUpdated={handleDetailUpdated}
-                onEdit={() => setShowEditModal(true)}
-              />
-            )}
+          <div className="hidden w-[420px] shrink-0 h-full overflow-hidden border-l bg-background lg:flex lg:flex-col">
+            <div className="h-full overflow-y-auto">
+              {detailLoading || !detail ? (
+                <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                  {detailLoading ? "Cargando detalle…" : "Sin datos"}
+                </div>
+              ) : (
+                <SupplierDetailPanel
+                  detail={detail}
+                  canManage={canManage}
+                  token={token}
+                  onClose={() => {
+                    setSelectedId(null)
+                    setDetail(null)
+                  }}
+                  onUpdated={handleDetailUpdated}
+                  onEdit={() => setShowEditModal(true)}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
