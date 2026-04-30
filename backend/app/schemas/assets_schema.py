@@ -168,6 +168,10 @@ class InventoryKpiSummaryRead(BaseModel):
     valor_total_interno: float
     productos_out_of_stock: int
     productos_below_min: int
+    productos_out_of_stock_vendible: int
+    productos_below_min_vendible: int
+    productos_out_of_stock_interno: int
+    productos_below_min_interno: int
     total_assets: int
     assets_en_reparacion: int
     total_vendible: int

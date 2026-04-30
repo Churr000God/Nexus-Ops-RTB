@@ -20,6 +20,10 @@ export type InventoryKpiV2 = {
   valor_total_interno: number
   productos_out_of_stock: number
   productos_below_min: number
+  productos_out_of_stock_vendible: number
+  productos_below_min_vendible: number
+  productos_out_of_stock_interno: number
+  productos_below_min_interno: number
   total_assets: number
   assets_en_reparacion: number
   total_vendible: number

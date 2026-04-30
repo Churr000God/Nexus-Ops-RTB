@@ -241,20 +241,20 @@ export default function EquiposPage() {
         />
         <KpiCard
           title="Bajo Mínimo"
-          value={formatNumber(kpisV2?.productos_below_min ?? 0)}
-          description="SKUs por debajo del stock mínimo"
+          value={formatNumber(kpisV2?.productos_below_min_interno ?? 0)}
+          description="SKUs internos por debajo del stock mínimo"
           icon={AlertTriangle}
           tone="orange"
           badge={
-            (kpisV2?.productos_below_min ?? 0) > 0
+            (kpisV2?.productos_below_min_interno ?? 0) > 0
               ? { label: "Atención", variant: "warning" }
               : undefined
           }
         />
         <KpiCard
           title="Sin Stock Total"
-          value={formatNumber(kpisV2?.productos_out_of_stock ?? 0)}
-          description="SKUs agotados en inventario interno"
+          value={formatNumber(kpisV2?.productos_out_of_stock_interno ?? 0)}
+          description="SKUs internos agotados"
           icon={ArrowLeftRight}
           tone="purple"
         />

@@ -291,20 +291,20 @@ export function AlmacenPage() {
         />
         <KpiCard
           title="Bajo Mínimo"
-          value={formatNumber(kpisV2?.productos_below_min ?? 0)}
-          description="SKUs por debajo del stock mínimo"
+          value={formatNumber(kpisV2?.productos_below_min_vendible ?? 0)}
+          description="SKUs vendibles por debajo del stock mínimo"
           icon={AlertTriangle}
           tone="orange"
           badge={
-            (kpisV2?.productos_below_min ?? 0) > 0
+            (kpisV2?.productos_below_min_vendible ?? 0) > 0
               ? { label: "Atención", variant: "warning" }
               : undefined
           }
         />
         <KpiCard
           title="Sin Stock Total"
-          value={formatNumber(kpisV2?.productos_out_of_stock ?? 0)}
-          description="SKUs agotados en inventario vendible"
+          value={formatNumber(kpisV2?.productos_out_of_stock_vendible ?? 0)}
+          description="SKUs vendibles agotados"
           icon={ArrowLeftRight}
           tone="purple"
         />
