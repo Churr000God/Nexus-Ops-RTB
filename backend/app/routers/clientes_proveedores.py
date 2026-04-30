@@ -186,8 +186,25 @@ async def add_address(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Clientes — direcciones (delete)
+# Clientes — direcciones (edit / delete)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+@clientes_router.put(
+    "/{customer_id}/addresses/{address_id}",
+    response_model=CustomerAddressRead,
+)
+async def update_customer_address(
+    customer_id: int,
+    address_id: int,
+    data: CustomerAddressCreate,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("customer.manage")),
+) -> CustomerAddressRead:
+    result = await svc.update_customer_address(customer_id, address_id, data)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dirección no encontrada")
+    return result
 
 
 @clientes_router.delete(
@@ -223,6 +240,23 @@ async def add_contact(
     _: User = Depends(require_permission("customer.manage")),
 ) -> CustomerContactRead:
     return await svc.add_customer_contact(customer_id, data)
+
+
+@clientes_router.put(
+    "/{customer_id}/contacts/{contact_id}",
+    response_model=CustomerContactRead,
+)
+async def update_contact(
+    customer_id: int,
+    contact_id: int,
+    data: CustomerContactCreate,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("customer.manage")),
+) -> CustomerContactRead:
+    result = await svc.update_customer_contact(customer_id, contact_id, data)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contacto no encontrado")
+    return result
 
 
 @clientes_router.delete(
@@ -390,8 +424,25 @@ async def update_supplier_tax_data(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Proveedores — direcciones (delete)
+# Proveedores — direcciones (edit / delete)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+@proveedores_router.put(
+    "/{supplier_id}/addresses/{address_id}",
+    response_model=SupplierAddressRead,
+)
+async def update_supplier_address(
+    supplier_id: int,
+    address_id: int,
+    data: SupplierAddressCreate,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.manage")),
+) -> SupplierAddressRead:
+    result = await svc.update_supplier_address(supplier_id, address_id, data)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dirección no encontrada")
+    return result
 
 
 @proveedores_router.delete(
@@ -413,6 +464,25 @@ async def delete_supplier_address(
 # ─────────────────────────────────────────────────────────────────────────────
 # Proveedores — contactos (delete)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+@proveedores_router.put(
+    "/{supplier_id}/contacts/{contact_id}",
+    response_model=SupplierContactRead,
+)
+async def update_supplier_contact(
+    supplier_id: int,
+    contact_id: int,
+    data: SupplierContactCreate,
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.manage")),
+) -> SupplierContactRead:
+    result = await svc.update_supplier_contact(supplier_id, contact_id, data)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Contacto no encontrado"
+        )
+    return result
 
 
 @proveedores_router.delete(

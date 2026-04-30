@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import React, { useCallback, useState } from "react"
 import { Building2, CheckCircle2, MapPin, Pencil, Plus, Search, Trash2, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
@@ -12,6 +12,7 @@ import { useAuthStore } from "@/stores/authStore"
 import type {
   CustomerAddress,
   CustomerAddressCreate,
+  CustomerContactCreate,
   CustomerDetail,
   CustomerRead,
   CustomerTaxDataCreate,
@@ -61,6 +62,93 @@ function LocalityBadge({ locality }: { locality: string }) {
 
 const inputCls =
   "w-full rounded-[var(--radius-md)] border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+
+// ─── Shared address inline form ──────────────────────────────────────────
+
+function AddressInlineForm({
+  title,
+  form,
+  setForm,
+  typeOptions,
+  submitting,
+  onSave,
+  onCancel,
+}: {
+  title: string
+  form: CustomerAddressCreate
+  setForm: React.Dispatch<React.SetStateAction<CustomerAddressCreate>>
+  typeOptions: { value: string; label: string }[]
+  submitting: boolean
+  onSave: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+        {title}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">Tipo</label>
+          <select
+            className={inputCls}
+            value={form.address_type}
+            onChange={(e) => setForm((p) => ({ ...p, address_type: e.target.value as "DELIVERY" | "OTHER" }))}
+          >
+            {typeOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground">Etiqueta</label>
+          <input
+            className={inputCls}
+            placeholder="Ej. Bodega Norte"
+            value={form.label ?? ""}
+            onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))}
+          />
+        </div>
+      </div>
+      <input
+        className={inputCls}
+        placeholder="Calle *"
+        value={form.street}
+        onChange={(e) => setForm((p) => ({ ...p, street: e.target.value }))}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <input className={inputCls} placeholder="No. exterior" value={form.exterior_number ?? ""} onChange={(e) => setForm((p) => ({ ...p, exterior_number: e.target.value }))} />
+        <input className={inputCls} placeholder="No. interior" value={form.interior_number ?? ""} onChange={(e) => setForm((p) => ({ ...p, interior_number: e.target.value }))} />
+      </div>
+      <input className={inputCls} placeholder="Colonia" value={form.neighborhood ?? ""} onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))} />
+      <div className="grid grid-cols-2 gap-2">
+        <input className={inputCls} placeholder="Ciudad" value={form.city ?? ""} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+        <input className={inputCls} placeholder="Estado" value={form.state ?? ""} onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input className={inputCls} placeholder="CP" value={form.zip_code ?? ""} onChange={(e) => setForm((p) => ({ ...p, zip_code: e.target.value }))} />
+        <input className={inputCls} placeholder="País" value={form.country ?? "México"} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
+      </div>
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.is_default ?? false}
+          onChange={(e) => setForm((p) => ({ ...p, is_default: e.target.checked }))}
+          className="h-4 w-4"
+        />
+        Dirección principal
+      </label>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onSave} disabled={submitting || !form.street}>
+          Guardar
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 // ─── Customer detail panel ────────────────────────────────────────────────
 
@@ -124,7 +212,8 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
   }
 
   const [showAddressForm, setShowAddressForm] = useState(false)
-  const [addressForm, setAddressForm] = useState<CustomerAddressCreate>({
+  const [editingAddressId, setEditingAddressId] = useState<number | null>(null)
+  const emptyAddress: CustomerAddressCreate = {
     address_type: "DELIVERY",
     label: "",
     street: "",
@@ -136,7 +225,93 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
     country: "México",
     zip_code: "",
     is_default: false,
+  }
+  const [addressForm, setAddressForm] = useState<CustomerAddressCreate>(emptyAddress)
+  const [editAddressForm, setEditAddressForm] = useState<CustomerAddressCreate>(emptyAddress)
+
+  const [editingContactId, setEditingContactId] = useState<number | null>(null)
+  const [editContactForm, setEditContactForm] = useState<CustomerContactCreate>({
+    full_name: "",
+    role_title: "",
+    email: "",
+    phone: "",
+    is_primary: false,
   })
+
+  function startEditAddress(addr: CustomerAddress) {
+    setEditingAddressId(addr.address_id)
+    setEditAddressForm({
+      address_type: addr.address_type as "DELIVERY" | "OTHER",
+      label: addr.label ?? "",
+      street: addr.street,
+      exterior_number: addr.exterior_number ?? "",
+      interior_number: addr.interior_number ?? "",
+      neighborhood: addr.neighborhood ?? "",
+      city: addr.city ?? "",
+      state: addr.state ?? "",
+      country: addr.country,
+      zip_code: addr.zip_code ?? "",
+      is_default: addr.is_default,
+    })
+    setShowAddressForm(false)
+  }
+
+  async function handleUpdateAddress() {
+    if (editingAddressId == null) return
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateCustomerAddress(token, detail.customer_id, editingAddressId, {
+        ...editAddressForm,
+        label: editAddressForm.label || null,
+        exterior_number: editAddressForm.exterior_number || null,
+        interior_number: editAddressForm.interior_number || null,
+        neighborhood: editAddressForm.neighborhood || null,
+        city: editAddressForm.city || null,
+        state: editAddressForm.state || null,
+        zip_code: editAddressForm.zip_code || null,
+      })
+      toast.success("Dirección actualizada")
+      setEditingAddressId(null)
+      onUpdated()
+    } catch {
+      toast.error("Error al actualizar dirección")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEditContact(c: { contact_id: number; full_name: string; role_title: string | null; email: string | null; phone: string | null; is_primary: boolean }) {
+    setEditingContactId(c.contact_id)
+    setEditContactForm({
+      full_name: c.full_name,
+      role_title: c.role_title ?? "",
+      email: c.email ?? "",
+      phone: c.phone ?? "",
+      is_primary: c.is_primary,
+    })
+    setShowContactForm(false)
+  }
+
+  async function handleUpdateContact() {
+    if (editingContactId == null) return
+    setSubmitting(true)
+    try {
+      await clientesProveedoresService.updateCustomerContact(token, detail.customer_id, editingContactId, {
+        full_name: editContactForm.full_name,
+        role_title: editContactForm.role_title || null,
+        email: editContactForm.email || null,
+        phone: editContactForm.phone || null,
+        is_primary: editContactForm.is_primary,
+      })
+      toast.success("Contacto actualizado")
+      setEditingContactId(null)
+      onUpdated()
+    } catch {
+      toast.error("Error al actualizar contacto")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   async function handleAddAddress() {
     setSubmitting(true)
@@ -153,19 +328,7 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
       })
       toast.success("Dirección agregada")
       setShowAddressForm(false)
-      setAddressForm({
-        address_type: "DELIVERY",
-        label: "",
-        street: "",
-        exterior_number: "",
-        interior_number: "",
-        neighborhood: "",
-        city: "",
-        state: "",
-        country: "México",
-        zip_code: "",
-        is_default: false,
-      })
+      setAddressForm(emptyAddress)
       onUpdated()
     } catch {
       toast.error("Error al guardar dirección")
@@ -475,158 +638,89 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
             {detail.addresses.length === 0 && !showAddressForm && (
               <p className="text-sm text-muted-foreground">Sin direcciones registradas.</p>
             )}
-            {detail.addresses.map((addr: CustomerAddress) => (
-              <div
-                key={addr.address_id}
-                className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-400">
-                        <MapPin className="h-3 w-3" />
-                        {addr.address_type === "DELIVERY" ? "Entrega" : "Otra"}
-                      </span>
-                      {addr.is_default && (
-                        <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                          Principal
+            {detail.addresses.map((addr: CustomerAddress) =>
+              editingAddressId === addr.address_id ? (
+                <AddressInlineForm
+                  key={addr.address_id}
+                  title="Editar dirección"
+                  form={editAddressForm}
+                  setForm={setEditAddressForm}
+                  typeOptions={[
+                    { value: "DELIVERY", label: "Entrega" },
+                    { value: "OTHER", label: "Otra" },
+                  ]}
+                  submitting={submitting}
+                  onSave={handleUpdateAddress}
+                  onCancel={() => setEditingAddressId(null)}
+                />
+              ) : (
+                <div
+                  key={addr.address_id}
+                  className="space-y-1 rounded-[var(--radius-md)] border bg-accent/20 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-400">
+                          <MapPin className="h-3 w-3" />
+                          {addr.address_type === "DELIVERY" ? "Entrega" : "Otra"}
                         </span>
+                        {addr.is_default && (
+                          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                            Principal
+                          </span>
+                        )}
+                        {addr.label && <span className="text-xs font-medium">{addr.label}</span>}
+                      </div>
+                      <p className="text-sm">
+                        {addr.street}
+                        {addr.exterior_number && ` #${addr.exterior_number}`}
+                        {addr.interior_number && ` Int. ${addr.interior_number}`}
+                      </p>
+                      {(addr.neighborhood || addr.city || addr.state) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[addr.neighborhood, addr.city, addr.state].filter(Boolean).join(", ")}
+                        </p>
                       )}
-                      {addr.label && (
-                        <span className="text-xs font-medium">{addr.label}</span>
+                      {addr.zip_code && (
+                        <p className="text-xs text-muted-foreground">CP: {addr.zip_code} — {addr.country}</p>
                       )}
                     </div>
-                    <p className="text-sm">
-                      {addr.street}
-                      {addr.exterior_number && ` #${addr.exterior_number}`}
-                      {addr.interior_number && ` Int. ${addr.interior_number}`}
-                    </p>
-                    {(addr.neighborhood || addr.city || addr.state) && (
-                      <p className="text-xs text-muted-foreground">
-                        {[addr.neighborhood, addr.city, addr.state].filter(Boolean).join(", ")}
-                      </p>
-                    )}
-                    {addr.zip_code && (
-                      <p className="text-xs text-muted-foreground">CP: {addr.zip_code} — {addr.country}</p>
+                    {canManage && (
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          onClick={() => startEditAddress(addr)}
+                          disabled={submitting}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAddress(addr.address_id)}
+                          disabled={submitting}
+                          className="rounded p-1 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {canManage && (
-                    <button
-                      onClick={() => handleDeleteAddress(addr.address_id)}
-                      disabled={submitting}
-                      className="rounded p-1 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
                 </div>
-              </div>
-            ))}
+              )
+            )}
             {showAddressForm && (
-              <div className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Agregar dirección
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Tipo</label>
-                    <select
-                      className={inputCls}
-                      value={addressForm.address_type}
-                      onChange={(e) =>
-                        setAddressForm((p) => ({ ...p, address_type: e.target.value as "DELIVERY" | "OTHER" }))
-                      }
-                    >
-                      <option value="DELIVERY">Entrega</option>
-                      <option value="OTHER">Otra</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Etiqueta</label>
-                    <input
-                      className={inputCls}
-                      placeholder="Ej. Bodega Norte"
-                      value={addressForm.label ?? ""}
-                      onChange={(e) => setAddressForm((p) => ({ ...p, label: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <input
-                  className={inputCls}
-                  placeholder="Calle *"
-                  value={addressForm.street}
-                  onChange={(e) => setAddressForm((p) => ({ ...p, street: e.target.value }))}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder="No. exterior"
-                    value={addressForm.exterior_number ?? ""}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, exterior_number: e.target.value }))}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="No. interior"
-                    value={addressForm.interior_number ?? ""}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, interior_number: e.target.value }))}
-                  />
-                </div>
-                <input
-                  className={inputCls}
-                  placeholder="Colonia"
-                  value={addressForm.neighborhood ?? ""}
-                  onChange={(e) => setAddressForm((p) => ({ ...p, neighborhood: e.target.value }))}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder="Ciudad"
-                    value={addressForm.city ?? ""}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, city: e.target.value }))}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="Estado"
-                    value={addressForm.state ?? ""}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, state: e.target.value }))}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder="CP"
-                    value={addressForm.zip_code ?? ""}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, zip_code: e.target.value }))}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="País"
-                    value={addressForm.country ?? "México"}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, country: e.target.value }))}
-                  />
-                </div>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={addressForm.is_default ?? false}
-                    onChange={(e) => setAddressForm((p) => ({ ...p, is_default: e.target.checked }))}
-                    className="h-4 w-4"
-                  />
-                  Dirección principal
-                </label>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleAddAddress}
-                    disabled={submitting || !addressForm.street}
-                  >
-                    Guardar
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowAddressForm(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
+              <AddressInlineForm
+                title="Agregar dirección"
+                form={addressForm}
+                setForm={setAddressForm}
+                typeOptions={[
+                  { value: "DELIVERY", label: "Entrega" },
+                  { value: "OTHER", label: "Otra" },
+                ]}
+                submitting={submitting}
+                onSave={handleAddAddress}
+                onCancel={() => setShowAddressForm(false)}
+              />
             )}
             {canManage && !showAddressForm && (
               <Button
@@ -646,39 +740,90 @@ function CustomerDetailPanel({ detail, canManage, token, onClose, onUpdated, onE
             {detail.contacts.length === 0 && !showContactForm && (
               <p className="text-sm text-muted-foreground">Sin contactos registrados.</p>
             )}
-            {detail.contacts.map((c) => (
-              <div
-                key={c.contact_id}
-                className="rounded-[var(--radius-md)] border bg-accent/20 p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{c.full_name}</span>
-                      {c.is_primary && (
-                        <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                          Principal
-                        </span>
-                      )}
-                    </div>
-                    {c.role_title && (
-                      <p className="text-xs text-muted-foreground">{c.role_title}</p>
-                    )}
-                    {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
-                    {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+            {detail.contacts.map((c) =>
+              editingContactId === c.contact_id ? (
+                <div
+                  key={c.contact_id}
+                  className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Editar contacto
+                  </p>
+                  {(
+                    [
+                      ["full_name", "Nombre completo *"],
+                      ["role_title", "Cargo / rol"],
+                      ["email", "Email"],
+                      ["phone", "Teléfono"],
+                    ] as [keyof typeof editContactForm, string][]
+                  ).map(([key, placeholder]) => (
+                    <input
+                      key={key}
+                      className={inputCls}
+                      placeholder={placeholder}
+                      value={editContactForm[key] as string}
+                      onChange={(e) => setEditContactForm((p) => ({ ...p, [key]: e.target.value }))}
+                    />
+                  ))}
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editContactForm.is_primary ?? false}
+                      onChange={(e) => setEditContactForm((p) => ({ ...p, is_primary: e.target.checked }))}
+                      className="h-4 w-4"
+                    />
+                    Contacto principal
+                  </label>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleUpdateContact} disabled={submitting || !editContactForm.full_name}>
+                      Guardar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setEditingContactId(null)}>
+                      Cancelar
+                    </Button>
                   </div>
-                  {canManage && (
-                    <button
-                      onClick={() => handleDeleteContact(c.contact_id)}
-                      disabled={submitting}
-                      className="rounded p-1 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
                 </div>
-              </div>
-            ))}
+              ) : (
+                <div
+                  key={c.contact_id}
+                  className="rounded-[var(--radius-md)] border bg-accent/20 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{c.full_name}</span>
+                        {c.is_primary && (
+                          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                            Principal
+                          </span>
+                        )}
+                      </div>
+                      {c.role_title && <p className="text-xs text-muted-foreground">{c.role_title}</p>}
+                      {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
+                      {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+                    </div>
+                    {canManage && (
+                      <div className="flex shrink-0 gap-1">
+                        <button
+                          onClick={() => startEditContact(c)}
+                          disabled={submitting}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteContact(c.contact_id)}
+                          disabled={submitting}
+                          className="rounded p-1 text-destructive/70 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
             {showContactForm && (
               <div className="space-y-3 rounded-[var(--radius-md)] border border-dashed p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -1191,7 +1336,7 @@ export function ClientesPage() {
       </div>
 
       {/* Content area */}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Table area */}
         <div
           className={cn(

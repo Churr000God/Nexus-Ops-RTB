@@ -3,6 +3,7 @@ import type {
   CustomerAddress,
   CustomerAddressCreate,
   CustomerContact,
+  CustomerContactCreate,
   CustomerCreate,
   CustomerDetail,
   CustomerListResponse,
@@ -17,6 +18,7 @@ import type {
   SupplierAddress,
   SupplierAddressCreate,
   SupplierContact,
+  SupplierContactCreate,
   SupplierCreate,
   SupplierDetail,
   SupplierListResponse,
@@ -132,6 +134,22 @@ export const clientesProveedoresService = {
     })
   },
 
+  updateCustomerAddress(token: string | null, customerId: number, addressId: number, data: CustomerAddressCreate) {
+    return requestJson<CustomerAddress>(`/api/clientes/${customerId}/addresses/${addressId}`, {
+      method: "PUT",
+      body: data,
+      token,
+    })
+  },
+
+  updateCustomerContact(token: string | null, customerId: number, contactId: number, data: CustomerContactCreate) {
+    return requestJson<CustomerContact>(`/api/clientes/${customerId}/contacts/${contactId}`, {
+      method: "PUT",
+      body: data,
+      token,
+    })
+  },
+
   addCustomerContact(
     token: string | null,
     customerId: number,
@@ -210,6 +228,22 @@ export const clientesProveedoresService = {
   deleteSupplierAddress(token: string | null, supplierId: number, addressId: number) {
     return requestJson<void>(`/api/proveedores/${supplierId}/addresses/${addressId}`, {
       method: "DELETE",
+      token,
+    })
+  },
+
+  updateSupplierAddress(token: string | null, supplierId: number, addressId: number, data: SupplierAddressCreate) {
+    return requestJson<SupplierAddress>(`/api/proveedores/${supplierId}/addresses/${addressId}`, {
+      method: "PUT",
+      body: data,
+      token,
+    })
+  },
+
+  updateSupplierContact(token: string | null, supplierId: number, contactId: number, data: SupplierContactCreate) {
+    return requestJson<SupplierContact>(`/api/proveedores/${supplierId}/contacts/${contactId}`, {
+      method: "PUT",
+      body: data,
       token,
     })
   },

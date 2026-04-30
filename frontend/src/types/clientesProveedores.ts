@@ -69,6 +69,14 @@ export type CustomerAddressCreate = {
   is_default?: boolean
 }
 
+export type CustomerContactCreate = {
+  full_name: string
+  role_title?: string | null
+  email?: string | null
+  phone?: string | null
+  is_primary?: boolean
+}
+
 export type CustomerContact = {
   contact_id: number
   customer_id: number
@@ -177,6 +185,14 @@ export type SupplierAddressCreate = {
   country?: string
   zip_code?: string | null
   is_default?: boolean
+}
+
+export type SupplierContactCreate = {
+  full_name: string
+  role_title?: string | null
+  email?: string | null
+  phone?: string | null
+  is_primary?: boolean
 }
 
 export type SupplierContact = {

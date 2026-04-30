@@ -237,6 +237,56 @@ class ClientesProveedoresService:
         await self.db.commit()
         return True
 
+    async def update_customer_address(
+        self, customer_id: int, address_id: int, data: CustomerAddressCreate
+    ) -> CustomerAddressRead | None:
+        addr = (
+            await self.db.execute(
+                select(CustomerAddress).where(
+                    CustomerAddress.address_id == address_id,
+                    CustomerAddress.customer_id == customer_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if addr is None:
+            return None
+        addr.address_type = data.address_type
+        addr.label = data.label
+        addr.street = data.street
+        addr.exterior_number = data.exterior_number
+        addr.interior_number = data.interior_number
+        addr.neighborhood = data.neighborhood
+        addr.city = data.city
+        addr.state = data.state
+        addr.country = data.country
+        addr.zip_code = data.zip_code
+        addr.is_default = data.is_default
+        await self.db.commit()
+        await self.db.refresh(addr)
+        return CustomerAddressRead.model_validate(addr)
+
+    async def update_customer_contact(
+        self, customer_id: int, contact_id: int, data: CustomerContactCreate
+    ) -> CustomerContactRead | None:
+        contact = (
+            await self.db.execute(
+                select(CustomerContact).where(
+                    CustomerContact.contact_id == contact_id,
+                    CustomerContact.customer_id == customer_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if contact is None:
+            return None
+        contact.full_name = data.full_name
+        contact.role_title = data.role_title
+        contact.email = data.email
+        contact.phone = data.phone
+        contact.is_primary = data.is_primary
+        await self.db.commit()
+        await self.db.refresh(contact)
+        return CustomerContactRead.model_validate(contact)
+
     async def add_customer_contact(
         self, customer_id: int, data: CustomerContactCreate
     ) -> CustomerContactRead:
@@ -451,6 +501,56 @@ class ClientesProveedoresService:
         await self.db.delete(addr)
         await self.db.commit()
         return True
+
+    async def update_supplier_address(
+        self, supplier_id: int, address_id: int, data: SupplierAddressCreate
+    ) -> SupplierAddressRead | None:
+        addr = (
+            await self.db.execute(
+                select(SupplierAddress).where(
+                    SupplierAddress.address_id == address_id,
+                    SupplierAddress.supplier_id == supplier_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if addr is None:
+            return None
+        addr.address_type = data.address_type
+        addr.label = data.label
+        addr.street = data.street
+        addr.exterior_number = data.exterior_number
+        addr.interior_number = data.interior_number
+        addr.neighborhood = data.neighborhood
+        addr.city = data.city
+        addr.state = data.state
+        addr.country = data.country
+        addr.zip_code = data.zip_code
+        addr.is_default = data.is_default
+        await self.db.commit()
+        await self.db.refresh(addr)
+        return SupplierAddressRead.model_validate(addr)
+
+    async def update_supplier_contact(
+        self, supplier_id: int, contact_id: int, data: SupplierContactCreate
+    ) -> SupplierContactRead | None:
+        contact = (
+            await self.db.execute(
+                select(SupplierContact).where(
+                    SupplierContact.contact_id == contact_id,
+                    SupplierContact.supplier_id == supplier_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if contact is None:
+            return None
+        contact.full_name = data.full_name
+        contact.role_title = data.role_title
+        contact.email = data.email
+        contact.phone = data.phone
+        contact.is_primary = data.is_primary
+        await self.db.commit()
+        await self.db.refresh(contact)
+        return SupplierContactRead.model_validate(contact)
 
     async def add_supplier_contact(
         self, supplier_id: int, data: SupplierContactCreate
