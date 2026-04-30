@@ -1,5 +1,37 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-30 — Catálogo cross-proveedor, deduplicación BD y prevención de duplicados
+
+### Base de datos
+- Eliminados 33 proveedores duplicados (sufijo `-2`, IDs 276–313) junto con sus 7 contactos y 19 datos fiscales (CASCADE). Duplicados originados por doble importación del CSV directorio.
+- Sin duplicados en tabla `customers`.
+
+### Backend — prevención de duplicados
+- `services/clientes_proveedores_service.py`: `create_customer` y `create_supplier` hacen pre-check `SELECT code` antes del INSERT; si existe → `raise ValueError("Ya existe un X con el código 'Y'")`.
+- `routers/clientes_proveedores.py`: ambos endpoints POST envuelven la llamada en `try/except ValueError` → `HTTPException(409, detail=mensaje)`.
+- Las restricciones `UNIQUE` (`uq_suppliers_code`, `uq_customers_code`) ya existían en BD como última línea de defensa.
+
+### Backend — catálogo cross-proveedor
+- `schemas/clientes_proveedores_schema.py`: añadidos `CatalogoItemRead` y `CatalogoListResponse`.
+- `services/clientes_proveedores_service.py`: método `list_catalogo()` con JOIN `supplier_products → suppliers → productos`; filtros `supplier_id`, `solo_vinculados`, `search` (ilike nombre/sku).
+- `routers/clientes_proveedores.py`: `GET /api/proveedores/catalogo` registrado **antes** de `/{supplier_id}` para evitar conflicto de ruta.
+
+### Frontend — catálogo cross-proveedor
+- `pages/proveedores/CatalogoPage.tsx`: página completa reemplazando stub. KPI cards, filtros (búsqueda, proveedor, solo vinculados), DataTable + vista tarjetas (`ProductoComparativaCard`), badges `CostBadge` / `LinkedBadge` / `AvailableBadge`.
+- `types/clientesProveedores.ts`: tipos `CatalogoItem` y `CatalogoListResponse`.
+- `services/clientesProveedoresService.ts`: método `listCatalogo()` con `CatalogoParams`.
+
+### Frontend — manejo de error 409
+- `pages/Clientes.tsx` + `pages/ProveedoresMaestro.tsx`: import `ApiError`; en modal de creación, catch `ApiError` con `status === 409` muestra `err.message` directo en toast en lugar del genérico.
+
+### Script seed catálogo
+- `scripts/seed_supplier_products.py` (nuevo): limpieza de CSV `Catalogo-Cross-Proveedor.csv`, batch upsert en `supplier_products`, vinculación por SKU a `productos`, asignación de `unit_cost` desde historial OCs 6 meses. Flag `--dry-run`. Resultado: 1 083 registros; costos = 0 (sin OCs registradas).
+
+### Documentación
+- `estructura_proyecto/14_modulo_clientes_proveedores.md`: reescritura completa — esquemas SQL de todas las tablas, relaciones FK con tipo CASCADE/RESTRICT, lógica de negocio (unicidad, SCD Type 2, cross-catalog JOIN), 26 endpoints, 3 páginas frontend, flujo de error 409.
+
+---
+
 ## 2026-04-29 — Clientes y Proveedores: edición completa + scroll independiente + fix 401
 
 ### Importación de datos
