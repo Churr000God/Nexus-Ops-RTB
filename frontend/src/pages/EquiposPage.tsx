@@ -1,110 +1,107 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import {
+  Activity,
   AlertTriangle,
-  ArrowDown,
-  ArrowLeftRight,
-  ArrowUp,
-  BoxesIcon,
-  Package,
+  Laptop,
+  Plus,
   Search,
-  TrendingDown,
-  TrendingUp,
-  Warehouse,
+  Wrench,
   X,
 } from "lucide-react"
 
+import { AssetDetailPanel } from "@/components/assets/AssetDetailPanel"
+import { AssetFormModal } from "@/components/assets/AssetFormModal"
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { KpiCard } from "@/components/common/KpiCard"
 import { StatusBadge } from "@/components/common/StatusBadge"
 import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
-import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
+import { formatCurrencyMXN } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
 import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
-import type { InventoryCurrentItem } from "@/types/assets"
+import type { AssetRead } from "@/types/assets"
 
-// ── Formatters ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const fmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" })
-const fmtQty = (n: number) =>
-  new Intl.NumberFormat("es-MX", { maximumFractionDigits: 2 }).format(n)
-
-// ── Stock badge ───────────────────────────────────────────────────────────────
-
-const STOCK_STATUS_LABELS: Record<string, string> = {
-  OK: "OK",
-  BELOW_MIN: "Bajo mínimo",
-  OUT: "Sin stock",
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  COMPUTER: "Computadora",
+  LAPTOP: "Laptop",
+  PRINTER: "Impresora",
+  MACHINE: "Máquina",
+  VEHICLE: "Vehículo",
+  TOOL: "Herramienta",
+  OTHER: "Otro",
 }
 
-const STOCK_STATUS_COLORS: Record<string, string> = {
-  OK: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
-  BELOW_MIN: "border-amber-500/30 bg-amber-500/10 text-amber-600",
-  OUT: "border-red-500/30 bg-red-500/10 text-red-600",
+const ASSET_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Activo",
+  IN_REPAIR: "En Reparación",
+  IDLE: "Inactivo",
+  RETIRED: "Retirado",
+  DISMANTLED: "Desmantelado",
 }
 
-function StockBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="text-muted-foreground">—</span>
+const ASSET_STATUS_COLORS: Record<string, string> = {
+  ACTIVE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+  IN_REPAIR: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+  IDLE: "border-slate-500/30 bg-slate-500/10 text-slate-500",
+  RETIRED: "border-red-500/30 bg-red-500/10 text-red-600",
+  DISMANTLED: "border-red-700/30 bg-red-700/10 text-red-700",
+}
+
+function AssetStatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-        STOCK_STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
+        ASSET_STATUS_COLORS[status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
       )}
     >
-      {STOCK_STATUS_LABELS[status] ?? status}
+      {ASSET_STATUS_LABELS[status] ?? status}
     </span>
   )
 }
 
-// ── Sort options ──────────────────────────────────────────────────────────────
-
-const SORT_OPTIONS = [
-  { value: "total_value", label: "Valor Total" },
-  { value: "quantity_on_hand", label: "Stock Real" },
-  { value: "name", label: "Nombre" },
-  { value: "sku", label: "SKU" },
-  { value: "category", label: "Categoría" },
-  { value: "avg_unit_cost", label: "Costo Prom." },
-  { value: "stock_status", label: "Estado" },
-]
-
 // ── Table columns ─────────────────────────────────────────────────────────────
 
-const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
-  { key: "sku", header: "SKU", cell: (r) => r.sku ?? "—" },
+const COLUMNS: DataTableColumn<AssetRead>[] = [
+  {
+    key: "asset_code",
+    header: "Código",
+    cell: (r) => <span className="font-mono text-xs">{r.asset_code}</span>,
+  },
+  {
+    key: "asset_type",
+    header: "Tipo",
+    cell: (r) => ASSET_TYPE_LABELS[r.asset_type] ?? r.asset_type,
+  },
   { key: "name", header: "Nombre", cell: (r) => r.name },
-  { key: "category", header: "Categoría", cell: (r) => r.category ?? "—" },
+  { key: "manufacturer", header: "Fabricante", cell: (r) => r.manufacturer ?? "—" },
+  { key: "location", header: "Ubicación", cell: (r) => r.location ?? "—" },
   {
-    key: "quantity_on_hand",
-    header: "Stock Real",
-    cell: (r) => fmtQty(r.quantity_on_hand),
+    key: "purchase_cost",
+    header: "Costo",
+    cell: (r) => (r.purchase_cost != null ? formatCurrencyMXN(r.purchase_cost) : "—"),
   },
   {
-    key: "theoretical_qty",
-    header: "Stock Teórico",
-    cell: (r) => (r.theoretical_qty != null ? fmtQty(r.theoretical_qty) : "—"),
+    key: "warranty_until",
+    header: "Garantía",
+    cell: (r) => {
+      if (!r.warranty_until) return <span className="text-muted-foreground">—</span>
+      const d = new Date(r.warranty_until)
+      const expired = d < new Date()
+      return (
+        <span className={expired ? "text-red-500" : undefined}>
+          {d.toLocaleDateString("es-MX")}
+        </span>
+      )
+    },
   },
   {
-    key: "avg_unit_cost",
-    header: "Costo Prom.",
-    cell: (r) => (r.avg_unit_cost != null ? fmt.format(r.avg_unit_cost) : "—"),
-  },
-  {
-    key: "total_value",
-    header: "Valor Real",
-    cell: (r) => (r.total_value != null ? fmt.format(r.total_value) : "—"),
-  },
-  {
-    key: "theoretical_value",
-    header: "Valor Teórico",
-    cell: (r) => (r.theoretical_value != null ? fmt.format(r.theoretical_value) : "—"),
-  },
-  {
-    key: "stock_status",
+    key: "status",
     header: "Estado",
-    cell: (r) => <StockBadge status={r.stock_status ?? null} />,
+    cell: (r) => <AssetStatusBadge status={r.status} />,
   },
 ]
 
@@ -113,25 +110,12 @@ const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
 export default function EquiposPage() {
   const token = useAuthStore((s) => s.accessToken)
   const [filterStatus, setFilterStatus] = useState("")
+  const [filterType, setFilterType] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [debouncedSearch, setDebouncedSearch] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("")
-  const [sortBy, setSortBy] = useState("total_value")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-
-  const PAGE_SIZE = 100
-  const [page, setPage] = useState(0)
-
-  // Debounce búsqueda
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
-    return () => clearTimeout(t)
-  }, [searchQuery])
-
-  // Reset página al cambiar filtros
-  useEffect(() => {
-    setPage(0)
-  }, [filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder])
+  const [selectedAsset, setSelectedAsset] = useState<AssetRead | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<AssetRead | null>(null)
+  const [listKey, setListKey] = useState(0)
 
   const kpisFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
@@ -139,136 +123,140 @@ export default function EquiposPage() {
   )
   const { data: kpisV2 } = useApi(kpisFetcher)
 
-  const internoFetcher = useCallback(
+  const assetsFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getInterno(
+      assetsService.listAssets(
         token,
         {
-          stock_status: filterStatus || undefined,
-          search: debouncedSearch || undefined,
-          category: categoryFilter || undefined,
-          sort_by: sortBy,
-          sort_order: sortOrder,
-          limit: PAGE_SIZE,
-          offset: page * PAGE_SIZE,
+          status: filterStatus || undefined,
+          asset_type: filterType || undefined,
+          limit: 500,
         },
         signal,
       ),
-    [token, filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, page],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, filterStatus, filterType, listKey],
   )
+  const { data: assets, status: tableStatus } = useApi(assetsFetcher)
 
-  const { data: interno, status: tableStatus } = useApi(internoFetcher)
+  const rows = assets ?? []
 
-  const rows = interno ?? []
+  const filteredRows = searchQuery.trim()
+    ? rows.filter(
+        (r) =>
+          r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.asset_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.manufacturer ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : rows
 
-  const tabKpis = {
-    conStock: kpisV2?.con_stock_interno ?? 0,
-    sinStock: kpisV2?.sin_stock_interno ?? 0,
-    stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
-    montoReal: kpisV2?.valor_total_interno ?? 0,
-    total: kpisV2?.total_interno ?? 0,
+  const kpis = {
+    total: kpisV2?.total_assets ?? rows.length,
+    enReparacion: kpisV2?.assets_en_reparacion ?? rows.filter((r) => r.status === "IN_REPAIR").length,
+    activos: rows.filter((r) => r.status === "ACTIVE").length,
+    inactivos: rows.filter((r) => r.status === "IDLE" || r.status === "RETIRED" || r.status === "DISMANTLED").length,
   }
 
-  const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
+  const hasFilters = filterStatus || filterType || searchQuery
 
-  const hasActiveFilters = filterStatus || debouncedSearch || categoryFilter
-
-  const clearFilters = () => {
+  function clearFilters() {
     setFilterStatus("")
+    setFilterType("")
     setSearchQuery("")
-    setDebouncedSearch("")
-    setCategoryFilter("")
-    setSortBy("total_value")
-    setSortOrder("desc")
-    setPage(0)
+  }
+
+  function handleRefresh() {
+    setListKey((k) => k + 1)
+  }
+
+  function openNew() {
+    setEditTarget(null)
+    setFormOpen(true)
+  }
+
+  function openEdit(asset: AssetRead) {
+    setEditTarget(asset)
+    setFormOpen(true)
+  }
+
+  function onFormSuccess(asset: AssetRead) {
+    handleRefresh()
+    if (editTarget) {
+      setSelectedAsset(asset)
+    }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <section className="surface-card">
         <div className="panel-header p-5 md:p-6">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <StatusBadge variant="success">En vivo</StatusBadge>
-              <StatusBadge variant="info">Productos no vendibles</StatusBadge>
+              <StatusBadge variant="info">Activos físicos</StatusBadge>
             </div>
             <div className="flex items-center gap-3">
-              <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
+              <Laptop className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
               <div>
                 <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                  Inventario Interno
+                  Gestión de Equipos
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Productos internos y equipos no vendibles · Stock en tiempo real
+                  Activos físicos registrados · Componentes y historial de mantenimiento
                 </p>
               </div>
             </div>
+          </div>
+          <div>
+            <Button onClick={openNew}>
+              <Plus className="h-4 w-4" />
+              Nuevo Activo
+            </Button>
           </div>
         </div>
       </section>
 
       {/* KPI cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          title="Valor Total"
-          value={formatCurrencyMXN(tabKpis.montoReal)}
-          description="Costo promedio × stock real (interno)"
-          icon={TrendingUp}
+          title="Total Activos"
+          value={String(kpis.total)}
+          description="Equipos registrados"
+          icon={Laptop}
           tone="blue"
         />
         <KpiCard
-          title="Con Stock"
-          value={formatNumber(tabKpis.conStock)}
-          description="SKUs con cantidad > 0"
-          icon={Package}
+          title="En Operación"
+          value={String(kpis.activos)}
+          description="Status: Activo"
+          icon={Activity}
           tone="green"
         />
         <KpiCard
-          title="Sin Stock"
-          value={formatNumber(tabKpis.sinStock)}
-          description="SKUs con cantidad = 0"
-          icon={BoxesIcon}
-          tone="neutral"
-        />
-        <KpiCard
-          title="Stock Negativo"
-          value={formatNumber(tabKpis.stockNegativo)}
-          description="Salidas sin entrada registrada"
-          icon={TrendingDown}
-          tone="red"
-          badge={tabKpis.stockNegativo > 0 ? { label: "Revisar", variant: "warning" } : undefined}
-        />
-        <KpiCard
-          title="Bajo Mínimo"
-          value={formatNumber(kpisV2?.productos_below_min_interno ?? 0)}
-          description="SKUs internos por debajo del stock mínimo"
-          icon={AlertTriangle}
+          title="En Reparación"
+          value={String(kpis.enReparacion)}
+          description="Status: In Repair"
+          icon={Wrench}
           tone="orange"
-          badge={
-            (kpisV2?.productos_below_min_interno ?? 0) > 0
-              ? { label: "Atención", variant: "warning" }
-              : undefined
-          }
+          badge={kpis.enReparacion > 0 ? { label: "Atención", variant: "warning" } : undefined}
         />
         <KpiCard
-          title="Sin Stock Total"
-          value={formatNumber(kpisV2?.productos_out_of_stock_interno ?? 0)}
-          description="SKUs internos agotados"
-          icon={ArrowLeftRight}
-          tone="purple"
+          title="Fuera de Servicio"
+          value={String(kpis.inactivos)}
+          description="Inactivos, Retirados o Desmantelados"
+          icon={AlertTriangle}
+          tone="neutral"
         />
       </div>
 
-      {/* Toolbar: búsqueda, filtros y ordenamiento */}
-      <div className="surface-card p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Búsqueda */}
-          <div className="relative flex-1 min-w-[240px]">
+      {/* Toolbar */}
+      <div className="surface-card p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Buscar por SKU o nombre..."
+              placeholder="Buscar por código, nombre o fabricante…"
               className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -284,133 +272,97 @@ export default function EquiposPage() {
             )}
           </div>
 
-          {/* Filtro categoría */}
-          <div className="relative min-w-[180px]">
-            <input
-              type="text"
-              placeholder="Filtrar categoría..."
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            />
-          </div>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            <option value="">Todos los tipos</option>
+            {Object.entries(ASSET_TYPE_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
 
-          {/* Filtro estado */}
           <select
             className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
           >
             <option value="">Todos los estados</option>
-            <option value="OK">OK</option>
-            <option value="BELOW_MIN">Bajo mínimo</option>
-            <option value="OUT">Sin stock</option>
+            {Object.entries(ASSET_STATUS_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
           </select>
 
-          {/* Ordenamiento */}
-          <div className="flex items-center gap-1">
-            <select
-              className="h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-            >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-foreground hover:bg-accent"
-              title={sortOrder === "asc" ? "Ascendente" : "Descendente"}
-            >
-              {sortOrder === "asc" ? (
-                <ArrowUp className="h-4 w-4" />
-              ) : (
-                <ArrowDown className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-
-          {/* Limpiar filtros */}
-          {hasActiveFilters && (
+          {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1">
               <X className="h-3.5 w-3.5" />
               Limpiar
             </Button>
           )}
+
+          {selectedAsset && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedAsset(null)}
+              className="ml-auto gap-1"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cerrar detalle
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Tabla */}
-      <DataTable
-        columns={COLUMNS}
-        rows={rows}
-        rowKey={(r) => r.product_id}
-        maxHeight="calc(100vh - 560px)"
-        emptyLabel={
-          tableStatus === "loading" || tableStatus === "idle"
-            ? "Cargando…"
-            : tableStatus === "error"
-              ? "Error al cargar inventario"
-              : "Sin productos"
-        }
-      />
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        total={tabKpis.total}
-        pageSize={PAGE_SIZE}
-        onPage={setPage}
-      />
-    </div>
-  )
-}
+      {/* Master-detail layout */}
+      <div className={cn("flex gap-4", selectedAsset ? "items-start" : "")}>
+        {/* Asset table */}
+        <div className="min-w-0 flex-1">
+          <DataTable
+            columns={COLUMNS}
+            rows={filteredRows}
+            rowKey={(r) => r.id}
+            onRowClick={(r) => setSelectedAsset(r)}
+            selectedRowKey={selectedAsset?.id}
+            maxHeight={selectedAsset ? "calc(100vh - 400px)" : "calc(100vh - 360px)"}
+            emptyLabel={
+              tableStatus === "loading" || tableStatus === "idle"
+                ? "Cargando activos…"
+                : tableStatus === "error"
+                  ? "Error al cargar activos"
+                  : "Sin activos registrados"
+            }
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            {filteredRows.length} activo{filteredRows.length !== 1 ? "s" : ""}
+          </p>
+        </div>
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-
-function Pagination({
-  page,
-  totalPages,
-  total,
-  pageSize,
-  onPage,
-}: {
-  page: number
-  totalPages: number
-  total: number
-  pageSize: number
-  onPage: (p: number) => void
-}) {
-  if (totalPages <= 1) return null
-  const start = page * pageSize + 1
-  const end = Math.min((page + 1) * pageSize, total)
-  return (
-    <div className="flex items-center justify-between gap-4 px-1 py-2 text-sm text-muted-foreground">
-      <span>
-        Mostrando {start}–{end} de {total} productos
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => onPage(page - 1)}
-          disabled={page === 0}
-          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          ← Anterior
-        </button>
-        <span className="px-2">
-          {page + 1} / {totalPages}
-        </span>
-        <button
-          onClick={() => onPage(page + 1)}
-          disabled={page >= totalPages - 1}
-          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Siguiente →
-        </button>
+        {/* Detail panel */}
+        {selectedAsset && (
+          <div className="w-[460px] shrink-0" style={{ maxHeight: "calc(100vh - 340px)" }}>
+            <AssetDetailPanel
+              asset={selectedAsset}
+              onClose={() => setSelectedAsset(null)}
+              onEdit={() => openEdit(selectedAsset)}
+              onRefresh={handleRefresh}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Modales */}
+      <AssetFormModal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={onFormSuccess}
+        asset={editTarget ?? undefined}
+      />
     </div>
   )
 }

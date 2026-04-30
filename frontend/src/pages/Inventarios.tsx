@@ -122,6 +122,7 @@ const COLUMNS: DataTableColumn<InventoryCurrentItem>[] = [
 export function AlmacenPage() {
   const token = useAuthStore((s) => s.accessToken)
   const { startDate, endDate } = useFilters()
+  const [stockTab, setStockTab] = useState<"vendible" | "interno">("vendible")
   const [filterStatus, setFilterStatus] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -140,10 +141,10 @@ export function AlmacenPage() {
     return () => clearTimeout(t)
   }, [searchQuery])
 
-  // Reset página al cambiar filtros
+  // Reset página al cambiar filtros o tab
   useEffect(() => {
     setPage(0)
-  }, [filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder])
+  }, [filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, stockTab])
 
   const kpisFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
@@ -169,18 +170,46 @@ export function AlmacenPage() {
     [token, filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, page],
   )
 
+  const internoFetcher = useCallback(
+    (signal: AbortSignal) =>
+      assetsService.getInterno(
+        token,
+        {
+          stock_status: filterStatus || undefined,
+          search: debouncedSearch || undefined,
+          category: categoryFilter || undefined,
+          sort_by: sortBy,
+          sort_order: sortOrder,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
+        },
+        signal,
+      ),
+    [token, filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, page],
+  )
+
   const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher)
+  const { data: interno, status: internoStatus } = useApi(internoFetcher)
 
-  const rows = vendible ?? []
-  const tableStatus = vendibleStatus
+  const rows = stockTab === "vendible" ? (vendible ?? []) : (interno ?? [])
+  const tableStatus = stockTab === "vendible" ? vendibleStatus : internoStatus
 
-  const tabKpis = {
-    conStock: kpisV2?.con_stock_vendible ?? 0,
-    sinStock: kpisV2?.sin_stock_vendible ?? 0,
-    stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
-    montoReal: kpisV2?.valor_total_vendible ?? 0,
-    total: kpisV2?.total_vendible ?? 0,
-  }
+  const tabKpis =
+    stockTab === "vendible"
+      ? {
+          conStock: kpisV2?.con_stock_vendible ?? 0,
+          sinStock: kpisV2?.sin_stock_vendible ?? 0,
+          stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
+          montoReal: kpisV2?.valor_total_vendible ?? 0,
+          total: kpisV2?.total_vendible ?? 0,
+        }
+      : {
+          conStock: kpisV2?.con_stock_interno ?? 0,
+          sinStock: kpisV2?.sin_stock_interno ?? 0,
+          stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
+          montoReal: kpisV2?.valor_total_interno ?? 0,
+          total: kpisV2?.total_interno ?? 0,
+        }
 
   const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
 
@@ -204,7 +233,9 @@ export function AlmacenPage() {
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <StatusBadge variant="success">En vivo</StatusBadge>
-              <StatusBadge variant="info">Productos vendibles</StatusBadge>
+              <StatusBadge variant="info">
+                {stockTab === "vendible" ? "Productos vendibles" : "Productos internos"}
+              </StatusBadge>
             </div>
             <div className="flex items-center gap-3">
               <Warehouse className="h-6 w-6 text-[hsl(var(--primary))]" aria-hidden="true" />
@@ -258,12 +289,33 @@ export function AlmacenPage() {
         </div>
       </section>
 
+      {/* Tab strip */}
+      <div className="surface-card overflow-hidden">
+        <div className="flex border-b border-border">
+          {(["vendible", "interno"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setStockTab(t)}
+              className={cn(
+                "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+                stockTab === t
+                  ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t === "vendible" ? "Inventario Vendible" : "Inventario Interno"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* KPI cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           title="Valor Total"
           value={formatCurrencyMXN(tabKpis.montoReal)}
-          description="Costo promedio × stock real (vendible)"
+          description={`Costo promedio × stock real (${stockTab === "vendible" ? "vendible" : "interno"})`}
           icon={TrendingUp}
           tone="blue"
         />
@@ -291,20 +343,30 @@ export function AlmacenPage() {
         />
         <KpiCard
           title="Bajo Mínimo"
-          value={formatNumber(kpisV2?.productos_below_min_vendible ?? 0)}
-          description="SKUs vendibles por debajo del stock mínimo"
+          value={formatNumber(
+            stockTab === "vendible"
+              ? (kpisV2?.productos_below_min_vendible ?? 0)
+              : (kpisV2?.productos_below_min_interno ?? 0),
+          )}
+          description="SKUs por debajo del stock mínimo"
           icon={AlertTriangle}
           tone="orange"
           badge={
-            (kpisV2?.productos_below_min_vendible ?? 0) > 0
+            (stockTab === "vendible"
+              ? kpisV2?.productos_below_min_vendible
+              : kpisV2?.productos_below_min_interno) ?? 0
               ? { label: "Atención", variant: "warning" }
               : undefined
           }
         />
         <KpiCard
-          title="Sin Stock Total"
-          value={formatNumber(kpisV2?.productos_out_of_stock_vendible ?? 0)}
-          description="SKUs vendibles agotados"
+          title="Sin Stock"
+          value={formatNumber(
+            stockTab === "vendible"
+              ? (kpisV2?.productos_out_of_stock_vendible ?? 0)
+              : (kpisV2?.productos_out_of_stock_interno ?? 0),
+          )}
+          description="SKUs agotados"
           icon={ArrowLeftRight}
           tone="purple"
         />

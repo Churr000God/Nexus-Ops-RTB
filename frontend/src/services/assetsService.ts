@@ -2,9 +2,13 @@ import { requestJson } from "@/lib/http"
 import type {
   AssetComponentDetail,
   AssetComponentHistoryItem,
+  AssetCreate,
   AssetRead,
+  AssetUpdate,
+  InstallComponentPayload,
   InventoryCurrentItem,
   InventoryKpiV2,
+  RemoveComponentPayload,
 } from "@/types/assets"
 
 function withQuery(
@@ -78,6 +82,39 @@ export const assetsService = {
 
   getAsset(token: string | null, id: string, signal?: AbortSignal): Promise<AssetRead> {
     return requestJson(`/api/assets/${id}`, { token, signal })
+  },
+
+  createAsset(token: string | null, data: AssetCreate): Promise<AssetRead> {
+    return requestJson("/api/assets", { method: "POST", body: data as never, token })
+  },
+
+  updateAsset(token: string | null, id: string, data: AssetUpdate): Promise<AssetRead> {
+    return requestJson(`/api/assets/${id}`, { method: "PATCH", body: data as never, token })
+  },
+
+  installComponent(
+    token: string | null,
+    assetId: string,
+    data: InstallComponentPayload,
+  ): Promise<AssetComponentDetail> {
+    return requestJson(`/api/assets/${assetId}/components`, {
+      method: "POST",
+      body: data as never,
+      token,
+    })
+  },
+
+  removeComponent(
+    token: string | null,
+    assetId: string,
+    componentId: string,
+    data: RemoveComponentPayload,
+  ): Promise<void> {
+    return requestJson(`/api/assets/${assetId}/components/${componentId}/remove`, {
+      method: "POST",
+      body: data as never,
+      token,
+    })
   },
 
   getComponents(token: string | null, assetId: string, signal?: AbortSignal): Promise<AssetComponentDetail[]> {

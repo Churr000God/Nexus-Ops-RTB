@@ -1,0 +1,325 @@
+import { useCallback, useState } from "react"
+import { History, Pencil, Plus, Trash2, X } from "lucide-react"
+
+import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { Button } from "@/components/ui/button"
+import { useApi } from "@/hooks/useApi"
+import { formatCurrencyMXN } from "@/lib/utils"
+import { assetsService } from "@/services/assetsService"
+import { useAuthStore } from "@/stores/authStore"
+import { cn } from "@/lib/utils"
+import type { AssetComponentDetail, AssetComponentHistoryItem, AssetRead } from "@/types/assets"
+import { InstallComponentModal } from "./InstallComponentModal"
+import { RemoveComponentModal } from "./RemoveComponentModal"
+
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  COMPUTER: "Computadora",
+  LAPTOP: "Laptop",
+  PRINTER: "Impresora",
+  MACHINE: "Máquina",
+  VEHICLE: "Vehículo",
+  TOOL: "Herramienta",
+  OTHER: "Otro",
+}
+
+const ASSET_STATUS_COLORS: Record<string, string> = {
+  ACTIVE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+  IN_REPAIR: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+  IDLE: "border-slate-500/30 bg-slate-500/10 text-slate-500",
+  RETIRED: "border-red-500/30 bg-red-500/10 text-red-600",
+  DISMANTLED: "border-red-700/30 bg-red-700/10 text-red-700",
+}
+
+const ASSET_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Activo",
+  IN_REPAIR: "En Reparación",
+  IDLE: "Inactivo",
+  RETIRED: "Retirado",
+  DISMANTLED: "Desmantelado",
+}
+
+const OPERATION_LABELS: Record<string, string> = {
+  INSTALL: "Instalado",
+  REMOVE: "Removido",
+  REPLACE: "Reemplazado",
+}
+
+const OPERATION_COLORS: Record<string, string> = {
+  INSTALL: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+  REMOVE: "border-red-500/30 bg-red-500/10 text-red-600",
+  REPLACE: "border-blue-500/30 bg-blue-500/10 text-blue-600",
+}
+
+type Tab = "info" | "components" | "history"
+
+interface AssetDetailPanelProps {
+  asset: AssetRead
+  onClose: () => void
+  onEdit: () => void
+  onRefresh: () => void
+}
+
+export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDetailPanelProps) {
+  const token = useAuthStore((s) => s.accessToken)
+  const [tab, setTab] = useState<Tab>("info")
+  const [installOpen, setInstallOpen] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState<AssetComponentDetail | null>(null)
+  const [compKey, setCompKey] = useState(0)
+
+  const componentsFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, asset.id, compKey],
+  )
+  const { data: components, status: compStatus } = useApi(componentsFetcher)
+
+  const historyFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getHistory(token, asset.id, {}, signal),
+    [token, asset.id],
+  )
+  const { data: history, status: histStatus } = useApi(historyFetcher)
+
+  function refreshComponents() {
+    setCompKey((k) => k + 1)
+    onRefresh()
+  }
+
+  const componentColumns: DataTableColumn<AssetComponentDetail>[] = [
+    { key: "component_name", header: "Componente", cell: (r) => r.component_name ?? "—" },
+    { key: "component_sku", header: "SKU", cell: (r) => r.component_sku ?? "—" },
+    { key: "quantity", header: "Cant.", cell: (r) => String(r.quantity) },
+    { key: "serial_number", header: "S/N", cell: (r) => r.serial_number ?? "—" },
+    {
+      key: "installed_at",
+      header: "Instalado",
+      cell: (r) => new Date(r.installed_at).toLocaleDateString("es-MX"),
+    },
+    {
+      key: "actions",
+      header: "",
+      cell: (r) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setRemoveTarget(r) }}
+          className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+          title="Remover componente"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ),
+    },
+  ]
+
+  const historyColumns: DataTableColumn<AssetComponentHistoryItem>[] = [
+    {
+      key: "occurred_at",
+      header: "Fecha",
+      cell: (r) => new Date(r.occurred_at).toLocaleDateString("es-MX"),
+    },
+    {
+      key: "operation",
+      header: "Operación",
+      cell: (r) => (
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+            OPERATION_COLORS[r.operation] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
+          )}
+        >
+          {OPERATION_LABELS[r.operation] ?? r.operation}
+        </span>
+      ),
+    },
+    { key: "component_name", header: "Componente", cell: (r) => r.component_name ?? "—" },
+    { key: "serial_number", header: "S/N", cell: (r) => r.serial_number ?? "—" },
+    { key: "performed_by", header: "Realizado por", cell: (r) => r.performed_by ?? "—" },
+    { key: "reason", header: "Motivo", cell: (r) => r.reason ?? "—" },
+  ]
+
+  function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+    return (
+      <div>
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </dt>
+        <dd className="mt-0.5 text-sm text-foreground">{value || "—"}</dd>
+      </div>
+    )
+  }
+
+  return (
+    <div className="surface-card flex h-full flex-col overflow-hidden">
+      {/* Panel header */}
+      <div className="flex shrink-0 items-start justify-between border-b border-border px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-medium text-muted-foreground">
+              {asset.asset_code}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                ASSET_STATUS_COLORS[asset.status] ??
+                  "border-slate-500/30 bg-slate-500/10 text-slate-500",
+              )}
+            >
+              {ASSET_STATUS_LABELS[asset.status] ?? asset.status}
+            </span>
+          </div>
+          <h3 className="mt-1 truncate text-sm font-semibold text-foreground">{asset.name}</h3>
+          <p className="text-xs text-muted-foreground">
+            {ASSET_TYPE_LABELS[asset.asset_type] ?? asset.asset_type}
+            {asset.manufacturer ? ` · ${asset.manufacturer}` : ""}
+            {asset.model ? ` ${asset.model}` : ""}
+          </p>
+        </div>
+        <div className="ml-2 flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Editar activo"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Cerrar panel"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex shrink-0 border-b border-border">
+        {(["info", "components", "history"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-medium transition-colors",
+              tab === t
+                ? "border-b-2 border-[hsl(var(--primary))] text-[hsl(var(--primary))]"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t === "info" && "Info General"}
+            {t === "components" && `Componentes${components ? ` (${components.length})` : ""}`}
+            {t === "history" && (
+              <span className="flex items-center justify-center gap-1">
+                <History className="h-3 w-3" />
+                Historial
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {tab === "info" && (
+          <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+            <InfoRow label="Tipo" value={ASSET_TYPE_LABELS[asset.asset_type] ?? asset.asset_type} />
+            <InfoRow label="Ubicación" value={asset.location} />
+            <InfoRow label="Fabricante" value={asset.manufacturer} />
+            <InfoRow label="Modelo" value={asset.model} />
+            <InfoRow label="Número de Serie" value={asset.serial_number} />
+            <InfoRow
+              label="Fecha de Compra"
+              value={
+                asset.purchase_date
+                  ? new Date(asset.purchase_date).toLocaleDateString("es-MX")
+                  : null
+              }
+            />
+            <InfoRow
+              label="Costo de Compra"
+              value={
+                asset.purchase_cost != null ? formatCurrencyMXN(asset.purchase_cost) : null
+              }
+            />
+            <InfoRow
+              label="Garantía hasta"
+              value={
+                asset.warranty_until
+                  ? new Date(asset.warranty_until).toLocaleDateString("es-MX")
+                  : null
+              }
+            />
+            {asset.notes && (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Notas
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
+                  {asset.notes}
+                </dd>
+              </div>
+            )}
+            <div className="sm:col-span-2 border-t border-border pt-3">
+              <InfoRow
+                label="Registrado"
+                value={new Date(asset.created_at).toLocaleString("es-MX")}
+              />
+            </div>
+          </dl>
+        )}
+
+        {tab === "components" && (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setInstallOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                Instalar Parte
+              </Button>
+            </div>
+            <DataTable
+              columns={componentColumns}
+              rows={components ?? []}
+              rowKey={(r) => r.asset_component_id}
+              maxHeight="300px"
+              emptyLabel={
+                compStatus === "loading" || compStatus === "idle"
+                  ? "Cargando…"
+                  : "Sin componentes instalados"
+              }
+            />
+          </div>
+        )}
+
+        {tab === "history" && (
+          <DataTable
+            columns={historyColumns}
+            rows={history ?? []}
+            rowKey={(r) => r.history_id}
+            maxHeight="300px"
+            emptyLabel={
+              histStatus === "loading" || histStatus === "idle"
+                ? "Cargando…"
+                : "Sin historial registrado"
+            }
+          />
+        )}
+      </div>
+
+      {/* Modales */}
+      <InstallComponentModal
+        open={installOpen}
+        onClose={() => setInstallOpen(false)}
+        onSuccess={refreshComponents}
+        assetId={asset.id}
+      />
+      <RemoveComponentModal
+        open={!!removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onSuccess={refreshComponents}
+        assetId={asset.id}
+        component={removeTarget}
+      />
+    </div>
+  )
+}

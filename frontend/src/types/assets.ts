@@ -36,6 +36,51 @@ export type InventoryKpiV2 = {
   stock_negativo_interno: number
 }
 
+export type AssetCreate = {
+  asset_code: string
+  asset_type: string
+  name: string
+  base_product_id?: string | null
+  serial_number?: string | null
+  manufacturer?: string | null
+  model?: string | null
+  location?: string | null
+  assigned_user_id?: string | null
+  status?: string
+  purchase_date?: string | null
+  purchase_cost?: number | null
+  warranty_until?: string | null
+  notes?: string | null
+}
+
+export type AssetUpdate = {
+  asset_type?: string | null
+  name?: string | null
+  serial_number?: string | null
+  manufacturer?: string | null
+  model?: string | null
+  location?: string | null
+  assigned_user_id?: string | null
+  status?: string | null
+  purchase_date?: string | null
+  purchase_cost?: number | null
+  warranty_until?: string | null
+  notes?: string | null
+}
+
+export type InstallComponentPayload = {
+  product_id?: string | null
+  quantity?: number
+  serial_number?: string | null
+  notes?: string | null
+}
+
+export type RemoveComponentPayload = {
+  is_reusable: boolean
+  reason?: string | null
+  notes?: string | null
+}
+
 export type AssetRead = {
   id: string
   asset_code: string
