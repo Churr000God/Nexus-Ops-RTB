@@ -67,6 +67,7 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0017 | 2026-04-24 | backend+scripts | alto | Headers CSV duplicados en Bitacora: DictReader last-wins borra UUID de la primera columna | resuelto | [ERR-0017_csv-headers-duplicados-bitacora-uuid-perdido.md](resolutions/ERR-0017_csv-headers-duplicados-bitacora-uuid-perdido.md) |
 | ERR-0018 | 2026-04-25 | docker | medio | ngrok se reinicia en bucle: dominio hardcodeado pertenece a otra cuenta (ERR_NGROK_320) | resuelto | [ERR-0018_ngrok-dominio-cuenta-incorrecta.md](resolutions/ERR-0018_ngrok-dominio-cuenta-incorrecta.md) |
 | ERR-0019 | 2026-04-25 | docker | medio | Fix ERR-0018 reemplazó dominio de producción con el de desarrollo causando el mismo error | resuelto | [ERR-0019_ngrok-dominio-prod-reemplazado-por-dev.md](resolutions/ERR-0019_ngrok-dominio-prod-reemplazado-por-dev.md) |
+| ERR-0020 | 2026-04-29 | frontend | medio | TS2322 `"neutral"` no asignable a `KpiTone` local en Inventarios.tsx rompe docker build | resuelto | [ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md](resolutions/ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md) |
 
 ---
 
@@ -74,8 +75,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 19 |
-| Resueltos | 19 |
+| Total errores registrados | 20 |
+| Resueltos | 20 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
