@@ -245,7 +245,15 @@ class AssetService:
                 COALESCE(SUM(total_value) FILTER (WHERE is_saleable),   0) AS valor_total_vendible,
                 COALESCE(SUM(total_value) FILTER (WHERE NOT is_saleable),0) AS valor_total_interno,
                 COUNT(*) FILTER (WHERE stock_status = 'OUT')            AS productos_out_of_stock,
-                COUNT(*) FILTER (WHERE stock_status = 'BELOW_MIN')      AS productos_below_min
+                COUNT(*) FILTER (WHERE stock_status = 'BELOW_MIN')      AS productos_below_min,
+                COUNT(*) FILTER (WHERE is_saleable)                     AS total_vendible,
+                COUNT(*) FILTER (WHERE NOT is_saleable)                 AS total_interno,
+                COUNT(*) FILTER (WHERE is_saleable AND quantity_on_hand > 0)  AS con_stock_vendible,
+                COUNT(*) FILTER (WHERE is_saleable AND quantity_on_hand = 0)  AS sin_stock_vendible,
+                COUNT(*) FILTER (WHERE is_saleable AND quantity_on_hand < 0)  AS stock_negativo_vendible,
+                COUNT(*) FILTER (WHERE NOT is_saleable AND quantity_on_hand > 0) AS con_stock_interno,
+                COUNT(*) FILTER (WHERE NOT is_saleable AND quantity_on_hand = 0) AS sin_stock_interno,
+                COUNT(*) FILTER (WHERE NOT is_saleable AND quantity_on_hand < 0) AS stock_negativo_interno
             FROM v_inventory_current
         """)
         row = (await self.db.execute(sql)).mappings().one()
@@ -267,4 +275,12 @@ class AssetService:
             productos_below_min=row["productos_below_min"],
             total_assets=asset_row["total_assets"],
             assets_en_reparacion=asset_row["assets_en_reparacion"],
+            total_vendible=row["total_vendible"],
+            total_interno=row["total_interno"],
+            con_stock_vendible=row["con_stock_vendible"],
+            sin_stock_vendible=row["sin_stock_vendible"],
+            stock_negativo_vendible=row["stock_negativo_vendible"],
+            con_stock_interno=row["con_stock_interno"],
+            sin_stock_interno=row["sin_stock_interno"],
+            stock_negativo_interno=row["stock_negativo_interno"],
         )

@@ -102,9 +102,42 @@ export interface CategoryRead {
   children: CategoryRead[]
 }
 
+export type CategoryCreate = {
+  name: string
+  parent_id?: string | null
+  slug?: string | null
+  description?: string | null
+  profit_margin_percent?: number | null
+  is_active?: boolean
+}
+
+export type CategoryUpdate = {
+  name?: string | null
+  parent_id?: string | null
+  slug?: string | null
+  description?: string | null
+  profit_margin_percent?: number | null
+  is_active?: boolean | null
+}
+
 export interface BrandRead {
   id: string
   name: string
   description: string | null
+  markup_percent: number | null
   is_active: boolean
+}
+
+export type BrandCreate = {
+  name: string
+  description?: string | null
+  markup_percent?: number | null
+  is_active?: boolean
+}
+
+export type BrandUpdate = {
+  name?: string | null
+  description?: string | null
+  markup_percent?: number | null
+  is_active?: boolean | null
 }

@@ -41,13 +41,22 @@ class BrandRead(BaseModel):
     id: UUID
     name: str
     description: str | None
+    markup_percent: Decimal | None
     is_active: bool
 
 
 class BrandCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     description: str | None = None
+    markup_percent: Decimal | None = None
     is_active: bool = True
+
+
+class BrandUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    markup_percent: Decimal | None = None
+    is_active: bool | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

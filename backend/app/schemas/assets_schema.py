@@ -170,3 +170,11 @@ class InventoryKpiSummaryRead(BaseModel):
     productos_below_min: int
     total_assets: int
     assets_en_reparacion: int
+    total_vendible: int
+    total_interno: int
+    con_stock_vendible: int
+    sin_stock_vendible: int
+    stock_negativo_vendible: int
+    con_stock_interno: int
+    sin_stock_interno: int
+    stock_negativo_interno: int

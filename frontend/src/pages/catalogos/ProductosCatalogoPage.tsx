@@ -1029,6 +1029,52 @@ function ProductGridCard({
   )
 }
 
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number
+  totalPages: number
+  total: number
+  pageSize: number
+  onPage: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+  const start = page * pageSize + 1
+  const end = Math.min((page + 1) * pageSize, total)
+  return (
+    <div className="flex items-center justify-between gap-4 px-1 py-2 text-sm text-muted-foreground">
+      <span>
+        Mostrando {start}–{end} de {total} productos
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page === 0}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ← Anterior
+        </button>
+        <span className="px-2">
+          {page + 1} / {totalPages}
+        </span>
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Siguiente →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type ActiveModal =
@@ -1040,6 +1086,8 @@ type ActiveModal =
 export function ProductosCatalogoPage() {
   const token = useAuthStore((s) => s.accessToken)
 
+  const PAGE_SIZE = 100
+
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState<"activos" | "todos">("activos")
@@ -1050,6 +1098,7 @@ export function ProductosCatalogoPage() {
   const [selectedProduct, setSelectedProduct] = useState<ProductRead | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [page, setPage] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -1060,20 +1109,27 @@ export function ProductosCatalogoPage() {
     }
   }, [search])
 
+  useEffect(() => { setPage(0) }, [filterStatus, debouncedSearch, filterCategory, filterBrand, filterSaleable])
+
   const productsFetcher = useCallback(
     (signal: AbortSignal) =>
       productosService.listProducts(
         token,
         {
-          limit: 500,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE,
           solo_activos: filterStatus === "activos",
           search: debouncedSearch || undefined,
           category_id: filterCategory || undefined,
           brand_id: filterBrand || undefined,
+          is_saleable:
+            filterSaleable === "vendibles" ? true
+            : filterSaleable === "internos" ? false
+            : undefined,
         },
         signal,
       ),
-    [token, filterStatus, debouncedSearch, filterCategory, filterBrand, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
+    [token, filterStatus, debouncedSearch, filterCategory, filterBrand, filterSaleable, page, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const categoriesFetcher = useCallback(
@@ -1090,13 +1146,9 @@ export function ProductosCatalogoPage() {
   const { data: categories } = useApi(categoriesFetcher)
   const { data: brands } = useApi(brandsFetcher)
 
-  const rawRows = productsData?.items ?? []
-  const rows = rawRows.filter((r) => {
-    if (filterSaleable === "vendibles") return r.is_saleable
-    if (filterSaleable === "internos") return !r.is_saleable
-    return true
-  })
-  const total = rows.length
+  const rows = productsData?.items ?? []
+  const total = productsData?.total ?? 0
+  const totalPages = Math.ceil(total / PAGE_SIZE)
   const isLoading = productsStatus === "loading"
 
   const flatCats = flattenCategories(categories ?? [])
@@ -1427,62 +1479,80 @@ export function ProductosCatalogoPage() {
       <div className="flex min-h-0 flex-1 gap-4">
         <div className="flex-1 min-w-0 h-full overflow-hidden">
           {viewMode === "table" ? (
-            <DataTable
-              columns={COLUMNS}
-              rows={rows}
-              rowKey={(r) => r.id}
-              emptyLabel={
-                isLoading
-                  ? "Cargando productos…"
-                  : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
-                    ? `Sin resultados para los filtros aplicados`
-                    : "No hay productos en el catálogo"
-              }
-              onRowClick={(r) =>
-                setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
-              }
-              selectedRowKey={selectedProduct?.id}
-              maxHeight={selectedProduct ? undefined : "calc(100vh - 380px)"}
-              fillHeight={!!selectedProduct}
-            />
+            <>
+              <DataTable
+                columns={COLUMNS}
+                rows={rows}
+                rowKey={(r) => r.id}
+                emptyLabel={
+                  isLoading
+                    ? "Cargando productos…"
+                    : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
+                      ? `Sin resultados para los filtros aplicados`
+                      : "No hay productos en el catálogo"
+                }
+                onRowClick={(r) =>
+                  setSelectedProduct((prev) => (prev?.id === r.id ? null : r))
+                }
+                selectedRowKey={selectedProduct?.id}
+                maxHeight={selectedProduct ? undefined : "calc(100vh - 380px)"}
+                fillHeight={!!selectedProduct}
+              />
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={PAGE_SIZE}
+                onPage={setPage}
+              />
+            </>
           ) : (
             /* Grid view */
-            <div className={cn("overflow-y-auto pr-1", selectedProduct ? "h-full" : "")} style={selectedProduct ? undefined : { maxHeight: "calc(100vh - 380px)" }}>
-              {rows.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                  <Package className="h-10 w-10 mb-3 opacity-40" />
-                  <p className="text-sm">
-                    {isLoading
-                      ? "Cargando productos…"
-                      : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
-                        ? "Sin resultados para los filtros aplicados"
-                        : "No hay productos en el catálogo"}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-                  {rows.map((product) => (
-                    <ProductGridCard
-                      key={product.id}
-                      product={product}
-                      isSelected={selectedProduct?.id === product.id}
-                      onSelect={() =>
-                        setSelectedProduct((prev) =>
-                          prev?.id === product.id ? null : product,
-                        )
-                      }
-                      onEdit={(e) => {
-                        e.stopPropagation()
-                        setActiveModal({ type: "edit", product })
-                      }}
-                      onDelete={(e) => {
-                        e.stopPropagation()
-                        setActiveModal({ type: "delete", product })
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className={cn("overflow-y-auto pr-1", selectedProduct ? "h-full" : "")} style={selectedProduct ? undefined : { maxHeight: "calc(100vh - 380px)" }}>
+                {rows.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <Package className="h-10 w-10 mb-3 opacity-40" />
+                    <p className="text-sm">
+                      {isLoading
+                        ? "Cargando productos…"
+                        : debouncedSearch || filterCategory || filterBrand || filterSaleable !== "todos"
+                          ? "Sin resultados para los filtros aplicados"
+                          : "No hay productos en el catálogo"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+                    {rows.map((product) => (
+                      <ProductGridCard
+                        key={product.id}
+                        product={product}
+                        isSelected={selectedProduct?.id === product.id}
+                        onSelect={() =>
+                          setSelectedProduct((prev) =>
+                            prev?.id === product.id ? null : product,
+                          )
+                        }
+                        onEdit={(e) => {
+                          e.stopPropagation()
+                          setActiveModal({ type: "edit", product })
+                        }}
+                        onDelete={(e) => {
+                          e.stopPropagation()
+                          setActiveModal({ type: "delete", product })
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                pageSize={PAGE_SIZE}
+                onPage={setPage}
+              />
             </div>
           )}
         </div>

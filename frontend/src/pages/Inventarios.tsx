@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Package, TrendingDown, TrendingUp, Warehouse } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
@@ -141,15 +141,34 @@ export function AlmacenPage() {
   const [stockTab, setStockTab] = useState<StockTab>("vendible")
   const [filterStatus, setFilterStatus] = useState("")
 
+  const PAGE_SIZE = 100
+  const [page, setPage] = useState(0)
+
+  useEffect(() => { setPage(0) }, [stockTab, filterStatus])
+
+  const kpisFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
+    [token],
+  )
+  const { data: kpisV2 } = useApi(kpisFetcher)
+
   const vendibleFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getVendible(token, { stock_status: filterStatus || undefined, limit: 2000 }, signal),
-    [token, filterStatus],
+      assetsService.getVendible(token, {
+        stock_status: filterStatus || undefined,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      }, signal),
+    [token, filterStatus, page],
   )
   const internoFetcher = useCallback(
     (signal: AbortSignal) =>
-      assetsService.getInterno(token, { stock_status: filterStatus || undefined, limit: 2000 }, signal),
-    [token, filterStatus],
+      assetsService.getInterno(token, {
+        stock_status: filterStatus || undefined,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      }, signal),
+    [token, filterStatus, page],
   )
 
   const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher, {
@@ -162,15 +181,22 @@ export function AlmacenPage() {
   const rows = stockTab === "vendible" ? (vendible ?? []) : (interno ?? [])
   const tableStatus = stockTab === "vendible" ? vendibleStatus : internoStatus
 
-  // KPIs computados desde las filas cargadas
-  const kpis = useMemo(() => {
-    const conStock      = rows.filter((r) => r.quantity_on_hand > 0).length
-    const sinStock      = rows.filter((r) => r.quantity_on_hand === 0).length
-    const stockNegativo = rows.filter((r) => r.quantity_on_hand < 0).length
-    const montoReal     = rows.reduce((s, r) => s + (r.total_value ?? 0), 0)
-    const montoTeorico  = rows.reduce((s, r) => s + (r.theoretical_value ?? 0), 0)
-    return { conStock, sinStock, stockNegativo, montoReal, montoTeorico }
-  }, [rows])
+  const tabKpis = stockTab === "vendible"
+    ? {
+        conStock: kpisV2?.con_stock_vendible ?? 0,
+        sinStock: kpisV2?.sin_stock_vendible ?? 0,
+        stockNegativo: kpisV2?.stock_negativo_vendible ?? 0,
+        montoReal: kpisV2?.valor_total_vendible ?? 0,
+        total: kpisV2?.total_vendible ?? 0,
+      }
+    : {
+        conStock: kpisV2?.con_stock_interno ?? 0,
+        sinStock: kpisV2?.sin_stock_interno ?? 0,
+        stockNegativo: kpisV2?.stock_negativo_interno ?? 0,
+        montoReal: kpisV2?.valor_total_interno ?? 0,
+        total: kpisV2?.total_interno ?? 0,
+      }
+  const totalPages = Math.ceil(tabKpis.total / PAGE_SIZE)
 
   return (
     <div className="space-y-6">
@@ -191,38 +217,31 @@ export function AlmacenPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           title="Con Stock"
-          value={String(kpis.conStock)}
+          value={String(tabKpis.conStock)}
           description="SKUs con cantidad > 0"
           icon={Package}
           tone="green"
         />
         <KpiCard
           title="Sin Stock"
-          value={String(kpis.sinStock)}
+          value={String(tabKpis.sinStock)}
           description="SKUs con cantidad = 0"
           icon={Package}
           tone="amber"
         />
         <KpiCard
           title="Stock Negativo"
-          value={String(kpis.stockNegativo)}
+          value={String(tabKpis.stockNegativo)}
           description="SKUs con cantidad < 0"
           icon={TrendingDown}
           tone="red"
         />
         <KpiCard
           title="Valor Real"
-          value={fmt.format(kpis.montoReal)}
+          value={fmt.format(tabKpis.montoReal)}
           description="Costo prom. × stock real"
           icon={TrendingUp}
           tone="blue"
-        />
-        <KpiCard
-          title="Valor Teórico"
-          value={kpis.montoTeorico > 0 ? fmt.format(kpis.montoTeorico) : "—"}
-          description="Costo prom. × stock teórico"
-          icon={TrendingUp}
-          tone="violet"
         />
       </div>
 
@@ -272,6 +291,59 @@ export function AlmacenPage() {
               : "Sin productos"
         }
       />
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        total={tabKpis.total}
+        pageSize={PAGE_SIZE}
+        onPage={setPage}
+      />
+    </div>
+  )
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number
+  totalPages: number
+  total: number
+  pageSize: number
+  onPage: (p: number) => void
+}) {
+  if (totalPages <= 1) return null
+  const start = page * pageSize + 1
+  const end = Math.min((page + 1) * pageSize, total)
+  return (
+    <div className="flex items-center justify-between gap-4 px-1 py-2 text-sm text-muted-foreground">
+      <span>
+        Mostrando {start}–{end} de {total} productos
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page === 0}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ← Anterior
+        </button>
+        <span className="px-2">
+          {page + 1} / {totalPages}
+        </span>
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page >= totalPages - 1}
+          className="rounded px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Siguiente →
+        </button>
+      </div>
     </div>
   )
 }

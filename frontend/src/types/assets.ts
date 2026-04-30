@@ -22,6 +22,14 @@ export type InventoryKpiV2 = {
   productos_below_min: number
   total_assets: number
   assets_en_reparacion: number
+  total_vendible: number
+  total_interno: number
+  con_stock_vendible: number
+  sin_stock_vendible: number
+  stock_negativo_vendible: number
+  con_stock_interno: number
+  sin_stock_interno: number
+  stock_negativo_interno: number
 }
 
 export type AssetRead = {

@@ -25,6 +25,7 @@ from app.models.productos_pricing_models import (
 from app.schemas.productos_pricing_schema import (
     BOMCreate,
     BrandCreate,
+    BrandUpdate,
     CategoryCreate,
     CategoryTreeNode,
     CategoryUpdate,
@@ -97,6 +98,7 @@ class ProductosService:
         pricing_strategy: str | None = None,
         solo_activos: bool = True,
         search: str | None = None,
+        is_saleable: bool | None = None,
     ) -> ProductListResponse:
         # is_active se deriva del campo status (no hay columna is_active en productos)
         # min_stock no existe en la tabla actual — se devuelve como NULL
@@ -160,6 +162,7 @@ class ProductosService:
                    OR lower(COALESCE(p.sku, '')) LIKE lower('%' || CAST(:search AS text) || '%')
                    OR lower(COALESCE(p.internal_code, '')) LIKE lower('%' || CAST(:search AS text) || '%')
                   ))
+              AND (CAST(:is_saleable AS boolean) IS NULL OR p.is_saleable = CAST(:is_saleable AS boolean))
             ORDER BY p.name
             LIMIT :limit OFFSET :offset
         """)
@@ -178,6 +181,7 @@ class ProductosService:
                    OR lower(COALESCE(p.sku, '')) LIKE lower('%' || CAST(:search AS text) || '%')
                    OR lower(COALESCE(p.internal_code, '')) LIKE lower('%' || CAST(:search AS text) || '%')
                   ))
+              AND (CAST(:is_saleable AS boolean) IS NULL OR p.is_saleable = CAST(:is_saleable AS boolean))
         """)
 
         params = dict(
@@ -186,6 +190,7 @@ class ProductosService:
             brand_id=str(brand_id) if brand_id else None,
             pricing_strategy=pricing_strategy,
             search=search,
+            is_saleable=is_saleable,
             limit=limit,
             offset=offset,
         )
@@ -481,10 +486,28 @@ class ProductosService:
         brand = Brand(
             name=data.name,
             description=data.description,
+            markup_percent=data.markup_percent,
             is_active=data.is_active,
         )
         self.db.add(brand)
         await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(brand)
+        return brand
+
+    async def update_brand(self, brand_id: UUID, data: BrandUpdate) -> Brand | None:
+        result = await self.db.execute(select(Brand).where(Brand.id == brand_id))
+        brand = result.scalar_one_or_none()
+        if brand is None:
+            return None
+        if data.name is not None:
+            brand.name = data.name
+        if data.description is not None:
+            brand.description = data.description
+        if data.markup_percent is not None:
+            brand.markup_percent = data.markup_percent
+        if data.is_active is not None:
+            brand.is_active = data.is_active
         await self.db.commit()
         await self.db.refresh(brand)
         return brand

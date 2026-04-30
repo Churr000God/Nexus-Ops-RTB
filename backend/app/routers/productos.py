@@ -14,6 +14,7 @@ from app.schemas.productos_pricing_schema import (
     BOMRead,
     BrandCreate,
     BrandRead,
+    BrandUpdate,
     CategoryCreate,
     CategoryRead,
     CategoryTreeNode,
@@ -73,6 +74,7 @@ async def list_productos(
     pricing_strategy: str | None = Query(default=None, pattern="^(MOVING_AVG|PASSTHROUGH)$"),
     solo_activos: bool = Query(default=True),
     search: str | None = Query(default=None, max_length=100),
+    is_saleable: bool | None = Query(default=None),
     svc: ProductosService = Depends(_svc),
     _: User = Depends(get_current_user),
 ) -> ProductListResponse:
@@ -84,6 +86,7 @@ async def list_productos(
         pricing_strategy=pricing_strategy,
         solo_activos=solo_activos,
         search=search,
+        is_saleable=is_saleable,
     )
 
 
@@ -336,6 +339,19 @@ async def create_marca(
     _: User = Depends(get_current_user),
 ) -> BrandRead:
     brand = await svc.create_brand(data)
+    return BrandRead.model_validate(brand)
+
+
+@brand_router.patch("/{brand_id}", response_model=BrandRead)
+async def update_marca(
+    brand_id: UUID,
+    data: BrandUpdate,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(get_current_user),
+) -> BrandRead:
+    brand = await svc.update_brand(brand_id, data)
+    if brand is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Marca no encontrada")
     return BrandRead.model_validate(brand)
 
 
