@@ -1,5 +1,47 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-04-30 — Almacén & Equipos: Bloques 1–7 (activos físicos completos)
+
+### Bloques implementados
+
+| Bloque | Feature | Migraciones |
+|---|---|---|
+| 1 | Listado de activos con búsqueda y filtros | — (endpoints ya existían) |
+| 2 | Asignación de activos a usuarios/ubicación | 0020 (tabla pre-existente) |
+| 3 | Baja/Retiro formal de activos | 0029 |
+| 4 | Conteo físico y reconciliación | 0030 |
+| 5 | Jerarquía parent_asset_id (sub-activos) | 0031 |
+| 6 | Órdenes de mantenimiento | 0032 |
+| 7 | Depreciación línea recta | 0033 |
+
+### Base de datos
+- **0029** — ADD COLUMNS a `assets`: `retired_at`, `retirement_reason`, `salvage_value`, `retired_by`
+- **0030** — CREATE `physical_counts` + `physical_count_lines` (conteo físico con snapshot de activos)
+- **0031** — ADD COLUMN `parent_asset_id` a `assets` (auto-referencial, FK SET NULL) + índice
+- **0032** — CREATE `asset_work_orders` (work_type/priority/status CHECK constraints, assigned_to FK)
+- **0033** — CREATE `asset_depreciation_config` (method STRAIGHT_LINE, useful_life_years, residual_value, start_date, UNIQUE por asset)
+
+### Backend
+- `services/assets_service.py`: métodos `retire_asset`, `assign_asset`, `get_assignments`, `get_children`, `create_work_order`, `list_work_orders`, `update_work_order`, `create_physical_count`, `list_physical_counts`, `get_physical_count_lines`, `update_count_line`, `confirm_physical_count`, `get_depreciation`, `upsert_depreciation_config`, helper `_add_years()` (reemplaza dateutil que no está instalado)
+- `routers/assets.py`: 11 endpoints nuevos (retire, assign, assignments, children, work-orders CRUD, counts CRUD + confirm, depreciation GET+POST)
+- `schemas/assets_schema.py`: `RetireAssetPayload`, `AssignAssetPayload`, `AssetAssignmentRead`, `WorkOrderCreate/Update/Read`, `PhysicalCountCreate/Read`, `PhysicalCountLineRead/Update`, `DepreciationConfigCreate/Read`, `DepreciationPeriodRead`, `DepreciationScheduleRead`
+
+### Frontend
+- `types/assets.ts`: todos los tipos nuevos correspondientes
+- `services/assetsService.ts`: `retireAsset`, `assignAsset`, `getAssignments`, `getChildren`, `createWorkOrder`, `listWorkOrders`, `updateWorkOrder`, `createCount`, `listCounts`, `getCountLines`, `updateCountLine`, `confirmCount`, `getDepreciation`, `upsertDepreciation`
+- `components/assets/AssetDetailPanel.tsx`: extendido a 7 tabs (Info, Partes, Historial, Asignaciones, Sub-activos, Mant., Depr.)
+- `components/assets/AssetFormModal.tsx`: búsqueda de activo padre con debounce 300ms
+- Nuevos modales: `AssignAssetModal`, `RetireAssetModal`, `WorkOrderFormModal`, `CreateCountModal`
+- `components/assets/DepreciationTab.tsx` (nuevo): KPIs, formulario inline, tabla año-a-año con fila actual resaltada
+- `pages/ConteosPage.tsx` (nuevo): list + detail con toggle ✓/✗ por línea
+- `routes.tsx` + `Sidebar.tsx`: ruta `/activos/conteos` + nav item
+
+### Documentación
+- `estructura_proyecto/15_modulo_inventario_almacen.md`: reescritura completa — 11 tablas, 3 vistas, 8 migraciones, 26 endpoints, todos los schemas, service methods, 7 flows de negocio, paleta de colores, notas de implementación
+- `docs/cambios_2026-04-30_assets_almacen_equipos.md`: changelog detallado de esta sesión
+
+---
+
 ## 2026-04-30 — Catálogo cross-proveedor, deduplicación BD y prevención de duplicados
 
 ### Base de datos
