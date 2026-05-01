@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.models.user_model import User
 from app.schemas.assets_schema import (
+    AssetAssignmentRead,
     AssetComponentCreate,
     AssetComponentDetailRead,
     AssetComponentHistoryRead,
     AssetCreate,
     AssetRead,
     AssetUpdate,
+    AssignAssetPayload,
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
@@ -110,6 +112,32 @@ async def remove_component(
 ) -> dict:
     await AssetService(db).remove_component(component_id, data, current_user.id)
     return {"ok": True}
+
+
+# ── Asignaciones ─────────────────────────────────────────────────────────────
+
+@router.get("/{asset_id}/assignments", response_model=list[AssetAssignmentRead])
+async def get_assignments(
+    asset_id: UUID,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[AssetAssignmentRead]:
+    return await AssetService(db).get_assignments(asset_id, limit=limit, offset=offset)
+
+
+@router.post("/{asset_id}/assign", response_model=AssetAssignmentRead, status_code=status.HTTP_201_CREATED)
+async def assign_asset(
+    asset_id: UUID,
+    data: AssignAssetPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssetAssignmentRead:
+    try:
+        return await AssetService(db).assign_asset(asset_id, data, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ── Historial ─────────────────────────────────────────────────────────────────

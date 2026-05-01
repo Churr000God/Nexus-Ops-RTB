@@ -1,10 +1,12 @@
 import { requestJson } from "@/lib/http"
 import type {
+  AssetAssignment,
   AssetComponentDetail,
   AssetComponentHistoryItem,
   AssetCreate,
   AssetRead,
   AssetUpdate,
+  AssignAssetPayload,
   InstallComponentPayload,
   InventoryCurrentItem,
   InventoryKpiV2,
@@ -128,5 +130,26 @@ export const assetsService = {
     signal?: AbortSignal,
   ): Promise<AssetComponentHistoryItem[]> {
     return requestJson(withQuery(`/api/assets/${assetId}/history`, params), { token, signal })
+  },
+
+  getAssignments(
+    token: string | null,
+    assetId: string,
+    params: { limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<AssetAssignment[]> {
+    return requestJson(withQuery(`/api/assets/${assetId}/assignments`, params), { token, signal })
+  },
+
+  assignAsset(
+    token: string | null,
+    assetId: string,
+    data: AssignAssetPayload,
+  ): Promise<AssetAssignment> {
+    return requestJson(`/api/assets/${assetId}/assign`, {
+      method: "POST",
+      body: data as never,
+      token,
+    })
   },
 }

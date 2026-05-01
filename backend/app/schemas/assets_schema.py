@@ -126,6 +126,26 @@ class RemoveComponentRequest(BaseModel):
     notes: str | None = None
 
 
+# ── AssetAssignment ──────────────────────────────────────────────────────────
+
+class AssignAssetPayload(BaseModel):
+    user_id: UUID | None = None
+    location: str | None = None
+    notes: str | None = None
+
+
+class AssetAssignmentRead(BaseModel):
+    id: UUID
+    asset_id: UUID
+    user_id: UUID | None
+    user_email: str | None
+    user_name: str | None
+    location: str | None
+    assigned_at: datetime
+    assigned_by_email: str | None
+    notes: str | None
+
+
 # ── InventorySnapshot ────────────────────────────────────────────────────────
 
 class InventorySnapshotRead(BaseModel):

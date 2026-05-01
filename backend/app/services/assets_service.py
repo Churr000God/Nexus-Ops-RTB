@@ -5,14 +5,16 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assets_models import Asset, AssetComponent, InventorySnapshot
+from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, InventorySnapshot
 from app.schemas.assets_schema import (
+    AssetAssignmentRead,
     AssetComponentCreate,
     AssetComponentDetailRead,
     AssetComponentHistoryRead,
     AssetCreate,
     AssetRead,
     AssetUpdate,
+    AssignAssetPayload,
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
@@ -182,6 +184,82 @@ class AssetService:
             await self.db.execute(sql, {"asset_id": asset_id, "limit": limit, "offset": offset})
         ).mappings().all()
         return [AssetComponentHistoryRead(**r) for r in rows]
+
+    # ── Asignaciones ─────────────────────────────────────────────────────────
+
+    async def assign_asset(
+        self,
+        asset_id: UUID,
+        data: AssignAssetPayload,
+        assigned_by: UUID,
+    ) -> AssetAssignmentRead:
+        asset = await self.db.get(Asset, asset_id)
+        if not asset:
+            raise ValueError("Asset no encontrado")
+
+        entry = AssetAssignmentHistory(
+            asset_id=asset_id,
+            user_id=data.user_id,
+            location=data.location if data.location is not None else asset.location,
+            assigned_by=assigned_by,
+            notes=data.notes,
+        )
+        self.db.add(entry)
+
+        asset.assigned_user_id = data.user_id
+        if data.location is not None:
+            asset.location = data.location
+
+        await self.db.commit()
+        await self.db.refresh(entry)
+
+        sql = text("""
+            SELECT
+                aah.id,
+                aah.asset_id,
+                aah.user_id,
+                u.email        AS user_email,
+                u.full_name    AS user_name,
+                aah.location,
+                aah.assigned_at,
+                ab.email       AS assigned_by_email,
+                aah.notes
+            FROM asset_assignment_history aah
+            LEFT JOIN users u  ON u.id = aah.user_id
+            LEFT JOIN users ab ON ab.id = aah.assigned_by
+            WHERE aah.id = :id
+        """)
+        row = (await self.db.execute(sql, {"id": entry.id})).mappings().one()
+        return AssetAssignmentRead(**row)
+
+    async def get_assignments(
+        self,
+        asset_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[AssetAssignmentRead]:
+        sql = text("""
+            SELECT
+                aah.id,
+                aah.asset_id,
+                aah.user_id,
+                u.email        AS user_email,
+                u.full_name    AS user_name,
+                aah.location,
+                aah.assigned_at,
+                ab.email       AS assigned_by_email,
+                aah.notes
+            FROM asset_assignment_history aah
+            LEFT JOIN users u  ON u.id = aah.user_id
+            LEFT JOIN users ab ON ab.id = aah.assigned_by
+            WHERE aah.asset_id = :asset_id
+            ORDER BY aah.assigned_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        rows = (
+            await self.db.execute(sql, {"asset_id": asset_id, "limit": limit, "offset": offset})
+        ).mappings().all()
+        return [AssetAssignmentRead(**r) for r in rows]
 
     # ── Snapshots ────────────────────────────────────────────────────────────
 

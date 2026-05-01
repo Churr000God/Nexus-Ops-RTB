@@ -113,6 +113,24 @@ export type AssetComponentDetail = {
   notes: string | null
 }
 
+export type AssetAssignment = {
+  id: string
+  asset_id: string
+  user_id: string | null
+  user_email: string | null
+  user_name: string | null
+  location: string | null
+  assigned_at: string
+  assigned_by_email: string | null
+  notes: string | null
+}
+
+export type AssignAssetPayload = {
+  user_id?: string | null
+  location?: string | null
+  notes?: string | null
+}
+
 export type AssetComponentHistoryItem = {
   history_id: string
   occurred_at: string

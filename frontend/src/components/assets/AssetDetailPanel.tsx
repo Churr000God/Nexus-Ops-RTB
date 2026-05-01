@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { History, Pencil, Plus, Trash2, X } from "lucide-react"
+import { History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,8 @@ import { formatCurrencyMXN } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
 import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
-import type { AssetComponentDetail, AssetComponentHistoryItem, AssetRead } from "@/types/assets"
+import type { AssetAssignment, AssetComponentDetail, AssetComponentHistoryItem, AssetRead } from "@/types/assets"
+import { AssignAssetModal } from "./AssignAssetModal"
 import { InstallComponentModal } from "./InstallComponentModal"
 import { RemoveComponentModal } from "./RemoveComponentModal"
 
@@ -50,7 +51,7 @@ const OPERATION_COLORS: Record<string, string> = {
   REPLACE: "border-blue-500/30 bg-blue-500/10 text-blue-600",
 }
 
-type Tab = "info" | "components" | "history"
+type Tab = "info" | "components" | "history" | "assignments"
 
 interface AssetDetailPanelProps {
   asset: AssetRead
@@ -64,7 +65,9 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
   const [tab, setTab] = useState<Tab>("info")
   const [installOpen, setInstallOpen] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<AssetComponentDetail | null>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
   const [compKey, setCompKey] = useState(0)
+  const [assignKey, setAssignKey] = useState(0)
 
   const componentsFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
@@ -79,8 +82,20 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
   )
   const { data: history, status: histStatus } = useApi(historyFetcher)
 
+  const assignmentsFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getAssignments(token, asset.id, {}, signal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, asset.id, assignKey],
+  )
+  const { data: assignments, status: assignStatus } = useApi(assignmentsFetcher)
+
   function refreshComponents() {
     setCompKey((k) => k + 1)
+    onRefresh()
+  }
+
+  function refreshAssignments() {
+    setAssignKey((k) => k + 1)
     onRefresh()
   }
 
@@ -134,6 +149,30 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     { key: "serial_number", header: "S/N", cell: (r) => r.serial_number ?? "—" },
     { key: "performed_by", header: "Realizado por", cell: (r) => r.performed_by ?? "—" },
     { key: "reason", header: "Motivo", cell: (r) => r.reason ?? "—" },
+  ]
+
+  const assignmentColumns: DataTableColumn<AssetAssignment>[] = [
+    {
+      key: "assigned_at",
+      header: "Fecha",
+      cell: (r) => new Date(r.assigned_at).toLocaleDateString("es-MX"),
+    },
+    {
+      key: "user_name",
+      header: "Asignado a",
+      cell: (r) =>
+        r.user_name ? (
+          <div>
+            <p className="text-sm text-foreground">{r.user_name}</p>
+            <p className="text-xs text-muted-foreground">{r.user_email}</p>
+          </div>
+        ) : (
+          <span className="text-muted-foreground italic">Sin asignar</span>
+        ),
+    },
+    { key: "location", header: "Ubicación", cell: (r) => r.location ?? "—" },
+    { key: "assigned_by_email", header: "Registrado por", cell: (r) => r.assigned_by_email ?? "—" },
+    { key: "notes", header: "Notas", cell: (r) => r.notes ?? "—" },
   ]
 
   function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -195,7 +234,7 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
 
       {/* Tabs */}
       <div className="flex shrink-0 border-b border-border">
-        {(["info", "components", "history"] as Tab[]).map((t) => (
+        {(["info", "components", "history", "assignments"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -207,12 +246,18 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {t === "info" && "Info General"}
-            {t === "components" && `Componentes${components ? ` (${components.length})` : ""}`}
+            {t === "info" && "Info"}
+            {t === "components" && `Partes${components ? ` (${components.length})` : ""}`}
             {t === "history" && (
               <span className="flex items-center justify-center gap-1">
                 <History className="h-3 w-3" />
                 Historial
+              </span>
+            )}
+            {t === "assignments" && (
+              <span className="flex items-center justify-center gap-1">
+                <UserCheck className="h-3 w-3" />
+                Asignaciones
               </span>
             )}
           </button>
@@ -304,6 +349,28 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
             }
           />
         )}
+
+        {tab === "assignments" && (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setAssignOpen(true)}>
+                <UserCheck className="h-3.5 w-3.5" />
+                Asignar / Reasignar
+              </Button>
+            </div>
+            <DataTable
+              columns={assignmentColumns}
+              rows={assignments ?? []}
+              rowKey={(r) => r.id}
+              maxHeight="300px"
+              emptyLabel={
+                assignStatus === "loading" || assignStatus === "idle"
+                  ? "Cargando…"
+                  : "Sin asignaciones registradas"
+              }
+            />
+          </div>
+        )}
       </div>
 
       {/* Modales */}
@@ -319,6 +386,12 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
         onSuccess={refreshComponents}
         assetId={asset.id}
         component={removeTarget}
+      />
+      <AssignAssetModal
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        onSuccess={refreshAssignments}
+        asset={asset}
       />
     </div>
   )

@@ -199,3 +199,32 @@ class AssetComponentHistory(Base):
     notes: Mapped[str | None] = mapped_column(Text)
 
     asset: Mapped[Asset] = relationship(back_populates="history")
+
+
+class AssetAssignmentHistory(Base):
+    """Serie de tiempo de asignaciones de un equipo.
+
+    Cada vez que el activo cambia de usuario asignado (o se desasigna)
+    se inserta una fila. La fila actual es la de mayor assigned_at.
+    """
+
+    __tablename__ = "asset_assignment_history"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    asset_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    location: Mapped[str | None] = mapped_column(Text)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    assigned_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
