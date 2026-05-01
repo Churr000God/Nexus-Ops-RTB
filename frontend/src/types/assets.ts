@@ -240,3 +240,40 @@ export type AssetComponentHistoryItem = {
   inventory_movement_id: string | null
   nc_id: string | null
 }
+
+export type DepreciationConfigRead = {
+  id: string
+  asset_id: string
+  method: "STRAIGHT_LINE"
+  useful_life_years: number
+  residual_value: number
+  start_date: string
+  created_at: string
+  updated_at: string
+}
+
+export type DepreciationConfigCreate = {
+  method?: "STRAIGHT_LINE"
+  useful_life_years: number
+  residual_value?: number
+  start_date: string
+}
+
+export type DepreciationPeriodRead = {
+  year: number
+  period_start: string
+  period_end: string
+  annual_depreciation: number
+  accumulated_depreciation: number
+  book_value: number
+  is_current: boolean
+}
+
+export type DepreciationScheduleRead = {
+  config: DepreciationConfigRead | null
+  asset_cost: number | null
+  current_book_value: number | null
+  accumulated_depreciation: number | null
+  percent_depreciated: number | null
+  periods: DepreciationPeriodRead[]
+}

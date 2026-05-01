@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
+
+
+def _add_years(d: date, years: int) -> date:
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:
+        return d.replace(year=d.year + years, day=28)
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, AssetWorkOrder, InventorySnapshot, PhysicalCount, PhysicalCountLine
+from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, AssetDepreciationConfig, AssetWorkOrder, InventorySnapshot, PhysicalCount, PhysicalCountLine
 from app.schemas.assets_schema import (
     AssetAssignmentRead,
     AssetComponentCreate,
@@ -20,6 +27,10 @@ from app.schemas.assets_schema import (
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
+    DepreciationConfigCreate,
+    DepreciationConfigRead,
+    DepreciationPeriodRead,
+    DepreciationScheduleRead,
     PhysicalCountCreate,
     PhysicalCountLineRead,
     PhysicalCountLineUpdate,
@@ -661,3 +672,94 @@ class AssetService:
             sin_stock_interno=row["sin_stock_interno"],
             stock_negativo_interno=row["stock_negativo_interno"],
         )
+
+    # ── Depreciación ─────────────────────────────────────────────────────────
+
+    async def get_depreciation(self, asset_id: UUID) -> DepreciationScheduleRead:
+        asset = await self.db.get(Asset, asset_id)
+        config_row = (
+            await self.db.execute(
+                select(AssetDepreciationConfig).where(AssetDepreciationConfig.asset_id == asset_id)
+            )
+        ).scalar_one_or_none()
+
+        if config_row is None or asset is None or asset.purchase_cost is None:
+            return DepreciationScheduleRead(
+                config=DepreciationConfigRead.model_validate(config_row) if config_row else None,
+                asset_cost=float(asset.purchase_cost) if asset and asset.purchase_cost else None,
+                current_book_value=None,
+                accumulated_depreciation=None,
+                percent_depreciated=None,
+                periods=[],
+            )
+
+        cost = float(asset.purchase_cost)
+        residual = float(config_row.residual_value)
+        life = config_row.useful_life_years
+        start = config_row.start_date
+        annual = (cost - residual) / life
+        today = date.today()
+
+        periods: list[DepreciationPeriodRead] = []
+        for year in range(1, life + 1):
+            p_start = _add_years(start, year - 1)
+            p_end = _add_years(start, year) - timedelta(days=1)
+            accumulated = annual * year
+            book_value = max(residual, cost - accumulated)
+            is_current = p_start <= today <= p_end
+            periods.append(
+                DepreciationPeriodRead(
+                    year=year,
+                    period_start=p_start,
+                    period_end=p_end,
+                    annual_depreciation=round(annual, 4),
+                    accumulated_depreciation=round(accumulated, 4),
+                    book_value=round(book_value, 4),
+                    is_current=is_current,
+                )
+            )
+
+        current = next((p for p in periods if p.is_current), periods[-1] if periods else None)
+        accum = current.accumulated_depreciation if current else 0.0
+        book = current.book_value if current else cost
+        pct = round((accum / (cost - residual)) * 100, 2) if (cost - residual) > 0 else 0.0
+
+        return DepreciationScheduleRead(
+            config=DepreciationConfigRead.model_validate(config_row),
+            asset_cost=cost,
+            current_book_value=book,
+            accumulated_depreciation=accum,
+            percent_depreciated=pct,
+            periods=periods,
+        )
+
+    async def upsert_depreciation_config(
+        self,
+        asset_id: UUID,
+        data: DepreciationConfigCreate,
+        user_id: UUID,
+    ) -> DepreciationScheduleRead:
+        existing = (
+            await self.db.execute(
+                select(AssetDepreciationConfig).where(AssetDepreciationConfig.asset_id == asset_id)
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.method = data.method
+            existing.useful_life_years = data.useful_life_years
+            existing.residual_value = data.residual_value
+            existing.start_date = data.start_date
+            existing.updated_at = datetime.now(timezone.utc)
+        else:
+            config = AssetDepreciationConfig(
+                asset_id=asset_id,
+                method=data.method,
+                useful_life_years=data.useful_life_years,
+                residual_value=data.residual_value,
+                start_date=data.start_date,
+            )
+            self.db.add(config)
+
+        await self.db.commit()
+        return await self.get_depreciation(asset_id)

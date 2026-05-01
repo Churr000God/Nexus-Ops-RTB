@@ -160,6 +160,47 @@ class AssetAssignmentRead(BaseModel):
     notes: str | None
 
 
+# ── Depreciación ─────────────────────────────────────────────────────────────
+
+class DepreciationConfigCreate(BaseModel):
+    method: str = "STRAIGHT_LINE"
+    useful_life_years: int
+    residual_value: float = 0.0
+    start_date: date
+
+
+class DepreciationConfigRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    asset_id: UUID
+    method: str
+    useful_life_years: int
+    residual_value: float
+    start_date: date
+    created_at: datetime
+    updated_at: datetime
+
+
+class DepreciationPeriodRead(BaseModel):
+    year: int
+    period_start: date
+    period_end: date
+    annual_depreciation: float
+    accumulated_depreciation: float
+    book_value: float
+    is_current: bool
+
+
+class DepreciationScheduleRead(BaseModel):
+    config: DepreciationConfigRead | None
+    asset_cost: float | None
+    current_book_value: float | None
+    accumulated_depreciation: float | None
+    percent_depreciated: float | None
+    periods: list[DepreciationPeriodRead]
+
+
 # ── AssetWorkOrder ───────────────────────────────────────────────────────────
 
 class WorkOrderCreate(BaseModel):

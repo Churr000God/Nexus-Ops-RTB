@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { AlertTriangle, GitBranch, History, Pencil, Plus, Trash2, UserCheck, Wrench, X } from "lucide-react"
+import { AlertTriangle, GitBranch, History, Pencil, Plus, Trash2, TrendingDown, UserCheck, Wrench, X } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
 import type { AssetAssignment, AssetComponentDetail, AssetComponentHistoryItem, AssetRead, WorkOrderRead } from "@/types/assets"
 import { AssignAssetModal } from "./AssignAssetModal"
+import DepreciationTab from "./DepreciationTab"
 import { InstallComponentModal } from "./InstallComponentModal"
 import { RemoveComponentModal } from "./RemoveComponentModal"
 import { RetireAssetModal } from "./RetireAssetModal"
@@ -53,7 +54,7 @@ const OPERATION_COLORS: Record<string, string> = {
   REPLACE: "border-blue-500/30 bg-blue-500/10 text-blue-600",
 }
 
-type Tab = "info" | "components" | "history" | "assignments" | "children" | "maintenance"
+type Tab = "info" | "components" | "history" | "assignments" | "children" | "maintenance" | "depreciation"
 
 interface AssetDetailPanelProps {
   asset: AssetRead
@@ -354,7 +355,7 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
 
       {/* Tabs */}
       <div className="flex shrink-0 border-b border-border">
-        {(["info", "components", "history", "assignments", "children", "maintenance"] as Tab[]).map((t) => (
+        {(["info", "components", "history", "assignments", "children", "maintenance", "depreciation"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -390,6 +391,12 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
               <span className="flex items-center justify-center gap-1">
                 <Wrench className="h-3 w-3" />
                 {`Mant.${workOrders ? ` (${workOrders.length})` : ""}`}
+              </span>
+            )}
+            {t === "depreciation" && (
+              <span className="flex items-center justify-center gap-1">
+                <TrendingDown className="h-3 w-3" />
+                Depr.
               </span>
             )}
           </button>
@@ -577,6 +584,14 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
               }
             />
           </div>
+        )}
+
+        {tab === "depreciation" && (
+          <DepreciationTab
+            assetId={asset.id}
+            purchaseCost={asset.purchase_cost}
+            purchaseDate={asset.purchase_date}
+          />
         )}
       </div>
 

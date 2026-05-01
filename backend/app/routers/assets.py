@@ -16,6 +16,8 @@ from app.schemas.assets_schema import (
     AssetRead,
     AssetUpdate,
     AssignAssetPayload,
+    DepreciationConfigCreate,
+    DepreciationScheduleRead,
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
@@ -288,6 +290,27 @@ async def confirm_physical_count(
         return await AssetService(db).confirm_physical_count(count_id, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Depreciación ─────────────────────────────────────────────────────────────
+
+@router.get("/{asset_id}/depreciation", response_model=DepreciationScheduleRead)
+async def get_depreciation(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> DepreciationScheduleRead:
+    return await AssetService(db).get_depreciation(asset_id)
+
+
+@router.post("/{asset_id}/depreciation", response_model=DepreciationScheduleRead)
+async def upsert_depreciation(
+    asset_id: UUID,
+    data: DepreciationConfigCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DepreciationScheduleRead:
+    return await AssetService(db).upsert_depreciation_config(asset_id, data, current_user.id)
 
 
 # ── Snapshots (bajo /api/assets/snapshots para separar del inventario) ────────

@@ -223,6 +223,41 @@ class AssetComponentHistory(Base):
     asset: Mapped[Asset] = relationship(back_populates="history")
 
 
+class AssetDepreciationConfig(Base):
+    """Configuración de depreciación lineal para un activo.
+
+    Una sola fila por activo (UNIQUE asset_id). El cálculo del calendario
+    se hace en Python en AssetService.get_depreciation().
+    """
+
+    __tablename__ = "asset_depreciation_config"
+    __table_args__ = (
+        CheckConstraint("method IN ('STRAIGHT_LINE')", name="ck_depreciation_method"),
+        CheckConstraint("useful_life_years > 0", name="ck_depreciation_life_positive"),
+        CheckConstraint("residual_value >= 0", name="ck_depreciation_residual_non_negative"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    asset_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    method: Mapped[str] = mapped_column(String(20), nullable=False, default="STRAIGHT_LINE")
+    useful_life_years: Mapped[int] = mapped_column(nullable=False)
+    residual_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False, default=0)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class AssetWorkOrder(Base):
     """Orden de trabajo de mantenimiento para un activo físico.
 

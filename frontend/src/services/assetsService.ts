@@ -7,6 +7,8 @@ import type {
   AssetRead,
   AssetUpdate,
   AssignAssetPayload,
+  DepreciationConfigCreate,
+  DepreciationScheduleRead,
   InstallComponentPayload,
   InventoryCurrentItem,
   InventoryKpiV2,
@@ -244,6 +246,28 @@ export const assetsService = {
   ): Promise<WorkOrderRead> {
     return requestJson(`/api/assets/${assetId}/work-orders/${woId}`, {
       method: "PATCH",
+      body: data as never,
+      token,
+    })
+  },
+
+  // ── Depreciación ─────────────────────────────────────────────────────────
+
+  getDepreciation(
+    token: string | null,
+    assetId: string,
+    signal?: AbortSignal,
+  ): Promise<DepreciationScheduleRead> {
+    return requestJson(`/api/assets/${assetId}/depreciation`, { token, signal })
+  },
+
+  upsertDepreciation(
+    token: string | null,
+    assetId: string,
+    data: DepreciationConfigCreate,
+  ): Promise<DepreciationScheduleRead> {
+    return requestJson(`/api/assets/${assetId}/depreciation`, {
+      method: "POST",
       body: data as never,
       token,
     })
