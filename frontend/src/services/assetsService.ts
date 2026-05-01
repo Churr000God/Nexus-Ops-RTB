@@ -11,6 +11,7 @@ import type {
   InventoryCurrentItem,
   InventoryKpiV2,
   RemoveComponentPayload,
+  RetireAssetPayload,
 } from "@/types/assets"
 
 function withQuery(
@@ -147,6 +148,18 @@ export const assetsService = {
     data: AssignAssetPayload,
   ): Promise<AssetAssignment> {
     return requestJson(`/api/assets/${assetId}/assign`, {
+      method: "POST",
+      body: data as never,
+      token,
+    })
+  },
+
+  retireAsset(
+    token: string | null,
+    assetId: string,
+    data: RetireAssetPayload,
+  ): Promise<AssetRead> {
+    return requestJson(`/api/assets/${assetId}/retire`, {
       method: "POST",
       body: data as never,
       token,

@@ -97,8 +97,17 @@ export type AssetRead = {
   purchase_cost: number | null
   warranty_until: string | null
   notes: string | null
+  retired_at: string | null
+  retirement_reason: string | null
+  salvage_value: number | null
+  retired_by: string | null
   created_at: string
   updated_at: string
+}
+
+export type RetireAssetPayload = {
+  retirement_reason?: string | null
+  salvage_value?: number | null
 }
 
 export type AssetComponentDetail = {

@@ -20,6 +20,7 @@ from app.schemas.assets_schema import (
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
     RemoveComponentRequest,
+    RetireAssetPayload,
 )
 from app.services.assets_service import AssetService
 
@@ -138,6 +139,21 @@ async def assign_asset(
         return await AssetService(db).assign_asset(asset_id, data, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ── Retiro ───────────────────────────────────────────────────────────────────
+
+@router.post("/{asset_id}/retire", response_model=AssetRead)
+async def retire_asset(
+    asset_id: UUID,
+    data: RetireAssetPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssetRead:
+    try:
+        return await AssetService(db).retire_asset(asset_id, data, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Historial ─────────────────────────────────────────────────────────────────

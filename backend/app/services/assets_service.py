@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -19,6 +20,7 @@ from app.schemas.assets_schema import (
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
     RemoveComponentRequest,
+    RetireAssetPayload,
 )
 
 
@@ -260,6 +262,29 @@ class AssetService:
             await self.db.execute(sql, {"asset_id": asset_id, "limit": limit, "offset": offset})
         ).mappings().all()
         return [AssetAssignmentRead(**r) for r in rows]
+
+    # ── Retiro formal ────────────────────────────────────────────────────────
+
+    async def retire_asset(
+        self,
+        asset_id: UUID,
+        data: RetireAssetPayload,
+        user_id: UUID,
+    ) -> AssetRead:
+        asset = await self.db.get(Asset, asset_id)
+        if not asset:
+            raise ValueError("Asset no encontrado")
+        if asset.status in ("RETIRED", "DISMANTLED"):
+            raise ValueError(f"El activo ya está en estado '{asset.status}'")
+
+        asset.status = "RETIRED"
+        asset.retired_at = datetime.now(timezone.utc)
+        asset.retirement_reason = data.retirement_reason
+        asset.salvage_value = data.salvage_value
+        asset.retired_by = user_id
+        await self.db.commit()
+        await self.db.refresh(asset)
+        return AssetRead.model_validate(asset)
 
     # ── Snapshots ────────────────────────────────────────────────────────────
 

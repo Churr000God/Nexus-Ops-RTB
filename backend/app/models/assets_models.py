@@ -99,6 +99,12 @@ class Asset(Base):
     purchase_cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
     warranty_until: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    salvage_value: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    retired_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
+import { AlertTriangle, History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import type { AssetAssignment, AssetComponentDetail, AssetComponentHistoryItem, 
 import { AssignAssetModal } from "./AssignAssetModal"
 import { InstallComponentModal } from "./InstallComponentModal"
 import { RemoveComponentModal } from "./RemoveComponentModal"
+import { RetireAssetModal } from "./RetireAssetModal"
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   COMPUTER: "Computadora",
@@ -68,6 +69,7 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
   const [assignOpen, setAssignOpen] = useState(false)
   const [compKey, setCompKey] = useState(0)
   const [assignKey, setAssignKey] = useState(0)
+  const [retireOpen, setRetireOpen] = useState(false)
 
   const componentsFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
@@ -213,6 +215,16 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
           </p>
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
+          {!["RETIRED", "DISMANTLED"].includes(asset.status) && (
+            <button
+              type="button"
+              onClick={() => setRetireOpen(true)}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+              title="Dar de baja"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={onEdit}
@@ -311,6 +323,33 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
                 value={new Date(asset.created_at).toLocaleString("es-MX")}
               />
             </div>
+            {asset.retired_at && (
+              <div className="sm:col-span-2 rounded-md border border-red-500/20 bg-red-500/5 p-3 space-y-2">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-red-500">
+                  Baja formal
+                </p>
+                <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                  <InfoRow
+                    label="Fecha de baja"
+                    value={new Date(asset.retired_at).toLocaleDateString("es-MX")}
+                  />
+                  {asset.salvage_value != null && (
+                    <InfoRow
+                      label="Valor residual"
+                      value={asset.salvage_value.toLocaleString("es-MX", {
+                        style: "currency",
+                        currency: "MXN",
+                      })}
+                    />
+                  )}
+                  {asset.retirement_reason && (
+                    <div className="sm:col-span-2">
+                      <InfoRow label="Motivo" value={asset.retirement_reason} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </dl>
         )}
 
@@ -391,6 +430,12 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
         open={assignOpen}
         onClose={() => setAssignOpen(false)}
         onSuccess={refreshAssignments}
+        asset={asset}
+      />
+      <RetireAssetModal
+        open={retireOpen}
+        onClose={() => setRetireOpen(false)}
+        onSuccess={(_updated) => { onRefresh(); onClose() }}
         asset={asset}
       />
     </div>

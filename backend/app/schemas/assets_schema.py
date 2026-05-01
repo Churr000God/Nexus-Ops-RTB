@@ -59,6 +59,10 @@ class AssetRead(BaseModel):
     purchase_cost: float | None
     warranty_until: date | None
     notes: str | None
+    retired_at: datetime | None = None
+    retirement_reason: str | None = None
+    salvage_value: float | None = None
+    retired_by: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -124,6 +128,13 @@ class RemoveComponentRequest(BaseModel):
     is_reusable: bool
     reason: str | None = None
     notes: str | None = None
+
+
+# ── RetireAsset ──────────────────────────────────────────────────────────────
+
+class RetireAssetPayload(BaseModel):
+    retirement_reason: str | None = None
+    salvage_value: float | None = None
 
 
 # ── AssetAssignment ──────────────────────────────────────────────────────────
