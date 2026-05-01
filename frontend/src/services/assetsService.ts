@@ -16,6 +16,9 @@ import type {
   PhysicalCountRead,
   RemoveComponentPayload,
   RetireAssetPayload,
+  WorkOrderCreate,
+  WorkOrderRead,
+  WorkOrderUpdate,
 } from "@/types/assets"
 
 function withQuery(
@@ -212,5 +215,37 @@ export const assetsService = {
 
   confirmCount(token: string | null, countId: string): Promise<PhysicalCountRead> {
     return requestJson(`/api/assets/counts/${countId}/confirm`, { method: "POST", token })
+  },
+
+  // ── Órdenes de Mantenimiento ─────────────────────────────────────────────
+
+  createWorkOrder(token: string | null, assetId: string, data: WorkOrderCreate): Promise<WorkOrderRead> {
+    return requestJson(`/api/assets/${assetId}/work-orders`, {
+      method: "POST",
+      body: data as never,
+      token,
+    })
+  },
+
+  listWorkOrders(
+    token: string | null,
+    assetId: string,
+    params: { status?: string; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<WorkOrderRead[]> {
+    return requestJson(withQuery(`/api/assets/${assetId}/work-orders`, params), { token, signal })
+  },
+
+  updateWorkOrder(
+    token: string | null,
+    assetId: string,
+    woId: string,
+    data: WorkOrderUpdate,
+  ): Promise<WorkOrderRead> {
+    return requestJson(`/api/assets/${assetId}/work-orders/${woId}`, {
+      method: "PATCH",
+      body: data as never,
+      token,
+    })
   },
 }

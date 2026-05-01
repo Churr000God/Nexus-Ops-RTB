@@ -160,6 +160,53 @@ class AssetAssignmentRead(BaseModel):
     notes: str | None
 
 
+# ── AssetWorkOrder ───────────────────────────────────────────────────────────
+
+class WorkOrderCreate(BaseModel):
+    title: str
+    description: str | None = None
+    work_type: str = "CORRECTIVE"
+    priority: str = "MEDIUM"
+    scheduled_date: date | None = None
+    cost: float | None = None
+    notes: str | None = None
+
+
+class WorkOrderUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    work_type: str | None = None
+    priority: str | None = None
+    status: str | None = None
+    scheduled_date: date | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    cost: float | None = None
+    notes: str | None = None
+
+
+class WorkOrderRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    asset_id: UUID
+    title: str
+    description: str | None
+    work_type: str
+    priority: str
+    status: str
+    assigned_to: UUID | None
+    assigned_to_email: str | None = None
+    scheduled_date: date | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    cost: float | None
+    notes: str | None
+    created_by: UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
 # ── PhysicalCount ────────────────────────────────────────────────────────────
 
 class PhysicalCountCreate(BaseModel):

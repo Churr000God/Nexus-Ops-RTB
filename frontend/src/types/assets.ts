@@ -143,6 +143,49 @@ export type AssignAssetPayload = {
   notes?: string | null
 }
 
+export type WorkOrderRead = {
+  id: string
+  asset_id: string
+  title: string
+  description: string | null
+  work_type: "PREVENTIVE" | "CORRECTIVE" | "INSPECTION" | "UPGRADE"
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+  status: "OPEN" | "IN_PROGRESS" | "DONE" | "CANCELLED"
+  assigned_to: string | null
+  assigned_to_email: string | null
+  scheduled_date: string | null
+  started_at: string | null
+  completed_at: string | null
+  cost: number | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type WorkOrderCreate = {
+  title: string
+  description?: string | null
+  work_type?: string
+  priority?: string
+  scheduled_date?: string | null
+  cost?: number | null
+  notes?: string | null
+}
+
+export type WorkOrderUpdate = {
+  title?: string | null
+  description?: string | null
+  work_type?: string | null
+  priority?: string | null
+  status?: string | null
+  scheduled_date?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  cost?: number | null
+  notes?: string | null
+}
+
 export type PhysicalCountRead = {
   id: string
   count_date: string

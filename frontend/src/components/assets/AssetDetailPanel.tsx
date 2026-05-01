@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { AlertTriangle, GitBranch, History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
+import { AlertTriangle, GitBranch, History, Pencil, Plus, Trash2, UserCheck, Wrench, X } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
@@ -8,11 +8,12 @@ import { formatCurrencyMXN } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
 import { useAuthStore } from "@/stores/authStore"
 import { cn } from "@/lib/utils"
-import type { AssetAssignment, AssetComponentDetail, AssetComponentHistoryItem, AssetRead } from "@/types/assets"
+import type { AssetAssignment, AssetComponentDetail, AssetComponentHistoryItem, AssetRead, WorkOrderRead } from "@/types/assets"
 import { AssignAssetModal } from "./AssignAssetModal"
 import { InstallComponentModal } from "./InstallComponentModal"
 import { RemoveComponentModal } from "./RemoveComponentModal"
 import { RetireAssetModal } from "./RetireAssetModal"
+import { WorkOrderFormModal } from "./WorkOrderFormModal"
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   COMPUTER: "Computadora",
@@ -52,7 +53,7 @@ const OPERATION_COLORS: Record<string, string> = {
   REPLACE: "border-blue-500/30 bg-blue-500/10 text-blue-600",
 }
 
-type Tab = "info" | "components" | "history" | "assignments" | "children"
+type Tab = "info" | "components" | "history" | "assignments" | "children" | "maintenance"
 
 interface AssetDetailPanelProps {
   asset: AssetRead
@@ -70,6 +71,9 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
   const [compKey, setCompKey] = useState(0)
   const [assignKey, setAssignKey] = useState(0)
   const [retireOpen, setRetireOpen] = useState(false)
+  const [woOpen, setWoOpen] = useState(false)
+  const [woTarget, setWoTarget] = useState<WorkOrderRead | null>(null)
+  const [woKey, setWoKey] = useState(0)
 
   const componentsFetcher = useCallback(
     (signal: AbortSignal) => assetsService.getComponents(token, asset.id, signal),
@@ -96,6 +100,15 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     [token, asset.id],
   )
   const { data: children, status: childrenStatus } = useApi(childrenFetcher)
+
+  const woFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.listWorkOrders(token, asset.id, {}, signal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, asset.id, woKey],
+  )
+  const { data: workOrders, status: woStatus } = useApi(woFetcher)
+
+  function refreshWo() { setWoKey((k) => k + 1) }
 
   const parentFetcher = useCallback(
     (signal: AbortSignal) =>
@@ -192,6 +205,66 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     { key: "notes", header: "Notas", cell: (r) => r.notes ?? "—" },
   ]
 
+  const WO_TYPE_LABELS: Record<string, string> = {
+    PREVENTIVE: "Preventivo", CORRECTIVE: "Correctivo", INSPECTION: "Inspección", UPGRADE: "Mejora",
+  }
+  const WO_PRIORITY_COLORS: Record<string, string> = {
+    LOW: "text-slate-500", MEDIUM: "text-amber-600", HIGH: "text-orange-500", URGENT: "text-red-600",
+  }
+  const WO_STATUS_COLORS: Record<string, string> = {
+    OPEN: "border-amber-500/30 bg-amber-500/10 text-amber-600",
+    IN_PROGRESS: "border-blue-500/30 bg-blue-500/10 text-blue-600",
+    DONE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600",
+    CANCELLED: "border-slate-500/30 bg-slate-500/10 text-slate-500",
+  }
+  const WO_STATUS_LABELS: Record<string, string> = {
+    OPEN: "Abierta", IN_PROGRESS: "En Proceso", DONE: "Completada", CANCELLED: "Cancelada",
+  }
+
+  const workOrderColumns: DataTableColumn<WorkOrderRead>[] = [
+    {
+      key: "status",
+      header: "Estado",
+      cell: (r) => (
+        <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", WO_STATUS_COLORS[r.status] ?? WO_STATUS_COLORS.OPEN)}>
+          {WO_STATUS_LABELS[r.status] ?? r.status}
+        </span>
+      ),
+    },
+    {
+      key: "priority",
+      header: "P",
+      cell: (r) => (
+        <span className={cn("text-xs font-bold", WO_PRIORITY_COLORS[r.priority] ?? "text-muted-foreground")}>
+          {r.priority[0]}
+        </span>
+      ),
+    },
+    { key: "title", header: "Título", cell: (r) => <span className="text-sm">{r.title}</span> },
+    { key: "work_type", header: "Tipo", cell: (r) => WO_TYPE_LABELS[r.work_type] ?? r.work_type },
+    {
+      key: "scheduled_date",
+      header: "Fecha",
+      cell: (r) => r.scheduled_date
+        ? new Date(r.scheduled_date + "T12:00:00").toLocaleDateString("es-MX")
+        : "—",
+    },
+    {
+      key: "actions",
+      header: "",
+      cell: (r) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setWoTarget(r); setWoOpen(true) }}
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          title="Editar orden"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      ),
+    },
+  ]
+
   const childrenColumns: DataTableColumn<AssetRead>[] = [
     { key: "asset_code", header: "Código", cell: (r) => <span className="font-mono text-xs">{r.asset_code}</span> },
     { key: "name", header: "Nombre", cell: (r) => r.name },
@@ -281,7 +354,7 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
 
       {/* Tabs */}
       <div className="flex shrink-0 border-b border-border">
-        {(["info", "components", "history", "assignments", "children"] as Tab[]).map((t) => (
+        {(["info", "components", "history", "assignments", "children", "maintenance"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -311,6 +384,12 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
               <span className="flex items-center justify-center gap-1">
                 <GitBranch className="h-3 w-3" />
                 {`Sub-activos${children ? ` (${children.length})` : ""}`}
+              </span>
+            )}
+            {t === "maintenance" && (
+              <span className="flex items-center justify-center gap-1">
+                <Wrench className="h-3 w-3" />
+                {`Mant.${workOrders ? ` (${workOrders.length})` : ""}`}
               </span>
             )}
           </button>
@@ -442,6 +521,28 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
           />
         )}
 
+        {tab === "maintenance" && (
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => { setWoTarget(null); setWoOpen(true) }}>
+                <Plus className="h-3.5 w-3.5" />
+                Nueva Orden
+              </Button>
+            </div>
+            <DataTable
+              columns={workOrderColumns}
+              rows={workOrders ?? []}
+              rowKey={(r) => r.id}
+              maxHeight="300px"
+              emptyLabel={
+                woStatus === "loading" || woStatus === "idle"
+                  ? "Cargando…"
+                  : "Sin órdenes de mantenimiento"
+              }
+            />
+          </div>
+        )}
+
         {tab === "children" && (
           <DataTable
             columns={childrenColumns}
@@ -504,6 +605,13 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
         onClose={() => setRetireOpen(false)}
         onSuccess={(_updated) => { onRefresh(); onClose() }}
         asset={asset}
+      />
+      <WorkOrderFormModal
+        open={woOpen}
+        onClose={() => { setWoOpen(false); setWoTarget(null) }}
+        onSuccess={() => refreshWo()}
+        assetId={asset.id}
+        workOrder={woTarget ?? undefined}
       />
     </div>
   )

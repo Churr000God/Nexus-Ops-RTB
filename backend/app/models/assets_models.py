@@ -223,6 +223,62 @@ class AssetComponentHistory(Base):
     asset: Mapped[Asset] = relationship(back_populates="history")
 
 
+class AssetWorkOrder(Base):
+    """Orden de trabajo de mantenimiento para un activo físico.
+
+    Puede ser preventiva (agendada), correctiva (falla), inspección o mejora.
+    Las órdenes completadas actualizan updated_at del activo vía la aplicación.
+    """
+
+    __tablename__ = "asset_work_orders"
+    __table_args__ = (
+        CheckConstraint(
+            "work_type IN ('PREVENTIVE','CORRECTIVE','INSPECTION','UPGRADE')",
+            name="ck_work_orders_work_type",
+        ),
+        CheckConstraint(
+            "priority IN ('LOW','MEDIUM','HIGH','URGENT')",
+            name="ck_work_orders_priority",
+        ),
+        CheckConstraint(
+            "status IN ('OPEN','IN_PROGRESS','DONE','CANCELLED')",
+            name="ck_work_orders_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    asset_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    work_type: Mapped[str] = mapped_column(String(20), nullable=False, default="CORRECTIVE")
+    priority: Mapped[str] = mapped_column(String(10), nullable=False, default="MEDIUM")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN", index=True)
+    assigned_to: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    scheduled_date: Mapped[date | None] = mapped_column(Date)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cost: Mapped[float | None] = mapped_column(Numeric(14, 4))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class PhysicalCount(Base):
     """Sesión de conteo físico de activos.
 

@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, InventorySnapshot, PhysicalCount, PhysicalCountLine
+from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, AssetWorkOrder, InventorySnapshot, PhysicalCount, PhysicalCountLine
 from app.schemas.assets_schema import (
     AssetAssignmentRead,
     AssetComponentCreate,
@@ -26,6 +26,9 @@ from app.schemas.assets_schema import (
     PhysicalCountRead,
     RemoveComponentRequest,
     RetireAssetPayload,
+    WorkOrderCreate,
+    WorkOrderRead,
+    WorkOrderUpdate,
 )
 
 
@@ -274,6 +277,95 @@ class AssetService:
             await self.db.execute(sql, {"asset_id": asset_id, "limit": limit, "offset": offset})
         ).mappings().all()
         return [AssetAssignmentRead(**r) for r in rows]
+
+    # ── Órdenes de Mantenimiento ─────────────────────────────────────────────
+
+    async def _wo_to_read(self, wo_id: UUID) -> WorkOrderRead:
+        """Enriquece la orden con el email del técnico asignado."""
+        sql = text("""
+            SELECT
+                wo.id, wo.asset_id, wo.title, wo.description,
+                wo.work_type, wo.priority, wo.status,
+                wo.assigned_to,
+                u.email AS assigned_to_email,
+                wo.scheduled_date, wo.started_at, wo.completed_at,
+                wo.cost, wo.notes, wo.created_by,
+                wo.created_at, wo.updated_at
+            FROM asset_work_orders wo
+            LEFT JOIN users u ON u.id = wo.assigned_to
+            WHERE wo.id = :id
+        """)
+        row = (await self.db.execute(sql, {"id": wo_id})).mappings().one()
+        return WorkOrderRead(**row)
+
+    async def create_work_order(
+        self,
+        asset_id: UUID,
+        data: WorkOrderCreate,
+        user_id: UUID,
+    ) -> WorkOrderRead:
+        wo = AssetWorkOrder(
+            asset_id=asset_id,
+            title=data.title,
+            description=data.description,
+            work_type=data.work_type,
+            priority=data.priority,
+            scheduled_date=data.scheduled_date,
+            cost=data.cost,
+            notes=data.notes,
+            created_by=user_id,
+        )
+        self.db.add(wo)
+        await self.db.commit()
+        await self.db.refresh(wo)
+        return await self._wo_to_read(wo.id)
+
+    async def list_work_orders(
+        self,
+        asset_id: UUID,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[WorkOrderRead]:
+        sql = text("""
+            SELECT
+                wo.id, wo.asset_id, wo.title, wo.description,
+                wo.work_type, wo.priority, wo.status,
+                wo.assigned_to,
+                u.email AS assigned_to_email,
+                wo.scheduled_date, wo.started_at, wo.completed_at,
+                wo.cost, wo.notes, wo.created_by,
+                wo.created_at, wo.updated_at
+            FROM asset_work_orders wo
+            LEFT JOIN users u ON u.id = wo.assigned_to
+            WHERE wo.asset_id = :asset_id
+            {status_filter}
+            ORDER BY
+                CASE wo.status WHEN 'OPEN' THEN 1 WHEN 'IN_PROGRESS' THEN 2 ELSE 3 END,
+                wo.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """.format(status_filter="AND wo.status = :status" if status else ""))
+        params: dict = {"asset_id": asset_id, "limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        rows = (await self.db.execute(sql, params)).mappings().all()
+        return [WorkOrderRead(**r) for r in rows]
+
+    async def update_work_order(
+        self,
+        asset_id: UUID,
+        wo_id: UUID,
+        data: WorkOrderUpdate,
+        user_id: UUID,
+    ) -> WorkOrderRead:
+        wo = await self.db.get(AssetWorkOrder, wo_id)
+        if not wo or wo.asset_id != asset_id:
+            raise ValueError("Orden de trabajo no encontrada")
+        for field, value in data.model_dump(exclude_none=True).items():
+            setattr(wo, field, value)
+        wo.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        return await self._wo_to_read(wo.id)
 
     # ── Jerarquía ────────────────────────────────────────────────────────────
 

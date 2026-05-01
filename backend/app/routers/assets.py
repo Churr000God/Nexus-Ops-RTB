@@ -25,6 +25,9 @@ from app.schemas.assets_schema import (
     PhysicalCountRead,
     RemoveComponentRequest,
     RetireAssetPayload,
+    WorkOrderCreate,
+    WorkOrderRead,
+    WorkOrderUpdate,
 )
 from app.services.assets_service import AssetService
 
@@ -82,6 +85,50 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset no encontrado")
     return asset
+
+
+# ── Órdenes de Mantenimiento ─────────────────────────────────────────────────
+
+@router.post(
+    "/{asset_id}/work-orders",
+    response_model=WorkOrderRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_work_order(
+    asset_id: UUID,
+    data: WorkOrderCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WorkOrderRead:
+    return await AssetService(db).create_work_order(asset_id, data, current_user.id)
+
+
+@router.get("/{asset_id}/work-orders", response_model=list[WorkOrderRead])
+async def list_work_orders(
+    asset_id: UUID,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[WorkOrderRead]:
+    return await AssetService(db).list_work_orders(
+        asset_id, status=status, limit=limit, offset=offset
+    )
+
+
+@router.patch("/{asset_id}/work-orders/{wo_id}", response_model=WorkOrderRead)
+async def update_work_order(
+    asset_id: UUID,
+    wo_id: UUID,
+    data: WorkOrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WorkOrderRead:
+    try:
+        return await AssetService(db).update_work_order(asset_id, wo_id, data, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ── Jerarquía ────────────────────────────────────────────────────────────────
