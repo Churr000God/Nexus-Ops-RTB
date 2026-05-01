@@ -87,4 +87,4 @@ Que queda pendiente para la proxima sesion.
 |---------|-------|
 | Total sesiones | 22 |
 | Errores registrados | 22 |
-| Lecciones documentadas | 27 |
+| Lecciones documentadas | 28 |

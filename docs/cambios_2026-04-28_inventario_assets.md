@@ -316,6 +316,47 @@ SELECT jobname, schedule FROM cron.job WHERE jobname = 'close-monthly-inventory-
 
 ---
 
+## Cambios posteriores (2026-04-30)
+
+### Mejora visual y unificación de tema
+
+- Unificación del diseño de `/inventario` y `/equipos` al tema claro del proyecto (`surface-card`, `panel-header`, componentes `KpiCard` con glow).
+- Eliminación del mix visual oscuro/claro (se reemplazaron `bg-slate-800`, `text-white` por `bg-background`, `text-foreground`, etc.).
+- Integración de acciones Reporte/CSV/Email directamente en la página de Almacén (antes solo disponibles en `AlmacenDashboard`).
+
+### Separación de vistas vendible / interno
+
+- **`/inventario`** — muestra únicamente productos vendibles (`is_saleable = TRUE`). Se eliminó el tab "Inventario Interno".
+- **`/equipos`** — reemplazó la gestión de activos físicos (`/api/assets`) por el listado de productos internos/no vendibles (`/api/inventario/interno`). La tabla ahora usa las mismas columnas de inventario (SKU, Stock Real, Costo Promedio, etc.).
+
+### Búsqueda, filtros y ordenamiento en tablas
+
+**Backend:**
+- `GET /api/inventario/vendible` e `GET /api/inventario/interno` aceptan nuevos query params:
+  - `search` — búsqueda parcial por SKU o nombre (`ILIKE`).
+  - `category` — filtro por categoría (`ILIKE`).
+  - `sort_by` — campo de ordenamiento (whitelist: `sku`, `name`, `category`, `quantity_on_hand`, `avg_unit_cost`, `total_value`, `stock_status`).
+  - `sort_order` — `asc` o `desc`.
+- El servicio `get_inventory_current` construye la cláusula `ORDER BY` de forma segura mediante whitelist para prevenir inyección SQL.
+
+**Frontend:**
+- Nueva barra de herramientas sobre cada tabla con:
+  - Input de búsqueda con debounce (300 ms).
+  - Filtro por categoría (texto libre).
+  - Filtro por estado de stock (Todos / OK / Bajo mínimo / Sin stock).
+  - Selector de ordenamiento + botón toggle ascendente/descendente.
+  - Botón "Limpiar" que aparece cuando hay filtros activos.
+
+### KPIs segmentados por tipo de inventario
+
+- El endpoint `/api/inventario/kpis-v2` ahora devuelve conteos separados:
+  - `productos_below_min_vendible` / `productos_out_of_stock_vendible`
+  - `productos_below_min_interno` / `productos_out_of_stock_interno`
+- **`/inventario`** — las tarjetas "Bajo Mínimo" y "Sin Stock Total" reflejan solo productos vendibles.
+- **`/equipos`** — las mismas tarjetas reflejan solo productos internos.
+
+---
+
 ## Pendientes (no bloqueantes)
 
 | Item | Descripción |
