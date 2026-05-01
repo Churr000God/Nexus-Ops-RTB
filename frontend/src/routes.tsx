@@ -23,6 +23,7 @@ import CotizacionesPage from "@/pages/CotizacionesPage"
 import EnviosPage from "@/pages/EnviosPage"
 import FleterasPage from "@/pages/FleterasPage"
 import EquiposPage from "@/pages/EquiposPage"
+import ConteosPage from "@/pages/ConteosPage"
 import GastosPage from "@/pages/GastosPage"
 import { HomePage } from "@/pages/Home"
 import { AlmacenPage } from "@/pages/Inventarios"
@@ -144,6 +145,7 @@ export function AppRoutes() {
 
           {/* ── Equipos ── */}
           <Route path="equipos" element={<EquiposPage />} />
+          <Route path="activos/conteos" element={<ConteosPage />} />
 
           {/* ── Clientes ── */}
           <Route path="clientes" element={<ClientesPage />} />

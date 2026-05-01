@@ -19,6 +19,10 @@ from app.schemas.assets_schema import (
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
+    PhysicalCountCreate,
+    PhysicalCountLineRead,
+    PhysicalCountLineUpdate,
+    PhysicalCountRead,
     RemoveComponentRequest,
     RetireAssetPayload,
 )
@@ -167,6 +171,63 @@ async def get_history(
     _: User = Depends(get_current_user),
 ) -> list[AssetComponentHistoryRead]:
     return await AssetService(db).get_history(asset_id, limit=limit, offset=offset)
+
+
+# ── Conteo Físico ────────────────────────────────────────────────────────────
+
+@router.post("/counts", response_model=PhysicalCountRead, status_code=status.HTTP_201_CREATED)
+async def create_physical_count(
+    data: PhysicalCountCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PhysicalCountRead:
+    return await AssetService(db).create_physical_count(data, current_user.id)
+
+
+@router.get("/counts", response_model=list[PhysicalCountRead])
+async def list_physical_counts(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PhysicalCountRead]:
+    return await AssetService(db).list_physical_counts(status=status, limit=limit, offset=offset)
+
+
+@router.get("/counts/{count_id}/lines", response_model=list[PhysicalCountLineRead])
+async def get_count_lines(
+    count_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[PhysicalCountLineRead]:
+    return await AssetService(db).get_physical_count_lines(count_id)
+
+
+@router.patch("/counts/{count_id}/lines/{line_id}", response_model=PhysicalCountLineRead)
+async def update_count_line(
+    count_id: UUID,
+    line_id: UUID,
+    data: PhysicalCountLineUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> PhysicalCountLineRead:
+    try:
+        return await AssetService(db).update_count_line(count_id, line_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/counts/{count_id}/confirm", response_model=PhysicalCountRead)
+async def confirm_physical_count(
+    count_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PhysicalCountRead:
+    try:
+        return await AssetService(db).confirm_physical_count(count_id, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Snapshots (bajo /api/assets/snapshots para separar del inventario) ────────

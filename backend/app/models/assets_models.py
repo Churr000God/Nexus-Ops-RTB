@@ -207,6 +207,67 @@ class AssetComponentHistory(Base):
     asset: Mapped[Asset] = relationship(back_populates="history")
 
 
+class PhysicalCount(Base):
+    """Sesión de conteo físico de activos.
+
+    Contiene un snapshot de todos los activos relevantes en el momento
+    de crear el conteo. Las líneas se marcan found/not-found durante
+    el recorrido físico y se confirman al cerrar la sesión.
+    """
+
+    __tablename__ = "physical_counts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('DRAFT','CONFIRMED','CANCELLED')",
+            name="ck_physical_counts_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    count_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    location_filter: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT", index=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    lines: Mapped[list[PhysicalCountLine]] = relationship(
+        back_populates="count", cascade="all, delete-orphan"
+    )
+
+
+class PhysicalCountLine(Base):
+    """Línea de conteo físico — un activo dentro de una sesión de conteo."""
+
+    __tablename__ = "physical_count_lines"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    count_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("physical_counts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    asset_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    asset_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    asset_name: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_location: Mapped[str | None] = mapped_column(Text)
+    scanned_location: Mapped[str | None] = mapped_column(Text)
+    found: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    count: Mapped[PhysicalCount] = relationship(back_populates="lines")
+
+
 class AssetAssignmentHistory(Base):
     """Serie de tiempo de asignaciones de un equipo.
 

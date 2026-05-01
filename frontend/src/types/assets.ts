@@ -140,6 +140,46 @@ export type AssignAssetPayload = {
   notes?: string | null
 }
 
+export type PhysicalCountRead = {
+  id: string
+  count_date: string
+  location_filter: string | null
+  status: "DRAFT" | "CONFIRMED" | "CANCELLED"
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  confirmed_at: string | null
+  confirmed_by: string | null
+  total_lines: number
+  found_count: number
+  not_found_count: number
+  pending_count: number
+}
+
+export type PhysicalCountCreate = {
+  count_date: string
+  location_filter?: string | null
+  notes?: string | null
+}
+
+export type PhysicalCountLineRead = {
+  id: string
+  count_id: string
+  asset_id: string
+  asset_code: string
+  asset_name: string
+  expected_location: string | null
+  scanned_location: string | null
+  found: boolean | null
+  notes: string | null
+}
+
+export type PhysicalCountLineUpdate = {
+  found?: boolean | null
+  scanned_location?: string | null
+  notes?: string | null
+}
+
 export type AssetComponentHistoryItem = {
   history_id: string
   occurred_at: string

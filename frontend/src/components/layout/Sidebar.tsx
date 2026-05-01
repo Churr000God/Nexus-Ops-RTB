@@ -128,6 +128,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <SectionLabel>Inventario & Activos</SectionLabel>
         <NavItem to="/inventario" label="Almacén" icon={Package} onNavigate={onNavigate} />
         <NavItem to="/equipos" label="Equipos" icon={Laptop} onNavigate={onNavigate} />
+        <NavItem to="/activos/conteos" label="Conteos Físicos" icon={ClipboardList} onNavigate={onNavigate} />
 
         {/* Clientes & Proveedores */}
         <SectionLabel>Clientes & Proveedores</SectionLabel>

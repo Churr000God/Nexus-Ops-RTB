@@ -10,6 +10,10 @@ import type {
   InstallComponentPayload,
   InventoryCurrentItem,
   InventoryKpiV2,
+  PhysicalCountCreate,
+  PhysicalCountLineRead,
+  PhysicalCountLineUpdate,
+  PhysicalCountRead,
   RemoveComponentPayload,
   RetireAssetPayload,
 } from "@/types/assets"
@@ -164,5 +168,44 @@ export const assetsService = {
       body: data as never,
       token,
     })
+  },
+
+  // ── Conteos Físicos ──────────────────────────────────────────────────────
+
+  createCount(token: string | null, data: PhysicalCountCreate): Promise<PhysicalCountRead> {
+    return requestJson("/api/assets/counts", { method: "POST", body: data as never, token })
+  },
+
+  listCounts(
+    token: string | null,
+    params: { status?: string; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<PhysicalCountRead[]> {
+    return requestJson(withQuery("/api/assets/counts", params), { token, signal })
+  },
+
+  getCountLines(
+    token: string | null,
+    countId: string,
+    signal?: AbortSignal,
+  ): Promise<PhysicalCountLineRead[]> {
+    return requestJson(`/api/assets/counts/${countId}/lines`, { token, signal })
+  },
+
+  updateCountLine(
+    token: string | null,
+    countId: string,
+    lineId: string,
+    data: PhysicalCountLineUpdate,
+  ): Promise<PhysicalCountLineRead> {
+    return requestJson(`/api/assets/counts/${countId}/lines/${lineId}`, {
+      method: "PATCH",
+      body: data as never,
+      token,
+    })
+  },
+
+  confirmCount(token: string | null, countId: string): Promise<PhysicalCountRead> {
+    return requestJson(`/api/assets/counts/${countId}/confirm`, { method: "POST", token })
   },
 }

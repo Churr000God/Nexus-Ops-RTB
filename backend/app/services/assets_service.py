@@ -5,8 +5,9 @@ from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, InventorySnapshot
+from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, InventorySnapshot, PhysicalCount, PhysicalCountLine
 from app.schemas.assets_schema import (
     AssetAssignmentRead,
     AssetComponentCreate,
@@ -19,6 +20,10 @@ from app.schemas.assets_schema import (
     InventoryCurrentRead,
     InventoryKpiSummaryRead,
     InventorySnapshotRead,
+    PhysicalCountCreate,
+    PhysicalCountLineRead,
+    PhysicalCountLineUpdate,
+    PhysicalCountRead,
     RemoveComponentRequest,
     RetireAssetPayload,
 )
@@ -285,6 +290,143 @@ class AssetService:
         await self.db.commit()
         await self.db.refresh(asset)
         return AssetRead.model_validate(asset)
+
+    # ── Conteo Físico ────────────────────────────────────────────────────────
+
+    def _count_to_read(self, count: PhysicalCount) -> PhysicalCountRead:
+        lines = count.lines if count.lines is not None else []
+        total = len(lines)
+        found = sum(1 for l in lines if l.found is True)
+        not_found = sum(1 for l in lines if l.found is False)
+        return PhysicalCountRead(
+            id=count.id,
+            count_date=count.count_date,
+            location_filter=count.location_filter,
+            status=count.status,
+            notes=count.notes,
+            created_by=count.created_by,
+            created_at=count.created_at,
+            confirmed_at=count.confirmed_at,
+            confirmed_by=count.confirmed_by,
+            total_lines=total,
+            found_count=found,
+            not_found_count=not_found,
+            pending_count=total - found - not_found,
+        )
+
+    async def create_physical_count(
+        self,
+        data: PhysicalCountCreate,
+        user_id: UUID,
+    ) -> PhysicalCountRead:
+        count = PhysicalCount(
+            count_date=data.count_date,
+            location_filter=data.location_filter,
+            notes=data.notes,
+            created_by=user_id,
+        )
+        self.db.add(count)
+        await self.db.flush()
+
+        stmt = select(Asset).where(Asset.status.notin_(["RETIRED", "DISMANTLED"]))
+        if data.location_filter:
+            stmt = stmt.where(Asset.location.ilike(f"%{data.location_filter}%"))
+        assets = (await self.db.execute(stmt)).scalars().all()
+
+        for asset in assets:
+            line = PhysicalCountLine(
+                count_id=count.id,
+                asset_id=asset.id,
+                asset_code=asset.asset_code,
+                asset_name=asset.name,
+                expected_location=asset.location,
+            )
+            self.db.add(line)
+
+        await self.db.commit()
+
+        stmt2 = (
+            select(PhysicalCount)
+            .where(PhysicalCount.id == count.id)
+            .options(selectinload(PhysicalCount.lines))
+        )
+        count = (await self.db.execute(stmt2)).scalar_one()
+        return self._count_to_read(count)
+
+    async def list_physical_counts(
+        self,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[PhysicalCountRead]:
+        stmt = (
+            select(PhysicalCount)
+            .options(selectinload(PhysicalCount.lines))
+            .order_by(PhysicalCount.count_date.desc(), PhysicalCount.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if status:
+            stmt = stmt.where(PhysicalCount.status == status)
+        counts = (await self.db.execute(stmt)).scalars().all()
+        return [self._count_to_read(c) for c in counts]
+
+    async def get_physical_count_lines(
+        self,
+        count_id: UUID,
+    ) -> list[PhysicalCountLineRead]:
+        stmt = (
+            select(PhysicalCountLine)
+            .where(PhysicalCountLine.count_id == count_id)
+            .order_by(PhysicalCountLine.asset_code)
+        )
+        lines = (await self.db.execute(stmt)).scalars().all()
+        return [PhysicalCountLineRead.model_validate(l) for l in lines]
+
+    async def update_count_line(
+        self,
+        count_id: UUID,
+        line_id: UUID,
+        data: PhysicalCountLineUpdate,
+    ) -> PhysicalCountLineRead:
+        line = await self.db.get(PhysicalCountLine, line_id)
+        if not line or line.count_id != count_id:
+            raise ValueError("Línea no encontrada")
+        count = await self.db.get(PhysicalCount, count_id)
+        if count and count.status != "DRAFT":
+            raise ValueError("El conteo ya está cerrado")
+        if data.found is not None:
+            line.found = data.found
+        if data.scanned_location is not None:
+            line.scanned_location = data.scanned_location
+        if data.notes is not None:
+            line.notes = data.notes
+        await self.db.commit()
+        await self.db.refresh(line)
+        return PhysicalCountLineRead.model_validate(line)
+
+    async def confirm_physical_count(
+        self,
+        count_id: UUID,
+        user_id: UUID,
+    ) -> PhysicalCountRead:
+        count = await self.db.get(PhysicalCount, count_id)
+        if not count:
+            raise ValueError("Conteo no encontrado")
+        if count.status != "DRAFT":
+            raise ValueError(f"El conteo ya está en estado '{count.status}'")
+        count.status = "CONFIRMED"
+        count.confirmed_at = datetime.now(timezone.utc)
+        count.confirmed_by = user_id
+        await self.db.commit()
+
+        stmt = (
+            select(PhysicalCount)
+            .where(PhysicalCount.id == count_id)
+            .options(selectinload(PhysicalCount.lines))
+        )
+        count = (await self.db.execute(stmt)).scalar_one()
+        return self._count_to_read(count)
 
     # ── Snapshots ────────────────────────────────────────────────────────────
 

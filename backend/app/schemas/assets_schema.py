@@ -157,6 +157,52 @@ class AssetAssignmentRead(BaseModel):
     notes: str | None
 
 
+# ── PhysicalCount ────────────────────────────────────────────────────────────
+
+class PhysicalCountCreate(BaseModel):
+    count_date: date
+    location_filter: str | None = None
+    notes: str | None = None
+
+
+class PhysicalCountLineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    count_id: UUID
+    asset_id: UUID
+    asset_code: str
+    asset_name: str
+    expected_location: str | None
+    scanned_location: str | None
+    found: bool | None
+    notes: str | None
+
+
+class PhysicalCountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    count_date: date
+    location_filter: str | None
+    status: str
+    notes: str | None
+    created_by: UUID | None
+    created_at: datetime
+    confirmed_at: datetime | None
+    confirmed_by: UUID | None
+    total_lines: int = 0
+    found_count: int = 0
+    not_found_count: int = 0
+    pending_count: int = 0
+
+
+class PhysicalCountLineUpdate(BaseModel):
+    found: bool | None = None
+    scanned_location: str | None = None
+    notes: str | None = None
+
+
 # ── InventorySnapshot ────────────────────────────────────────────────────────
 
 class InventorySnapshotRead(BaseModel):
