@@ -46,6 +46,7 @@ export type AssetCreate = {
   model?: string | null
   location?: string | null
   assigned_user_id?: string | null
+  parent_asset_id?: string | null
   status?: string
   purchase_date?: string | null
   purchase_cost?: number | null
@@ -61,6 +62,7 @@ export type AssetUpdate = {
   model?: string | null
   location?: string | null
   assigned_user_id?: string | null
+  parent_asset_id?: string | null
   status?: string | null
   purchase_date?: string | null
   purchase_cost?: number | null
@@ -92,6 +94,7 @@ export type AssetRead = {
   model: string | null
   location: string | null
   assigned_user_id: string | null
+  parent_asset_id: string | null
   status: string
   purchase_date: string | null
   purchase_cost: number | null

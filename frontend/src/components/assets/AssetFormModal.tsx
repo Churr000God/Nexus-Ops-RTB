@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { Search, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -85,14 +85,48 @@ export function AssetFormModal({ open, onClose, onSuccess, asset }: AssetFormMod
   const [saving, setSaving] = useState(false)
   const firstRef = useRef<HTMLInputElement>(null)
 
+  // Parent asset search state
+  const [parentSearch, setParentSearch] = useState("")
+  const [parentResults, setParentResults] = useState<AssetRead[]>([])
+  const [parentSelected, setParentSelected] = useState<AssetRead | null>(null)
+  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
+
   const isEdit = !!asset
 
   useEffect(() => {
     if (open) {
       setForm(asset ? assetToForm(asset) : EMPTY)
+      setParentSearch("")
+      setParentResults([])
+      setParentSelected(null)
       setTimeout(() => firstRef.current?.focus(), 50)
     }
   }, [open, asset])
+
+  function handleParentSearch(q: string) {
+    setParentSearch(q)
+    if (searchTimer) clearTimeout(searchTimer)
+    if (!q.trim()) { setParentResults([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const results = await assetsService.listAssets(token, { search: q, limit: 8 })
+        setParentResults(results.filter((a) => a.id !== asset?.id))
+      } catch { setParentResults([]) }
+    }, 300)
+    setSearchTimer(t)
+  }
+
+  function selectParent(a: AssetRead) {
+    setParentSelected(a)
+    setParentSearch("")
+    setParentResults([])
+  }
+
+  function clearParent() {
+    setParentSelected(null)
+    setParentSearch("")
+    setParentResults([])
+  }
 
   if (!open) return null
 
@@ -299,6 +333,49 @@ export function AssetFormModal({ open, onClose, onSuccess, asset }: AssetFormMod
                 onChange={(e) => set("warranty_until", e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Activo padre */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Activo padre
+              <span className="ml-1 text-muted-foreground/60">(opcional — para jerarquías)</span>
+            </label>
+            {parentSelected ? (
+              <div className="flex items-center gap-2 rounded-md border border-input bg-accent/20 px-3 py-2">
+                <span className="font-mono text-xs text-muted-foreground">{parentSelected.asset_code}</span>
+                <span className="flex-1 text-sm text-foreground">{parentSelected.name}</span>
+                <button type="button" onClick={clearParent} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={parentSearch}
+                  onChange={(e) => handleParentSearch(e.target.value)}
+                  placeholder="Buscar por código o nombre…"
+                />
+                {parentResults.length > 0 && (
+                  <ul className="absolute z-20 mt-1 w-full rounded-md border border-border bg-background shadow-lg">
+                    {parentResults.map((a) => (
+                      <li key={a.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectParent(a)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                        >
+                          <span className="font-mono text-xs text-muted-foreground">{a.asset_code}</span>
+                          <span className="text-sm text-foreground">{a.name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1">

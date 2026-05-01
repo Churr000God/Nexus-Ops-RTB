@@ -105,6 +105,9 @@ class Asset(Base):
     retired_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    parent_asset_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -122,6 +125,19 @@ class Asset(Base):
     )
     history: Mapped[list[AssetComponentHistory]] = relationship(
         back_populates="asset", cascade="all, delete-orphan"
+    )
+    children: Mapped[list[Asset]] = relationship(
+        "Asset",
+        foreign_keys="Asset.parent_asset_id",
+        back_populates="parent",
+        lazy="select",
+    )
+    parent: Mapped[Asset | None] = relationship(
+        "Asset",
+        foreign_keys="Asset.parent_asset_id",
+        back_populates="children",
+        remote_side="Asset.id",
+        lazy="select",
     )
 
 

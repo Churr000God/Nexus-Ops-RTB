@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { AlertTriangle, History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
+import { AlertTriangle, GitBranch, History, Pencil, Plus, Trash2, UserCheck, X } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
@@ -52,7 +52,7 @@ const OPERATION_COLORS: Record<string, string> = {
   REPLACE: "border-blue-500/30 bg-blue-500/10 text-blue-600",
 }
 
-type Tab = "info" | "components" | "history" | "assignments"
+type Tab = "info" | "components" | "history" | "assignments" | "children"
 
 interface AssetDetailPanelProps {
   asset: AssetRead
@@ -90,6 +90,21 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     [token, asset.id, assignKey],
   )
   const { data: assignments, status: assignStatus } = useApi(assignmentsFetcher)
+
+  const childrenFetcher = useCallback(
+    (signal: AbortSignal) => assetsService.getChildren(token, asset.id, signal),
+    [token, asset.id],
+  )
+  const { data: children, status: childrenStatus } = useApi(childrenFetcher)
+
+  const parentFetcher = useCallback(
+    (signal: AbortSignal) =>
+      asset.parent_asset_id
+        ? assetsService.getAsset(token, asset.parent_asset_id, signal)
+        : Promise.resolve(null),
+    [token, asset.parent_asset_id],
+  )
+  const { data: parentAsset } = useApi(parentFetcher)
 
   function refreshComponents() {
     setCompKey((k) => k + 1)
@@ -177,6 +192,26 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     { key: "notes", header: "Notas", cell: (r) => r.notes ?? "—" },
   ]
 
+  const childrenColumns: DataTableColumn<AssetRead>[] = [
+    { key: "asset_code", header: "Código", cell: (r) => <span className="font-mono text-xs">{r.asset_code}</span> },
+    { key: "name", header: "Nombre", cell: (r) => r.name },
+    {
+      key: "status",
+      header: "Estado",
+      cell: (r) => (
+        <span
+          className={cn(
+            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+            ASSET_STATUS_COLORS[r.status] ?? "border-slate-500/30 bg-slate-500/10 text-slate-500",
+          )}
+        >
+          {ASSET_STATUS_LABELS[r.status] ?? r.status}
+        </span>
+      ),
+    },
+    { key: "location", header: "Ubicación", cell: (r) => r.location ?? "—" },
+  ]
+
   function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
     return (
       <div>
@@ -246,7 +281,7 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
 
       {/* Tabs */}
       <div className="flex shrink-0 border-b border-border">
-        {(["info", "components", "history", "assignments"] as Tab[]).map((t) => (
+        {(["info", "components", "history", "assignments", "children"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -270,6 +305,12 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
               <span className="flex items-center justify-center gap-1">
                 <UserCheck className="h-3 w-3" />
                 Asignaciones
+              </span>
+            )}
+            {t === "children" && (
+              <span className="flex items-center justify-center gap-1">
+                <GitBranch className="h-3 w-3" />
+                {`Sub-activos${children ? ` (${children.length})` : ""}`}
               </span>
             )}
           </button>
@@ -314,6 +355,18 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
                 </dt>
                 <dd className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
                   {asset.notes}
+                </dd>
+              </div>
+            )}
+            {parentAsset && (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Activo padre
+                </dt>
+                <dd className="mt-0.5 flex items-center gap-2">
+                  <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-mono text-xs text-muted-foreground">{parentAsset.asset_code}</span>
+                  <span className="text-sm text-foreground">{parentAsset.name}</span>
                 </dd>
               </div>
             )}
@@ -385,6 +438,20 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
               histStatus === "loading" || histStatus === "idle"
                 ? "Cargando…"
                 : "Sin historial registrado"
+            }
+          />
+        )}
+
+        {tab === "children" && (
+          <DataTable
+            columns={childrenColumns}
+            rows={children ?? []}
+            rowKey={(r) => r.id}
+            maxHeight="300px"
+            emptyLabel={
+              childrenStatus === "loading" || childrenStatus === "idle"
+                ? "Cargando…"
+                : "Sin sub-activos vinculados"
             }
           />
         )}

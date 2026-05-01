@@ -18,6 +18,7 @@ class AssetCreate(BaseModel):
     model: str | None = None
     location: str | None = None
     assigned_user_id: UUID | None = None
+    parent_asset_id: UUID | None = None
     status: str = "ACTIVE"
     purchase_date: date | None = None
     purchase_cost: float | None = None
@@ -34,6 +35,7 @@ class AssetUpdate(BaseModel):
     model: str | None = None
     location: str | None = None
     assigned_user_id: UUID | None = None
+    parent_asset_id: UUID | None = None
     status: str | None = None
     purchase_date: date | None = None
     purchase_cost: float | None = None
@@ -54,6 +56,7 @@ class AssetRead(BaseModel):
     model: str | None
     location: str | None
     assigned_user_id: UUID | None
+    parent_asset_id: UUID | None = None
     status: str
     purchase_date: date | None
     purchase_cost: float | None

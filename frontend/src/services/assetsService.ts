@@ -79,12 +79,17 @@ export const assetsService = {
       status?: string
       asset_type?: string
       location?: string
+      search?: string
       limit?: number
       offset?: number
     } = {},
     signal?: AbortSignal,
   ): Promise<AssetRead[]> {
     return requestJson(withQuery("/api/assets", params), { token, signal })
+  },
+
+  getChildren(token: string | null, assetId: string, signal?: AbortSignal): Promise<AssetRead[]> {
+    return requestJson(`/api/assets/${assetId}/children`, { token, signal })
   },
 
   getAsset(token: string | null, id: string, signal?: AbortSignal): Promise<AssetRead> {

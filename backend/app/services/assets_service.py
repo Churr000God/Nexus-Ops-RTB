@@ -40,6 +40,7 @@ class AssetService:
         status: str | None = None,
         asset_type: str | None = None,
         location: str | None = None,
+        search: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[AssetRead]:
@@ -50,6 +51,12 @@ class AssetService:
             stmt = stmt.where(Asset.asset_type == asset_type)
         if location:
             stmt = stmt.where(Asset.location.ilike(f"%{location}%"))
+        if search:
+            like = f"%{search}%"
+            from sqlalchemy import or_
+            stmt = stmt.where(
+                or_(Asset.asset_code.ilike(like), Asset.name.ilike(like))
+            )
         stmt = stmt.order_by(Asset.asset_code).limit(limit).offset(offset)
         rows = (await self.db.execute(stmt)).scalars().all()
         return [AssetRead.model_validate(r) for r in rows]
@@ -267,6 +274,17 @@ class AssetService:
             await self.db.execute(sql, {"asset_id": asset_id, "limit": limit, "offset": offset})
         ).mappings().all()
         return [AssetAssignmentRead(**r) for r in rows]
+
+    # ── Jerarquía ────────────────────────────────────────────────────────────
+
+    async def get_children(self, asset_id: UUID) -> list[AssetRead]:
+        stmt = (
+            select(Asset)
+            .where(Asset.parent_asset_id == asset_id)
+            .order_by(Asset.asset_code)
+        )
+        rows = (await self.db.execute(stmt)).scalars().all()
+        return [AssetRead.model_validate(r) for r in rows]
 
     # ── Retiro formal ────────────────────────────────────────────────────────
 

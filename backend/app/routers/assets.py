@@ -38,13 +38,15 @@ async def list_assets(
     status: str | None = Query(default=None),
     asset_type: str | None = Query(default=None),
     location: str | None = Query(default=None),
+    search: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[AssetRead]:
     return await AssetService(db).list_assets(
-        status=status, asset_type=asset_type, location=location, limit=limit, offset=offset
+        status=status, asset_type=asset_type, location=location,
+        search=search, limit=limit, offset=offset
     )
 
 
@@ -80,6 +82,17 @@ async def update_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset no encontrado")
     return asset
+
+
+# ── Jerarquía ────────────────────────────────────────────────────────────────
+
+@router.get("/{asset_id}/children", response_model=list[AssetRead])
+async def get_children(
+    asset_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[AssetRead]:
+    return await AssetService(db).get_children(asset_id)
 
 
 # ── Componentes ───────────────────────────────────────────────────────────────
