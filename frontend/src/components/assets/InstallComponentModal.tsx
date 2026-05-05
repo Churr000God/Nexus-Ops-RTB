@@ -136,7 +136,7 @@ export function InstallComponentModal({
                   placeholder="Buscar por SKU o nombre…"
                 />
                 {(results.length > 0 || searching) && (
-                  <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-popover shadow-lg">
+                  <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-background shadow-lg">
                     {searching ? (
                       <p className="px-3 py-2 text-xs text-muted-foreground">Buscando…</p>
                     ) : (
