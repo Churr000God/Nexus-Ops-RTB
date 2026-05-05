@@ -14,7 +14,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, AssetDepreciationConfig, AssetWorkOrder, InventorySnapshot, PhysicalCount, PhysicalCountLine
+from app.models.assets_models import Asset, AssetAssignmentHistory, AssetComponent, AssetDepreciationConfig, AssetWorkOrder, InventorySnapshot, PhysicalCount, PhysicalCountLine, ProductCountLine
+from app.models.ops_models import InventoryMovement
 from app.schemas.assets_schema import (
     AssetAssignmentRead,
     AssetComponentCreate,
@@ -35,6 +36,10 @@ from app.schemas.assets_schema import (
     PhysicalCountLineRead,
     PhysicalCountLineUpdate,
     PhysicalCountRead,
+    AdjustmentCreate,
+    InventoryMovementRead,
+    ProductCountLineRead,
+    ProductCountLineUpdate,
     RemoveComponentRequest,
     RetireAssetPayload,
     WorkOrderCreate,
@@ -415,13 +420,10 @@ class AssetService:
     # ── Conteo Físico ────────────────────────────────────────────────────────
 
     def _count_to_read(self, count: PhysicalCount) -> PhysicalCountRead:
-        lines = count.lines if count.lines is not None else []
-        total = len(lines)
-        found = sum(1 for l in lines if l.found is True)
-        not_found = sum(1 for l in lines if l.found is False)
-        return PhysicalCountRead(
+        base = dict(
             id=count.id,
             count_date=count.count_date,
+            count_type=getattr(count, "count_type", "ASSET"),
             location_filter=count.location_filter,
             status=count.status,
             notes=count.notes,
@@ -429,11 +431,35 @@ class AssetService:
             created_at=count.created_at,
             confirmed_at=count.confirmed_at,
             confirmed_by=count.confirmed_by,
-            total_lines=total,
-            found_count=found,
-            not_found_count=not_found,
-            pending_count=total - found - not_found,
         )
+        if getattr(count, "count_type", "ASSET") == "PRODUCT":
+            pl = count.product_lines if count.product_lines is not None else []
+            total = len(pl)
+            counted = sum(1 for l in pl if l.counted_qty is not None)
+            discrepancy = sum(
+                1 for l in pl
+                if l.counted_qty is not None
+                and abs(float(l.counted_qty) - float(l.real_qty)) > 0.001
+            )
+            return PhysicalCountRead(
+                **base,
+                total_lines=total,
+                counted_lines=counted,
+                discrepancy_lines=discrepancy,
+                uncounted_lines=total - counted,
+            )
+        else:
+            lines = count.lines if count.lines is not None else []
+            total = len(lines)
+            found = sum(1 for l in lines if l.found is True)
+            not_found = sum(1 for l in lines if l.found is False)
+            return PhysicalCountRead(
+                **base,
+                total_lines=total,
+                found_count=found,
+                not_found_count=not_found,
+                pending_count=total - found - not_found,
+            )
 
     async def create_physical_count(
         self,
@@ -442,6 +468,7 @@ class AssetService:
     ) -> PhysicalCountRead:
         count = PhysicalCount(
             count_date=data.count_date,
+            count_type=data.count_type,
             location_filter=data.location_filter,
             notes=data.notes,
             created_by=user_id,
@@ -449,27 +476,55 @@ class AssetService:
         self.db.add(count)
         await self.db.flush()
 
-        stmt = select(Asset).where(Asset.status.notin_(["RETIRED", "DISMANTLED"]))
-        if data.location_filter:
-            stmt = stmt.where(Asset.location.ilike(f"%{data.location_filter}%"))
-        assets = (await self.db.execute(stmt)).scalars().all()
-
-        for asset in assets:
-            line = PhysicalCountLine(
-                count_id=count.id,
-                asset_id=asset.id,
-                asset_code=asset.asset_code,
-                asset_name=asset.name,
-                expected_location=asset.location,
-            )
-            self.db.add(line)
+        if data.count_type == "PRODUCT":
+            sql = text("""
+                SELECT
+                    p.id        AS product_id,
+                    p.sku,
+                    p.name      AS product_name,
+                    p.is_saleable,
+                    c.name      AS category,
+                    COALESCE(SUM(im.qty_in) - SUM(im.qty_out), 0) AS real_qty,
+                    iv.theoretical_qty
+                FROM productos p
+                LEFT JOIN inventory_movements im ON im.product_id = p.id
+                LEFT JOIN categorias c ON c.id = p.category_id
+                LEFT JOIN inventario iv ON iv.product_id = p.id
+                GROUP BY p.id, p.sku, p.name, p.is_saleable, c.name, iv.theoretical_qty
+                ORDER BY p.name
+            """)
+            rows = (await self.db.execute(sql)).mappings().all()
+            for row in rows:
+                self.db.add(ProductCountLine(
+                    count_id=count.id,
+                    product_id=row["product_id"],
+                    sku=row["sku"],
+                    product_name=row["product_name"],
+                    is_saleable=row["is_saleable"],
+                    category=row["category"],
+                    theoretical_qty=row["theoretical_qty"],
+                    real_qty=float(row["real_qty"]),
+                ))
+        else:
+            stmt = select(Asset).where(Asset.status.notin_(["RETIRED", "DISMANTLED"]))
+            if data.location_filter:
+                stmt = stmt.where(Asset.location.ilike(f"%{data.location_filter}%"))
+            assets = (await self.db.execute(stmt)).scalars().all()
+            for asset in assets:
+                self.db.add(PhysicalCountLine(
+                    count_id=count.id,
+                    asset_id=asset.id,
+                    asset_code=asset.asset_code,
+                    asset_name=asset.name,
+                    expected_location=asset.location,
+                ))
 
         await self.db.commit()
 
         stmt2 = (
             select(PhysicalCount)
             .where(PhysicalCount.id == count.id)
-            .options(selectinload(PhysicalCount.lines))
+            .options(selectinload(PhysicalCount.lines), selectinload(PhysicalCount.product_lines))
         )
         count = (await self.db.execute(stmt2)).scalar_one()
         return self._count_to_read(count)
@@ -482,7 +537,7 @@ class AssetService:
     ) -> list[PhysicalCountRead]:
         stmt = (
             select(PhysicalCount)
-            .options(selectinload(PhysicalCount.lines))
+            .options(selectinload(PhysicalCount.lines), selectinload(PhysicalCount.product_lines))
             .order_by(PhysicalCount.count_date.desc(), PhysicalCount.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -496,19 +551,57 @@ class AssetService:
         self,
         count_id: UUID,
     ) -> list[PhysicalCountLineRead]:
-        stmt = (
-            select(PhysicalCountLine)
-            .where(PhysicalCountLine.count_id == count_id)
-            .order_by(PhysicalCountLine.asset_code)
-        )
-        lines = (await self.db.execute(stmt)).scalars().all()
-        return [PhysicalCountLineRead.model_validate(l) for l in lines]
+        sql = text("""
+            SELECT
+                pcl.id, pcl.count_id, pcl.asset_id,
+                pcl.asset_code, pcl.asset_name,
+                pcl.expected_location, pcl.scanned_location,
+                pcl.found, pcl.notes,
+                pcl.updated_by, pcl.updated_at,
+                u.email AS updated_by_email
+            FROM physical_count_lines pcl
+            LEFT JOIN users u ON u.id = pcl.updated_by
+            WHERE pcl.count_id = CAST(:count_id AS UUID)
+            ORDER BY pcl.asset_code
+        """)
+        rows = (await self.db.execute(sql, {"count_id": str(count_id)})).mappings().all()
+        return [PhysicalCountLineRead.model_validate(dict(r)) for r in rows]
+
+    async def get_product_count_lines(
+        self,
+        count_id: UUID,
+        search: str | None = None,
+        is_saleable: bool | None = None,
+    ) -> list[ProductCountLineRead]:
+        sql_str = """
+            SELECT
+                pcl.id, pcl.count_id, pcl.product_id,
+                pcl.sku, pcl.product_name, pcl.is_saleable,
+                pcl.category, pcl.theoretical_qty, pcl.real_qty,
+                pcl.counted_qty, pcl.notes,
+                pcl.updated_by, pcl.updated_at,
+                u.email AS updated_by_email
+            FROM product_count_lines pcl
+            LEFT JOIN users u ON u.id = pcl.updated_by
+            WHERE pcl.count_id = CAST(:count_id AS UUID)
+        """
+        params: dict = {"count_id": str(count_id)}
+        if search:
+            sql_str += " AND (pcl.sku ILIKE :search OR pcl.product_name ILIKE :search)"
+            params["search"] = f"%{search}%"
+        if is_saleable is not None:
+            sql_str += " AND pcl.is_saleable = CAST(:is_saleable AS BOOLEAN)"
+            params["is_saleable"] = is_saleable
+        sql_str += " ORDER BY pcl.product_name"
+        rows = (await self.db.execute(text(sql_str), params)).mappings().all()
+        return [ProductCountLineRead.model_validate(dict(r)) for r in rows]
 
     async def update_count_line(
         self,
         count_id: UUID,
         line_id: UUID,
         data: PhysicalCountLineUpdate,
+        user_id: UUID | None = None,
     ) -> PhysicalCountLineRead:
         line = await self.db.get(PhysicalCountLine, line_id)
         if not line or line.count_id != count_id:
@@ -522,9 +615,55 @@ class AssetService:
             line.scanned_location = data.scanned_location
         if data.notes is not None:
             line.notes = data.notes
+        if user_id:
+            line.updated_by = user_id
+            line.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
-        await self.db.refresh(line)
-        return PhysicalCountLineRead.model_validate(line)
+        # reload con email
+        rows = (await self.db.execute(
+            text("""
+                SELECT pcl.*, u.email AS updated_by_email
+                FROM physical_count_lines pcl
+                LEFT JOIN users u ON u.id = pcl.updated_by
+                WHERE pcl.id = CAST(:id AS UUID)
+            """),
+            {"id": str(line_id)},
+        )).mappings().all()
+        return PhysicalCountLineRead.model_validate(dict(rows[0]))
+
+    async def update_product_count_line(
+        self,
+        count_id: UUID,
+        line_id: UUID,
+        data: ProductCountLineUpdate,
+        user_id: UUID | None = None,
+    ) -> ProductCountLineRead:
+        line = await self.db.get(ProductCountLine, line_id)
+        if not line or line.count_id != count_id:
+            raise ValueError("Línea no encontrada")
+        count = await self.db.get(PhysicalCount, count_id)
+        if count and count.status != "DRAFT":
+            raise ValueError("El conteo ya está cerrado")
+        if data.counted_qty is not None:
+            line.counted_qty = data.counted_qty
+        elif data.counted_qty is None and "counted_qty" in data.model_fields_set:
+            line.counted_qty = None
+        if data.notes is not None:
+            line.notes = data.notes
+        if user_id:
+            line.updated_by = user_id
+            line.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        rows = (await self.db.execute(
+            text("""
+                SELECT pcl.*, u.email AS updated_by_email
+                FROM product_count_lines pcl
+                LEFT JOIN users u ON u.id = pcl.updated_by
+                WHERE pcl.id = CAST(:id AS UUID)
+            """),
+            {"id": str(line_id)},
+        )).mappings().all()
+        return ProductCountLineRead.model_validate(dict(rows[0]))
 
     async def confirm_physical_count(
         self,
@@ -544,7 +683,7 @@ class AssetService:
         stmt = (
             select(PhysicalCount)
             .where(PhysicalCount.id == count_id)
-            .options(selectinload(PhysicalCount.lines))
+            .options(selectinload(PhysicalCount.lines), selectinload(PhysicalCount.product_lines))
         )
         count = (await self.db.execute(stmt)).scalar_one()
         return self._count_to_read(count)
@@ -566,6 +705,91 @@ class AssetService:
         result = await self.db.execute(text("SELECT fn_close_monthly_snapshot()"))
         await self.db.commit()
         return result.scalar_one()
+
+    # ── Movimientos & Ajustes ────────────────────────────────────────────────
+
+    _MOVEMENT_JOIN = """
+        SELECT
+            im.id, im.movement_number, im.product_id,
+            p.sku  AS product_sku,
+            p.name AS product_name,
+            im.movement_type,
+            im.qty_in, im.qty_out, im.qty_nonconformity,
+            im.unit_cost, im.moved_on,
+            im.origin, im.destination, im.observations,
+            u.email AS created_by_email,
+            im.created_at
+        FROM inventory_movements im
+        LEFT JOIN productos p ON p.id = im.product_id
+        LEFT JOIN users u     ON u.id = im.created_by_user_id
+    """
+
+    async def list_movements(
+        self,
+        product_id: UUID | None = None,
+        movement_type: str | None = None,
+        search: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[InventoryMovementRead]:
+        sql_str = self._MOVEMENT_JOIN + " WHERE 1=1"
+        params: dict = {}
+        if product_id:
+            sql_str += " AND im.product_id = CAST(:product_id AS UUID)"
+            params["product_id"] = str(product_id)
+        if movement_type:
+            sql_str += " AND im.movement_type ILIKE :movement_type"
+            params["movement_type"] = f"%{movement_type}%"
+        if search:
+            sql_str += (
+                " AND (p.sku ILIKE :search OR p.name ILIKE :search"
+                " OR im.observations ILIKE :search)"
+            )
+            params["search"] = f"%{search}%"
+        if date_from:
+            sql_str += " AND im.moved_on >= CAST(:date_from AS TIMESTAMPTZ)"
+            params["date_from"] = date_from
+        if date_to:
+            sql_str += " AND im.moved_on <= CAST(:date_to AS TIMESTAMPTZ)"
+            params["date_to"] = date_to
+        sql_str += (
+            " ORDER BY COALESCE(im.moved_on, im.created_at) DESC"
+            " LIMIT :limit OFFSET :offset"
+        )
+        params["limit"] = limit
+        params["offset"] = offset
+        rows = (await self.db.execute(text(sql_str), params)).mappings().all()
+        return [InventoryMovementRead.model_validate(dict(r)) for r in rows]
+
+    async def create_adjustment(
+        self,
+        data: AdjustmentCreate,
+        user_id: UUID,
+    ) -> InventoryMovementRead:
+        moved = (
+            datetime.combine(data.moved_on, datetime.min.time()).replace(tzinfo=timezone.utc)
+            if data.moved_on
+            else datetime.now(timezone.utc)
+        )
+        movement = InventoryMovement(
+            product_id=data.product_id,
+            movement_type="Ajuste",
+            qty_in=data.quantity if data.direction == "in" else None,
+            qty_out=data.quantity if data.direction == "out" else None,
+            unit_cost=data.unit_cost,
+            moved_on=moved,
+            observations=data.observations,
+            created_by_user_id=user_id,
+        )
+        self.db.add(movement)
+        await self.db.commit()
+        rows = (await self.db.execute(
+            text(self._MOVEMENT_JOIN + " WHERE im.id = CAST(:id AS UUID)"),
+            {"id": str(movement.id)},
+        )).mappings().all()
+        return InventoryMovementRead.model_validate(dict(rows[0]))
 
     # ── Inventario actual (vistas nuevas) ────────────────────────────────────
 

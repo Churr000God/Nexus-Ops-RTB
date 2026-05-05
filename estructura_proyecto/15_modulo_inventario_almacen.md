@@ -1,6 +1,6 @@
 # Módulo Inventario & Activos — Documentación Técnica Completa
 
-> Última actualización: 2026-04-30
+> Última actualización: 2026-05-05
 
 ---
 
@@ -180,13 +180,14 @@ Configuración de depreciación por activo. UNIQUE en `asset_id` — un activo s
 
 ### 2.10 `physical_counts`
 
-Sesiones de conteo físico de activos.
+Sesiones de conteo físico. Puede ser de activos (`count_type='ASSET'`) o de productos (`count_type='PRODUCT'`).
 
 | Columna | Tipo | Descripción |
 |---|---|---|
 | `id` | UUID PK | |
 | `count_date` | DATE | Fecha del conteo |
-| `location_filter` | VARCHAR (nullable) | Filtro de ubicación (solo se incluyen activos que coincidan) |
+| `count_type` | VARCHAR(10) CHECK IN ('ASSET','PRODUCT') default `'ASSET'` | Tipo de conteo |
+| `location_filter` | VARCHAR (nullable) | Filtro de ubicación (solo aplica para `count_type='ASSET'`) |
 | `status` | VARCHAR default `DRAFT` | `DRAFT` / `CONFIRMED` / `CANCELLED` |
 | `notes` | TEXT (nullable) | |
 | `created_by` | UUID FK → users (nullable) | |
@@ -196,7 +197,7 @@ Sesiones de conteo físico de activos.
 
 ### 2.11 `physical_count_lines`
 
-Una fila por activo por sesión de conteo. Representa el estado de cada activo al momento de la sesión.
+Una fila por activo por sesión de conteo `count_type='ASSET'`. Representa el estado de cada activo al momento de la sesión.
 
 | Columna | Tipo | Descripción |
 |---|---|---|
@@ -209,6 +210,28 @@ Una fila por activo por sesión de conteo. Representa el estado de cada activo a
 | `scanned_location` | VARCHAR (nullable) | Ubicación real escaneada durante el conteo |
 | `found` | BOOLEAN (nullable) | `NULL` = pendiente, `TRUE` = encontrado, `FALSE` = no encontrado |
 | `notes` | TEXT (nullable) | |
+| `updated_by` | UUID FK → users SET NULL (nullable) | Último usuario que actualizó la línea |
+| `updated_at` | TIMESTAMPTZ (nullable) | Timestamp de la última actualización |
+
+### 2.12 `product_count_lines`
+
+Una fila por producto por sesión de conteo `count_type='PRODUCT'`. Permite contar cantidades de productos en almacén.
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `id` | UUID PK | |
+| `count_id` | UUID FK → physical_counts CASCADE | |
+| `product_id` | UUID FK → productos SET NULL (nullable) | Producto del catálogo |
+| `sku` | VARCHAR(120) (nullable) | Snapshot del SKU |
+| `product_name` | VARCHAR(500) | Snapshot del nombre del producto |
+| `is_saleable` | BOOLEAN | Snapshot del tipo (vendible / interno) |
+| `category` | VARCHAR(200) (nullable) | Snapshot de la categoría |
+| `theoretical_qty` | NUMERIC(14,4) (nullable) | Stock teórico al momento de crear el conteo (tabla `inventario`) |
+| `real_qty` | NUMERIC(14,4) default 0 | Stock real al momento de crear el conteo (`inventory_movements`) |
+| `counted_qty` | NUMERIC(14,4) (nullable) | Cantidad contada físicamente; `NULL` = no contado aún |
+| `notes` | TEXT (nullable) | |
+| `updated_by` | UUID FK → users SET NULL (nullable) | Último operador que actualizó la línea |
+| `updated_at` | TIMESTAMPTZ (nullable) | Timestamp de la última actualización |
 
 ---
 
@@ -295,7 +318,7 @@ ORDER BY ach.occurred_at DESC
 
 ## 4. Migraciones Alembic
 
-El módulo abarca ocho revisiones. La cadena de activos tiene **dos heads** conviviendo en el proyecto (rama TOTP en `20260429_0027` y la cadena de assets). **Nunca** ejecutar `alembic upgrade head` — siempre especificar el ID de revisión concreto.
+El módulo abarca nueve revisiones. La cadena de activos tiene **dos heads** conviviendo en el proyecto (rama TOTP en `20260429_0027` y la cadena de assets). **Nunca** ejecutar `alembic upgrade head` — siempre especificar el ID de revisión concreto.
 
 | Revisión | Archivo | Contenido |
 |---|---|---|
@@ -308,6 +331,7 @@ El módulo abarca ocho revisiones. La cadena de activos tiene **dos heads** conv
 | `20260430_0031` | `asset_parent_hierarchy` | `ALTER TABLE assets` — agrega columna `parent_asset_id` + índice |
 | `20260430_0032` | `asset_work_orders` | Crea tabla `asset_work_orders` |
 | `20260430_0033` | `asset_depreciation_config` | Crea tabla `asset_depreciation_config` |
+| `20260505_0034` | `product_count_lines` | ADD COLUMN `count_type` a `physical_counts`; ADD COLUMNS `updated_by`/`updated_at` a `physical_count_lines`; CREATE TABLE `product_count_lines` |
 
 ---
 
@@ -341,10 +365,12 @@ Todos los endpoints requieren autenticación JWT: `Authorization: Bearer <token>
 
 | Método | Ruta | Status | Descripción |
 |---|---|---|---|
-| `POST` | `/api/assets/counts` | 201 | Crea sesión de conteo físico (snapshot de todos los activos activos) |
+| `POST` | `/api/assets/counts` | 201 | Crea sesión de conteo. `count_type='ASSET'` hace snapshot de activos; `count_type='PRODUCT'` hace snapshot de productos con stock teórico y real |
 | `GET` | `/api/assets/counts` | 200 | Lista sesiones de conteo. Filtro: `status` |
-| `GET` | `/api/assets/counts/{count_id}/lines` | 200 | Líneas de una sesión de conteo |
-| `PATCH` | `/api/assets/counts/{count_id}/lines/{line_id}` | 200 | Actualiza `found`, `scanned_location`, `notes`; 400 si conteo no está en DRAFT |
+| `GET` | `/api/assets/counts/{count_id}/lines` | 200 | Líneas de activos de un conteo ASSET; incluye `updated_by_email` |
+| `PATCH` | `/api/assets/counts/{count_id}/lines/{line_id}` | 200 | Actualiza `found`, `scanned_location`, `notes`, registra `updated_by`/`updated_at`; 400 si no es DRAFT |
+| `GET` | `/api/assets/counts/{count_id}/product-lines` | 200 | Líneas de productos de un conteo PRODUCT. Params: `search`, `is_saleable` |
+| `PATCH` | `/api/assets/counts/{count_id}/product-lines/{line_id}` | 200 | Actualiza `counted_qty`, `notes`, registra quién contó; 400 si no es DRAFT |
 | `POST` | `/api/assets/counts/{count_id}/confirm` | 200 | Cierra el conteo (DRAFT → CONFIRMED); 400 si ya está cerrado |
 
 ### 5.2 Router `/api/inventario` — `inventory_router` en `assets.py`
@@ -354,6 +380,8 @@ Todos los endpoints requieren autenticación JWT: `Authorization: Bearer <token>
 | `GET` | `/api/inventario/kpis-v2` | KPIs agregados del inventario completo (dos queries SQL + merge en Python) |
 | `GET` | `/api/inventario/vendible` | Items con `is_saleable=true` de `v_inventory_current`. Params: `stock_status`, `search`, `category`, `sort_by`, `sort_order`, `limit` (max 5000), `offset` |
 | `GET` | `/api/inventario/interno` | Items con `is_saleable=false`. Mismos params que `/vendible` |
+| `GET` | `/api/inventario/movimientos` | Bitácora de movimientos de inventario. Params: `product_id`, `movement_type`, `search`, `date_from`, `date_to`, `limit` (default 100), `offset` |
+| `POST` | `/api/inventario/ajustes` | Crea ajuste manual de inventario. Body: `AdjustmentCreate`. Status 201 |
 
 **Columnas sort válidas para `/vendible` e `/interno`:** `sku`, `name`, `category`, `quantity_on_hand`, `avg_unit_cost`, `total_value`, `stock_status`.
 
@@ -484,28 +512,70 @@ class WorkOrderRead(BaseModel):      # from_attributes=True
 ```python
 class PhysicalCountCreate(BaseModel):
     count_date: date
-    location_filter: str | None = None
+    count_type: str = "ASSET"        # "ASSET" | "PRODUCT"
+    location_filter: str | None = None  # solo para ASSET
     notes: str | None = None
 
 class PhysicalCountRead(BaseModel):  # from_attributes=True
-    id / count_date / location_filter / status / notes
+    id / count_date / count_type / location_filter / status / notes
     created_by / created_at
     confirmed_at / confirmed_by
-    total_lines: int = 0             # calculado en Python desde líneas cargadas
+    total_lines: int = 0
+    # ASSET stats
     found_count: int = 0             # found is True
     not_found_count: int = 0         # found is False
     pending_count: int = 0           # found is None
+    # PRODUCT stats
+    counted_lines: int = 0           # counted_qty is not None
+    discrepancy_lines: int = 0       # counted_qty != real_qty
+    uncounted_lines: int = 0         # counted_qty is None
 
 class PhysicalCountLineRead(BaseModel):  # from_attributes=True
     id / count_id / asset_id
     asset_code / asset_name          # snapshots al momento de crear el conteo
     expected_location / scanned_location
     found / notes
+    updated_by: UUID | None          # nuevo — quién actualizó la línea
+    updated_at: datetime | None      # nuevo — cuándo
+    updated_by_email: str | None     # JOINed desde users
 
 class PhysicalCountLineUpdate(BaseModel):
     found: bool | None = None
     scanned_location: str | None = None
     notes: str | None = None
+
+class ProductCountLineRead(BaseModel):
+    id / count_id / product_id
+    sku / product_name / is_saleable / category
+    theoretical_qty: float | None    # stock teórico al momento de crear
+    real_qty: float                  # stock real al momento de crear
+    counted_qty: float | None        # None = no contado aún
+    notes / updated_by / updated_at
+    updated_by_email: str | None     # JOINed desde users
+
+class ProductCountLineUpdate(BaseModel):
+    counted_qty: float | None = None
+    notes: str | None = None
+```
+
+### 6.7 Movimientos e Inventario (nuevos schemas)
+
+```python
+class InventoryMovementRead(BaseModel):  # from_attributes=True
+    id / movement_number
+    product_id / product_sku / product_name  # enriquecido vía JOIN
+    movement_type / qty_in / qty_out / qty_nonconformity
+    unit_cost / moved_on / origin / destination / observations
+    created_by_email: str | None     # JOINed desde users
+    created_at
+
+class AdjustmentCreate(BaseModel):
+    product_id: UUID
+    direction: str                   # "in" | "out" — validado con @field_validator
+    quantity: float                  # > 0 — validado con @field_validator
+    unit_cost: float | None = None
+    observations: str                # requerido
+    moved_on: date | None = None     # default: hoy en el backend
 ```
 
 ### 6.7 Depreciación
@@ -628,12 +698,24 @@ def _add_years(d: date, years: int) -> date:
 
 ### 7.9 Conteos Físicos
 
-- **`create_physical_count`** — INSERT `PhysicalCount` → `flush()` → SELECT activos `status NOT IN ('RETIRED', 'DISMANTLED')` con filtro ilike de location opcional → INSERT `PhysicalCountLine` por cada activo (snapshot de `asset_code`, `asset_name`, `location`) → commit → reload con `selectinload(PhysicalCount.lines)`.
-- **`_count_to_read(count)`** — helper privado; calcula `total`, `found` (found=True), `not_found` (found=False), `pending` (found=None) desde líneas ya cargadas en memoria.
-- **`list_physical_counts`** — SELECT con `selectinload(lines)`, ordenado `count_date DESC, created_at DESC`.
-- **`get_physical_count_lines`** — SELECT líneas ordenadas por `asset_code`.
-- **`update_count_line`** — valida que `line.count_id == count_id` y que el conteo esté en DRAFT; actualiza solo campos no-None; commit; refresh.
-- **`confirm_physical_count`** — valida estado DRAFT; establece `status='CONFIRMED'`, `confirmed_at=now()`, `confirmed_by`; reload con `selectinload` para calcular stats.
+- **`create_physical_count`** — INSERT `PhysicalCount` → `flush()`. Bifurca según `count_type`:
+  - `ASSET`: SELECT activos `status NOT IN ('RETIRED', 'DISMANTLED')` con filtro ilike de location → INSERT `PhysicalCountLine` por cada activo (snapshot de `asset_code`, `asset_name`, `location`).
+  - `PRODUCT`: SQL que une `inventory_movements` (para `real_qty` = SUM qty_in−qty_out) y `inventario` (para `theoretical_qty`) → INSERT `ProductCountLine` por cada producto del catálogo activo con snapshots de sku/nombre/is_saleable/categoría.
+  - Commit → reload con `selectinload(lines)` + `selectinload(product_lines)`.
+- **`_count_to_read(count)`** — helper privado; bifurca por `count_type`:
+  - ASSET: calcula `total/found/not_found/pending` desde `lines`.
+  - PRODUCT: calcula `total/counted/discrepancy/uncounted` desde `product_lines`.
+- **`list_physical_counts`** — SELECT con `selectinload(lines)` + `selectinload(product_lines)`, ordenado `count_date DESC, created_at DESC`.
+- **`get_physical_count_lines`** — SQL raw con LEFT JOIN a `users` para `updated_by_email`, ordenado por `asset_code`.
+- **`get_product_count_lines(count_id, search, is_saleable)`** — SQL raw con filtros opcionales de búsqueda (ilike en sku/nombre) y tipo, LEFT JOIN a `users` para `updated_by_email`.
+- **`update_count_line(count_id, line_id, data, user_id)`** — valida count DRAFT; actualiza campos no-None + `updated_by=user_id` + `updated_at=now()`; commit; refresh.
+- **`update_product_count_line(count_id, line_id, data, user_id)`** — similar para `ProductCountLine`; 400 si el conteo no es DRAFT.
+- **`confirm_physical_count`** — valida DRAFT; establece `status='CONFIRMED'`, `confirmed_at`, `confirmed_by`; reload con eager-load de ambas relaciones.
+
+### 7.10 Movimientos e Inventario (nuevos métodos)
+
+- **`list_movements(product_id?, movement_type?, search?, date_from?, date_to?, limit, offset)`** — SQL con LEFT JOIN a `productos` (para `product_sku`/`product_name`) y LEFT JOIN a `users` (para `created_by_email`). Filtros acumulativos con `WHERE` dinámico. Ordenado `moved_on DESC, created_at DESC`.
+- **`create_adjustment(data, user_id)`** — INSERT `InventoryMovement` con `movement_type="Ajuste"`, `moved_on=data.moved_on or today`, `qty_in=quantity` si direction='in' (qty_out=None) o viceversa. No genera movimiento de inventory_snapshots — el snapshot lo hace pg_cron mensualmente.
 
 ### 7.10 Snapshots
 
@@ -715,13 +797,33 @@ type WorkOrderCreate = { title, description?, work_type?, priority?,
 type WorkOrderUpdate = { title?, ...todos opcionales, started_at?, completed_at? }
 
 // Conteos físicos
-type PhysicalCountRead    = { id, count_date, location_filter,
-  status: "DRAFT"|"CONFIRMED"|"CANCELLED", notes, created_by, created_at,
-  confirmed_at, confirmed_by, total_lines, found_count, not_found_count, pending_count }
-type PhysicalCountCreate  = { count_date, location_filter?, notes? }
+type PhysicalCountRead    = { id, count_date, count_type: "ASSET"|"PRODUCT",
+  location_filter, status: "DRAFT"|"CONFIRMED"|"CANCELLED", notes,
+  created_by, created_at, confirmed_at, confirmed_by, total_lines,
+  // ASSET stats:
+  found_count, not_found_count, pending_count,
+  // PRODUCT stats:
+  counted_lines, discrepancy_lines, uncounted_lines }
+type PhysicalCountCreate  = { count_date, count_type?: "ASSET"|"PRODUCT", location_filter?, notes? }
 type PhysicalCountLineRead = { id, count_id, asset_id, asset_code, asset_name,
-  expected_location, scanned_location, found: boolean|null, notes }
+  expected_location, scanned_location, found: boolean|null, notes,
+  updated_by: string|null, updated_at: string|null, updated_by_email: string|null }
 type PhysicalCountLineUpdate = { found?, scanned_location?, notes? }
+type ProductCountLineRead = { id, count_id, product_id: string|null, sku: string|null,
+  product_name, is_saleable, category: string|null,
+  theoretical_qty: number|null, real_qty: number, counted_qty: number|null,
+  notes, updated_by, updated_at, updated_by_email: string|null }
+type ProductCountLineUpdate = { counted_qty?: number|null, notes?: string|null }
+
+// Movimientos
+type InventoryMovementRead = { id, movement_number: string|null,
+  product_id: string|null, product_sku: string|null, product_name: string|null,
+  movement_type: string|null, qty_in: number|null, qty_out: number|null,
+  qty_nonconformity: number|null, unit_cost: number|null,
+  moved_on: string|null, origin: string|null, destination: string|null,
+  observations: string|null, created_by_email: string|null, created_at: string }
+type AdjustmentCreate = { product_id: string, direction: "in"|"out",
+  quantity: number, unit_cost?: number|null, observations: string, moved_on?: string|null }
 
 // Depreciación
 type DepreciationConfigRead   = { id, asset_id, method: "STRAIGHT_LINE",
@@ -756,11 +858,15 @@ Todas las funciones reciben `token: string | null` como primer argumento. El hel
 | `getAssignments(token, assetId, params, signal?)` | GET `/api/assets/{id}/assignments` | Historial de asignaciones |
 | `assignAsset(token, assetId, data)` | POST `/api/assets/{id}/assign` | Asigna/reasigna activo |
 | `retireAsset(token, assetId, data)` | POST `/api/assets/{id}/retire` | Retira activo formalmente |
-| `createCount(token, data)` | POST `/api/assets/counts` | Crea sesión de conteo |
+| `createCount(token, data)` | POST `/api/assets/counts` | Crea sesión de conteo (ASSET o PRODUCT) |
 | `listCounts(token, params, signal?)` | GET `/api/assets/counts` | Lista sesiones de conteo |
-| `getCountLines(token, countId, signal?)` | GET `/api/assets/counts/{id}/lines` | Líneas de un conteo |
-| `updateCountLine(token, countId, lineId, data)` | PATCH `/api/assets/counts/{id}/lines/{lid}` | Actualiza línea de conteo |
+| `getCountLines(token, countId, signal?)` | GET `/api/assets/counts/{id}/lines` | Líneas de activos de un conteo |
+| `updateCountLine(token, countId, lineId, data)` | PATCH `/api/assets/counts/{id}/lines/{lid}` | Actualiza línea de activo |
+| `getProductCountLines(token, countId, params, signal?)` | GET `/api/assets/counts/{id}/product-lines` | Líneas de productos de un conteo |
+| `updateProductCountLine(token, countId, lineId, data)` | PATCH `/api/assets/counts/{id}/product-lines/{lid}` | Actualiza cantidad contada |
 | `confirmCount(token, countId)` | POST `/api/assets/counts/{id}/confirm` | Cierra el conteo |
+| `listMovements(token, params, signal?)` | GET `/api/inventario/movimientos` | Bitácora de movimientos de inventario |
+| `createAdjustment(token, data)` | POST `/api/inventario/ajustes` | Crea ajuste manual de inventario |
 | `createWorkOrder(token, assetId, data)` | POST `/api/assets/{id}/work-orders` | Crea orden de mantenimiento |
 | `listWorkOrders(token, assetId, params, signal?)` | GET `/api/assets/{id}/work-orders` | Lista órdenes de mantenimiento |
 | `updateWorkOrder(token, assetId, woId, data)` | PATCH `/api/assets/{id}/work-orders/{wid}` | Actualiza orden |
@@ -776,27 +882,28 @@ Todas las funciones reciben `token: string | null` como primer argumento. El hel
 ```
 AlmacenPage
 ├── Header card — "Control de Almacén · Stock en tiempo real..."
-├── KPI cards (5, calculadas con useMemo sobre las filas ya cargadas)
-│     ├── Con Stock        — quantity_on_hand > 0   (emerald)
-│     ├── Sin Stock        — quantity_on_hand = 0   (amber)
-│     ├── Stock Negativo   — quantity_on_hand < 0   (red)
-│     ├── Valor Real       — Σ total_value           (blue)
-│     └── Valor Teórico    — Σ theoretical_value     (violet)
-├── Tab strip [Inventario Vendible | Inventario Interno]
-│     + select filtro por stock_status
-└── DataTable (scroll horizontal + vertical independiente)
+│     └── Badges de contexto adaptativos al tab activo
+├── Tab strip [Inventario Vendible | Inventario Interno | Ajustes | Bitácora]
+│
+│  ── Tabs Vendible / Interno ──
+├── KPI cards (6 tarjetas, desde /api/inventario/kpis-v2)
+│     ├── Valor Total · Con Stock · Sin Stock · Stock Negativo · Bajo Mínimo · Sin Stock
+├── Toolbar: búsqueda + filtro categoría + filtro estado + ordenamiento
+└── DataTable de stock
       Columnas: SKU · Nombre · Categoría · Stock Real · Stock Teórico
-                · Costo Prom. · Valor Real · Valor Teórico · Estado (badge)
+                · Diferencia (±diff con flecha color) · Costo Prom.
+                · Valor Real · Valor Teórico · Estado (badge)
+│
+│  ── Tab Ajustes ──
+├── Toolbar: búsqueda + rango de fechas + botón "Nuevo Ajuste" → AjusteModal
+└── DataTable filtrado a movement_type='Ajuste'
+      Columnas: Fecha · Tipo (badge) · Producto · Entrada · Salida
+                · Costo Unit. · Observaciones · Registrado por · Folio
+│
+│  ── Tab Bitácora ──
+├── Toolbar: búsqueda + filtro tipo de movimiento + rango de fechas
+└── DataTable de todos los movimientos (mismas columnas que Ajustes)
 ```
-
-**Carga lazy por tab:**
-
-```tsx
-const { data: vendible } = useApi(vendibleFetcher, { enabled: stockTab === "vendible" })
-const { data: interno  } = useApi(internoFetcher,  { enabled: stockTab === "interno"  })
-```
-
-Solo la tab activa hace el fetch HTTP. Los KPIs se recalculan automáticamente al cambiar de tab sin llamada adicional.
 
 ### 10.2 `EquiposPage` (`frontend/src/pages/EquiposPage.tsx`)
 
@@ -816,16 +923,28 @@ EquiposPage
 ```
 ConteosPage — vista lista
 ├── Header card — KPI cards (total / DRAFT / CONFIRMED)
-├── Botón "Nuevo Conteo" → CreateCountModal
-└── DataTable de sesiones (fecha, filtro ubicación, estado, estadísticas)
+├── Botón "Nuevo Conteo" → CreateCountModal (selector Activos / Productos)
+└── DataTable de sesiones (fecha, tipo badge, estado, progreso adaptativo)
       onClick fila → vista detalle (in-page, no modal)
 
-ConteosPage — vista detalle (al seleccionar un conteo)
-├── Breadcrumb header + estadísticas en tiempo real
-├── Botón "Confirmar Conteo" (solo visible cuando status = DRAFT)
-└── DataTable de líneas
-      Columnas: Código · Nombre · Ubicación Esperada · Ubicación Escaneada · Estado
-      Botones inline por fila: ✓ (found=true) / ✗ (found=false) — toggle
+ConteosPage — vista detalle ASSET (count_type='ASSET')
+├── Breadcrumb header + estadísticas (total/encontrado/no encontrado/pendiente)
+├── Botón "Confirmar Conteo" (solo en DRAFT)
+└── DataTable de líneas de activos
+      Columnas: Código · Nombre · Ubic. Esperada · Ubic. Escaneada · Estado · Contado por
+      Botones inline: ✓ / ✗ — toggle found; registra updated_by_email + timestamp
+
+ConteosPage — vista detalle PRODUCT (count_type='PRODUCT')
+├── Breadcrumb header + KPIs (total/contados/con discrepancia/sin contar)
+├── Barra de búsqueda (debounce 300ms) + filtro vendible/interno/todos
+├── Auto-refresh cada 10s cuando status='DRAFT' (colaboración multi-usuario)
+├── Advertencia amber si hay uncounted_lines al confirmar → permite pasar con N/A
+└── DataTable de líneas de productos
+      Columnas: SKU (mono) · Nombre · Tipo (Vendible/Interno) · Categoría
+                · Stock Teórico (violet) · Stock Real (blue)
+                · Cant. Contada (input inline en DRAFT / valor o N/A en CONFIRMED)
+                · Diferencia (badge ±diff en CONFIRMED)
+                · Contado por (email + timestamp)
 ```
 
 ---
@@ -871,7 +990,8 @@ Componente autónomo (no levanta estado al padre):
 | `AssignAssetModal.tsx` | Asignar/reasignar activo: select de usuario + campo ubicación + notas. Valor especial `__none__` en el select es convertido a `null` antes del POST (para desasignar) |
 | `RetireAssetModal.tsx` | Retiro formal: textarea de motivo + input valor de rescate + botón destructivo de confirmación |
 | `WorkOrderFormModal.tsx` | Crear / editar orden de mantenimiento: tipo, prioridad, status (solo edición), fecha programada, costo, descripción, notas |
-| `CreateCountModal.tsx` | Crear sesión de conteo: fecha del conteo + filtro de ubicación opcional + notas |
+| `CreateCountModal.tsx` | Crear sesión de conteo: selector visual tipo (Activos físicos / Inventario de productos), fecha, filtro de ubicación (solo ASSET), notas |
+| `AjusteModal.tsx` | Ajuste manual de inventario: typeahead de producto (`productosService.listProducts`, debounce 300ms), toggle Entrada/Salida (color-coded), cantidad + costo unitario + observaciones (requeridas) + fecha |
 
 ---
 
@@ -965,7 +1085,50 @@ Componente autónomo (no levanta estado al padre):
    pending_count = total - found_count - not_found_count
 ```
 
-### 12.6 Cálculo de Depreciación (Línea Recta)
+### 12.6 Conteo Físico de Productos
+
+```
+1. Usuario crea sesión en ConteosPage → CreateCountModal (tipo=PRODUCTO)
+   { count_date, count_type: "PRODUCT", notes? }
+2. POST /api/assets/counts
+3. AssetService.create_physical_count() para PRODUCT:
+   a. INSERT PhysicalCount (count_type='PRODUCT', status=DRAFT)
+   b. flush() para obtener count.id
+   c. SQL que une inventory_movements y inventario para calcular
+      real_qty y theoretical_qty de cada producto activo
+   d. INSERT ProductCountLine por cada producto (snapshot completo)
+   e. commit()
+4. Operadores abren el conteo en detalle — auto-refresh cada 10s mantiene
+   sincronizado si varios usuarios están contando al mismo tiempo
+5. Por cada producto: PATCH /counts/{id}/product-lines/{lid}
+   { counted_qty: N } — registra user_id → updated_by + updated_at
+6. Al confirmar con productos sin contar (counted_qty null):
+   a. Primera llamada → frontend muestra advertencia amber con conteo de no contados
+   b. Segunda llamada (force) → POST /confirm procede
+   c. Productos sin contar aparecen como N/A en el reporte
+7. POST /counts/{id}/confirm → status=CONFIRMED
+   Stats: counted_lines, discrepancy_lines, uncounted_lines calculados en Python
+```
+
+### 12.7 Ajuste Manual de Inventario
+
+```
+1. Usuario navega a Almacén → tab Ajustes → "Nuevo Ajuste"
+2. AjusteModal:
+   a. Typeahead busca producto por nombre/SKU (productosService.listProducts)
+   b. Selecciona Entrada (qty_in) o Salida (qty_out)
+   c. Llena cantidad, costo unitario (opcional), observaciones (requerido), fecha
+3. POST /api/inventario/ajustes { product_id, direction, quantity, unit_cost?,
+   observations, moved_on? }
+4. AssetService.create_adjustment():
+   a. INSERT inventory_movements con movement_type="Ajuste"
+   b. qty_in = quantity si direction='in', qty_out = quantity si direction='out'
+   c. moved_on = data.moved_on o date.today()
+5. Frontend incrementa movKey → tabla de ajustes se recarga automáticamente
+6. El ajuste afecta el stock real inmediatamente (v_inventory_current recalcula)
+```
+
+### 12.9 Cálculo de Depreciación (Línea Recta)
 
 ```
 Configuración: useful_life_years, residual_value, start_date
@@ -990,7 +1153,7 @@ percent_depreciated  = accumulated / (cost - residual) * 100
 
 Si no hay `purchase_cost`: retorna `DepreciationScheduleRead` con `periods=[]` y todos los valores `None`. No se lanza error.
 
-### 12.7 Flujo de Órdenes de Mantenimiento
+### 12.10 Flujo de Órdenes de Mantenimiento
 
 ```
 Creación:  POST /work-orders { title, work_type, priority, scheduled_date?, cost?, notes? }
@@ -1129,7 +1292,40 @@ La tarjeta con borde rojo que muestra los detalles del retiro solo se renderiza 
 
 `DepreciationTab` gestiona su propio estado y fetcher — no levanta datos al `AssetDetailPanel`. Esto mantiene el panel principal liviano y evita que un error en depreciación afecte las otras tabs.
 
-### 14.9 Scroll independiente en DataTable
+### 14.9 Múltiples Alembic heads — head actualizado
+
+Con la migración `20260505_0034` la cadena de assets queda en:
+- Rama TOTP: `20260429_0027`
+- Cadena de assets (ahora head): `20260505_0034`
+
+Para aplicar la migración:
+```bash
+docker compose exec backend alembic upgrade 20260505_0034
+```
+
+### 14.10 Colaboración multi-usuario en conteos de productos
+
+Los conteos de productos (`count_type='PRODUCT'`) pueden ser trabajados por múltiples operadores simultáneamente. El frontend implementa un refresh automático cada 10 segundos cuando el conteo está en `DRAFT`. Cada PATCH de línea registra `updated_by`/`updated_at` en la base de datos, y el frontend lo muestra en la columna "Contado por".
+
+### 14.11 Confirmación de conteo con productos sin contar
+
+Cuando se intenta confirmar un conteo `PRODUCT` con líneas sin `counted_qty`, el frontend:
+1. Detecta `uncounted_lines > 0` en la respuesta del `GET /counts`
+2. Muestra un banner amber con el número de productos no contados
+3. Ofrece botones "Sí, confirmar" (procede con `force=true`) y "Cancelar"
+4. Los productos sin contar quedan en el reporte con `N/A`
+
+Esto permite cerrar conteos parciales sin bloquear el flujo operativo.
+
+### 14.12 Columna Diferencia en tabla de stock
+
+En `AlmacenPage`, la columna "Diferencia" calcula `quantity_on_hand - theoretical_qty` en el frontend (no viene del backend). Es un campo computed en la tabla:
+- `theoretical_qty = null`: muestra "—"
+- `diff = 0`: muestra "0" en muted
+- `diff > 0`: flecha verde ↑ (más stock real que teórico)
+- `diff < 0`: flecha roja ↓ (menos stock real que teórico)
+
+### 14.14 Scroll independiente en DataTable
 
 `DataTable` con prop `maxHeight` coloca scroll horizontal y vertical en el mismo contenedor:
 

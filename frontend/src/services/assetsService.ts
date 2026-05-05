@@ -1,5 +1,6 @@
 import { requestJson } from "@/lib/http"
 import type {
+  AdjustmentCreate,
   AssetAssignment,
   AssetComponentDetail,
   AssetComponentHistoryItem,
@@ -12,10 +13,13 @@ import type {
   InstallComponentPayload,
   InventoryCurrentItem,
   InventoryKpiV2,
+  InventoryMovementRead,
   PhysicalCountCreate,
   PhysicalCountLineRead,
   PhysicalCountLineUpdate,
   PhysicalCountRead,
+  ProductCountLineRead,
+  ProductCountLineUpdate,
   RemoveComponentPayload,
   RetireAssetPayload,
   WorkOrderCreate,
@@ -219,6 +223,28 @@ export const assetsService = {
     return requestJson(`/api/assets/counts/${countId}/confirm`, { method: "POST", token })
   },
 
+  getProductCountLines(
+    token: string | null,
+    countId: string,
+    params: { search?: string; is_saleable?: boolean } = {},
+    signal?: AbortSignal,
+  ): Promise<ProductCountLineRead[]> {
+    return requestJson(withQuery(`/api/assets/counts/${countId}/product-lines`, params), { token, signal })
+  },
+
+  updateProductCountLine(
+    token: string | null,
+    countId: string,
+    lineId: string,
+    data: ProductCountLineUpdate,
+  ): Promise<ProductCountLineRead> {
+    return requestJson(`/api/assets/counts/${countId}/product-lines/${lineId}`, {
+      method: "PATCH",
+      body: data as never,
+      token,
+    })
+  },
+
   // ── Órdenes de Mantenimiento ─────────────────────────────────────────────
 
   createWorkOrder(token: string | null, assetId: string, data: WorkOrderCreate): Promise<WorkOrderRead> {
@@ -271,5 +297,30 @@ export const assetsService = {
       body: data as never,
       token,
     })
+  },
+
+  // ── Movimientos de inventario ─────────────────────────────────────────────
+
+  listMovements(
+    token: string | null,
+    params: {
+      product_id?: string
+      movement_type?: string
+      search?: string
+      date_from?: string
+      date_to?: string
+      limit?: number
+      offset?: number
+    } = {},
+    signal?: AbortSignal,
+  ): Promise<InventoryMovementRead[]> {
+    return requestJson(withQuery("/api/inventario/movimientos", params), { token, signal })
+  },
+
+  createAdjustment(
+    token: string | null,
+    data: AdjustmentCreate,
+  ): Promise<InventoryMovementRead> {
+    return requestJson("/api/inventario/ajustes", { method: "POST", body: data as never, token })
   },
 }

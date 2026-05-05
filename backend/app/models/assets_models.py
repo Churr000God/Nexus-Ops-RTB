@@ -315,11 +315,10 @@ class AssetWorkOrder(Base):
 
 
 class PhysicalCount(Base):
-    """Sesión de conteo físico de activos.
+    """Sesión de conteo físico.
 
-    Contiene un snapshot de todos los activos relevantes en el momento
-    de crear el conteo. Las líneas se marcan found/not-found durante
-    el recorrido físico y se confirman al cerrar la sesión.
+    count_type='ASSET'   → conteo de equipos físicos (found/not-found)
+    count_type='PRODUCT' → conteo de productos de inventario (cantidades)
     """
 
     __tablename__ = "physical_counts"
@@ -328,10 +327,15 @@ class PhysicalCount(Base):
             "status IN ('DRAFT','CONFIRMED','CANCELLED')",
             name="ck_physical_counts_status",
         ),
+        CheckConstraint(
+            "count_type IN ('ASSET','PRODUCT')",
+            name="ck_physical_counts_count_type",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     count_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    count_type: Mapped[str] = mapped_column(String(10), nullable=False, default="ASSET")
     location_filter: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT", index=True)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -351,10 +355,13 @@ class PhysicalCount(Base):
     lines: Mapped[list[PhysicalCountLine]] = relationship(
         back_populates="count", cascade="all, delete-orphan"
     )
+    product_lines: Mapped[list[ProductCountLine]] = relationship(
+        back_populates="count", cascade="all, delete-orphan"
+    )
 
 
 class PhysicalCountLine(Base):
-    """Línea de conteo físico — un activo dentro de una sesión de conteo."""
+    """Línea de conteo físico — un activo dentro de una sesión de conteo ASSET."""
 
     __tablename__ = "physical_count_lines"
 
@@ -371,8 +378,40 @@ class PhysicalCountLine(Base):
     scanned_location: Mapped[str | None] = mapped_column(Text)
     found: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     count: Mapped[PhysicalCount] = relationship(back_populates="lines")
+
+
+class ProductCountLine(Base):
+    """Línea de conteo de inventario — un SKU dentro de una sesión de conteo PRODUCT."""
+
+    __tablename__ = "product_count_lines"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    count_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("physical_counts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    product_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("productos.id", ondelete="SET NULL"), nullable=True
+    )
+    sku: Mapped[str | None] = mapped_column(String(120))
+    product_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_saleable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    category: Mapped[str | None] = mapped_column(String(200))
+    theoretical_qty: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    real_qty: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False, default=0)
+    counted_qty: Mapped[float | None] = mapped_column(Numeric(14, 4), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    count: Mapped[PhysicalCount] = relationship(back_populates="product_lines")
 
 
 class AssetAssignmentHistory(Base):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ── Asset ────────────────────────────────────────────────────────────────────
@@ -252,6 +252,7 @@ class WorkOrderRead(BaseModel):
 
 class PhysicalCountCreate(BaseModel):
     count_date: date
+    count_type: str = "ASSET"  # 'ASSET' | 'PRODUCT'
     location_filter: str | None = None
     notes: str | None = None
 
@@ -268,6 +269,9 @@ class PhysicalCountLineRead(BaseModel):
     scanned_location: str | None
     found: bool | None
     notes: str | None
+    updated_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by_email: str | None = None
 
 
 class PhysicalCountRead(BaseModel):
@@ -275,6 +279,7 @@ class PhysicalCountRead(BaseModel):
 
     id: UUID
     count_date: date
+    count_type: str = "ASSET"
     location_filter: str | None
     status: str
     notes: str | None
@@ -283,14 +288,45 @@ class PhysicalCountRead(BaseModel):
     confirmed_at: datetime | None
     confirmed_by: UUID | None
     total_lines: int = 0
+    # ASSET stats
     found_count: int = 0
     not_found_count: int = 0
     pending_count: int = 0
+    # PRODUCT stats
+    counted_lines: int = 0
+    discrepancy_lines: int = 0
+    uncounted_lines: int = 0
 
 
 class PhysicalCountLineUpdate(BaseModel):
     found: bool | None = None
     scanned_location: str | None = None
+    notes: str | None = None
+
+
+# ── ProductCountLine ──────────────────────────────────────────────────────────
+
+class ProductCountLineRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    count_id: UUID
+    product_id: UUID | None
+    sku: str | None
+    product_name: str
+    is_saleable: bool
+    category: str | None
+    theoretical_qty: float | None
+    real_qty: float
+    counted_qty: float | None
+    notes: str | None
+    updated_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by_email: str | None = None
+
+
+class ProductCountLineUpdate(BaseModel):
+    counted_qty: float | None = None
     notes: str | None = None
 
 
@@ -350,3 +386,49 @@ class InventoryKpiSummaryRead(BaseModel):
     con_stock_interno: int
     sin_stock_interno: int
     stock_negativo_interno: int
+
+
+# ── Movimientos de inventario ─────────────────────────────────────────────────
+
+class InventoryMovementRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    movement_number: str | None
+    product_id: UUID | None
+    product_sku: str | None = None
+    product_name: str | None = None
+    movement_type: str | None
+    qty_in: float | None
+    qty_out: float | None
+    qty_nonconformity: float | None = None
+    unit_cost: float | None
+    moved_on: datetime | None
+    origin: str | None
+    destination: str | None
+    observations: str | None
+    created_by_email: str | None = None
+    created_at: datetime
+
+
+class AdjustmentCreate(BaseModel):
+    product_id: UUID
+    direction: str        # 'in' | 'out'
+    quantity: float
+    unit_cost: float | None = None
+    observations: str
+    moved_on: date | None = None
+
+    @field_validator("direction")
+    @classmethod
+    def validate_direction(cls, v: str) -> str:
+        if v not in ("in", "out"):
+            raise ValueError("direction debe ser 'in' o 'out'")
+        return v
+
+    @field_validator("quantity")
+    @classmethod
+    def validate_quantity(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("quantity debe ser mayor a 0")
+        return v

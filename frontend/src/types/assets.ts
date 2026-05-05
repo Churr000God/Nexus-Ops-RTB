@@ -189,6 +189,7 @@ export type WorkOrderUpdate = {
 export type PhysicalCountRead = {
   id: string
   count_date: string
+  count_type: "ASSET" | "PRODUCT"
   location_filter: string | null
   status: "DRAFT" | "CONFIRMED" | "CANCELLED"
   notes: string | null
@@ -197,13 +198,19 @@ export type PhysicalCountRead = {
   confirmed_at: string | null
   confirmed_by: string | null
   total_lines: number
+  // ASSET stats
   found_count: number
   not_found_count: number
   pending_count: number
+  // PRODUCT stats
+  counted_lines: number
+  discrepancy_lines: number
+  uncounted_lines: number
 }
 
 export type PhysicalCountCreate = {
   count_date: string
+  count_type?: "ASSET" | "PRODUCT"
   location_filter?: string | null
   notes?: string | null
 }
@@ -218,12 +225,65 @@ export type PhysicalCountLineRead = {
   scanned_location: string | null
   found: boolean | null
   notes: string | null
+  updated_by: string | null
+  updated_at: string | null
+  updated_by_email: string | null
 }
 
 export type PhysicalCountLineUpdate = {
   found?: boolean | null
   scanned_location?: string | null
   notes?: string | null
+}
+
+export type ProductCountLineRead = {
+  id: string
+  count_id: string
+  product_id: string | null
+  sku: string | null
+  product_name: string
+  is_saleable: boolean
+  category: string | null
+  theoretical_qty: number | null
+  real_qty: number
+  counted_qty: number | null
+  notes: string | null
+  updated_by: string | null
+  updated_at: string | null
+  updated_by_email: string | null
+}
+
+export type ProductCountLineUpdate = {
+  counted_qty?: number | null
+  notes?: string | null
+}
+
+export type InventoryMovementRead = {
+  id: string
+  movement_number: string | null
+  product_id: string | null
+  product_sku: string | null
+  product_name: string | null
+  movement_type: string | null
+  qty_in: number | null
+  qty_out: number | null
+  qty_nonconformity: number | null
+  unit_cost: number | null
+  moved_on: string | null
+  origin: string | null
+  destination: string | null
+  observations: string | null
+  created_by_email: string | null
+  created_at: string
+}
+
+export type AdjustmentCreate = {
+  product_id: string
+  direction: "in" | "out"
+  quantity: number
+  unit_cost?: number | null
+  observations: string
+  moved_on?: string | null
 }
 
 export type AssetComponentHistoryItem = {

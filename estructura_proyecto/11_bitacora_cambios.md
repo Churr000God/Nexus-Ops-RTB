@@ -1,5 +1,77 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-05-05 — Inventario: diferencia de stock, conteo de productos, ajustes y bitácora
+
+### Resumen
+Sesión enfocada en madurar el módulo Inventario & Activos: columna de diferencia de stock, conteo físico de productos (además del conteo de activos), colaboración multi-usuario en conteos, manejo de productos no contados al confirmar, ajustes manuales de inventario y bitácora completa de movimientos.
+
+### Base de datos
+
+- **Migración `20260505_0034`** — extiende la cadena de assets desde `20260430_0033`:
+  - `ALTER TABLE physical_counts` → agrega `count_type VARCHAR(10) DEFAULT 'ASSET'` con CHECK `('ASSET','PRODUCT')`
+  - `ALTER TABLE physical_count_lines` → agrega `updated_by UUID FK users` y `updated_at TIMESTAMPTZ`
+  - `CREATE TABLE product_count_lines` → líneas de conteo de productos: `id`, `count_id`, `product_id`, `sku`, `product_name`, `is_saleable`, `category`, `theoretical_qty`, `real_qty`, `counted_qty`, `notes`, `updated_by`, `updated_at`
+
+### Backend
+
+**Nuevos schemas (`assets_schema.py`):**
+- `ProductCountLineRead` — fila de conteo con `sku`, stock teórico, real, contado, `updated_by_email`
+- `ProductCountLineUpdate` — `{ counted_qty?, notes? }`
+- `InventoryMovementRead` — movimiento enriquecido con `product_sku`, `product_name`, `created_by_email`
+- `AdjustmentCreate` — `{ product_id, direction: 'in'|'out', quantity, unit_cost?, observations, moved_on? }` con validadores
+
+**Nuevos métodos en `AssetService` (`assets_service.py`):**
+- `create_physical_count()` — bifurca en `count_type`: PRODUCT hace snapshot de todos los productos con `theoretical_qty` desde `inventario` y `real_qty` desde `inventory_movements`; ASSET sigue el flujo previo de activos
+- `get_product_count_lines(count_id, search, is_saleable)` — SQL raw con filtros y JOIN a users para `updated_by_email`
+- `update_product_count_line(count_id, line_id, data, user_id)` — PATCH con timestamp de auditoría
+- `update_count_line()` actualizado para recibir `user_id` y registrar `updated_by/updated_at`
+- `confirm_physical_count()` — eager-load de `lines` + `product_lines`; PRODUCT calcula `counted_lines / discrepancy_lines / uncounted_lines`
+- `list_movements(product_id?, movement_type?, search?, date_from?, date_to?, limit, offset)` — SQL JOIN a productos + users con filtros acumulativos
+- `create_adjustment(data, user_id)` — INSERT en `inventory_movements` tipo `"Ajuste"`, `qty_in` o `qty_out` según direction
+
+**Nuevos endpoints (`assets.py`):**
+- `GET /api/assets/counts/{count_id}/product-lines` — lista líneas de conteo de productos (filtros: `search`, `is_saleable`)
+- `PATCH /api/assets/counts/{count_id}/product-lines/{line_id}` — actualiza `counted_qty`/`notes`; registra quien contó
+- `GET /api/inventario/movimientos` — bitácora completa con filtros
+- `POST /api/inventario/ajustes` → 201 — crea ajuste manual
+
+### Frontend
+
+**Tipos (`types/assets.ts`):**
+- `InventoryMovementRead` — todos los campos del movimiento enriquecido
+- `AdjustmentCreate` — payload del formulario de ajuste
+
+**Servicio (`assetsService.ts`):**
+- `getProductCountLines(token, countId, params, signal?)`
+- `updateProductCountLine(token, countId, lineId, data)`
+- `listMovements(token, params, signal?)`
+- `createAdjustment(token, data)`
+
+**Componente nuevo — `AjusteModal.tsx`:**
+- Typeahead de producto (llama `productosService.listProducts` con debounce 300ms)
+- Toggle Entrada / Salida (color-coded verde / rojo)
+- Campos: cantidad, costo unitario (opcional), observaciones (requerido), fecha (default: hoy)
+
+**`AlmacenPage` (`Inventarios.tsx`) — ampliado a 4 tabs:**
+- `Inventario Vendible` / `Inventario Interno` — comportamiento previo + columna "Diferencia" (stock real − stock teórico, con flecha color)
+- `Ajustes` — tabla filtrada a `movement_type=Ajuste` + botón "Nuevo Ajuste" → `AjusteModal`
+- `Bitácora` — todos los movimientos con filtro de tipo, búsqueda y rango de fechas
+- KPIs y toolbar de stock solo visibles en las dos primeras tabs
+
+**`ConteosPage` — conteo de productos:**
+- `CreateCountModal` rediseñado: selector visual "Activos físicos" vs "Inventario de productos"
+- Vista detalle bifurca según `count_type`:
+  - ASSET: comportamiento previo (found/not-found)
+  - PRODUCT: tabla con SKU, Nombre, Tipo (Vendible/Interno), Categoría, Stock Teórico, Stock Real, Cant. Contada (input inline en DRAFT / N/A si no fue contado en CONFIRMED), Diferencia, Contado por
+- Barra de búsqueda con debounce 300ms + filtro vendible/interno
+- Auto-refresh cada 10s en DRAFT → colaboración multi-usuario en tiempo real
+- Advertencia amber al confirmar si hay productos sin contar: permite proceder (productos sin contar aparecen como N/A en el reporte)
+
+### Documentación
+- `estructura_proyecto/15_modulo_inventario_almacen.md` — actualizado con nuevas tablas, endpoints, schemas, métodos y flujos
+
+---
+
 ## 2026-05-05 — Autocomplete de usuarios en asignación de equipos
 
 ### Backend
