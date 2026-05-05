@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from "react"
-import { UserCheck, X } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Search, UserCheck, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { useApi } from "@/hooks/useApi"
 import { assetsService } from "@/services/assetsService"
 import { adminService } from "@/services/adminService"
 import { useAuthStore } from "@/stores/authStore"
 import type { AssetRead } from "@/types/assets"
+import type { User } from "@/types/auth"
 
 interface AssignAssetModalProps {
   open: boolean
@@ -19,27 +19,47 @@ interface AssignAssetModalProps {
 export function AssignAssetModal({ open, onClose, onSuccess, asset }: AssignAssetModalProps) {
   const token = useAuthStore((s) => s.accessToken)
   const [selectedUserId, setSelectedUserId] = useState<string>("__none__")
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [search, setSearch] = useState("")
+  const [results, setResults] = useState<User[]>([])
+  const [searching, setSearching] = useState(false)
   const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
-
-  const usersFetcher = useCallback(
-    (signal: AbortSignal) => adminService.listUsers(token, signal),
-    [token],
-  )
-  const { data: users } = useApi(usersFetcher)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
       setSelectedUserId(asset.assigned_user_id ?? "__none__")
+      setSelectedUser(null)
+      setSearch("")
+      setResults([])
       setLocation(asset.location ?? "")
       setNotes("")
+      setTimeout(() => searchRef.current?.focus(), 50)
     }
   }, [open, asset])
 
-  if (!open) return null
+  useEffect(() => {
+    if (!search.trim() || selectedUser) {
+      setResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await adminService.searchUsers(token, search.trim())
+        setResults(res)
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [search, selectedUser, token])
 
-  const activeUsers = (users ?? []).filter((u) => u.is_active)
+  if (!open) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,7 +84,7 @@ export function AssignAssetModal({ open, onClose, onSuccess, asset }: AssignAsse
   const currentUserName =
     selectedUserId === "__none__"
       ? "Sin asignar"
-      : (activeUsers.find((u) => u.id === selectedUserId)?.full_name ?? "Usuario")
+      : (selectedUser?.full_name ?? "Usuario")
 
   return (
     <div
@@ -96,23 +116,61 @@ export function AssignAssetModal({ open, onClose, onSuccess, asset }: AssignAsse
             </p>
           </div>
 
-          {/* User select */}
+          {/* User search */}
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
               Asignar a *
             </label>
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-            >
-              <option value="__none__">Sin asignar</option>
-              {activeUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.full_name} ({u.email})
-                </option>
-              ))}
-            </select>
+            {selectedUserId !== "__none__" && selectedUser ? (
+              <div className="flex items-center justify-between rounded-md border border-border bg-accent/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{selectedUser.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{selectedUser.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedUser(null); setSelectedUserId("__none__"); setSearch(""); setTimeout(() => searchRef.current?.focus(), 50) }}
+                  className="ml-2 shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  ref={searchRef}
+                  className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar usuario por nombre o email…"
+                />
+                {(results.length > 0 || searching) && (
+                  <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-background shadow-lg">
+                    {searching ? (
+                      <p className="px-3 py-2 text-xs text-muted-foreground">Buscando…</p>
+                    ) : (
+                      results.map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-accent"
+                          onClick={() => { setSelectedUser(u); setSelectedUserId(u.id); setSearch("") }}
+                        >
+                          <p className="text-sm font-medium text-foreground">{u.full_name}</p>
+                          <p className="text-xs text-muted-foreground">{u.email}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {selectedUserId === "__none__" && !selectedUser && (
+              <p className="text-[11px] text-muted-foreground">
+                Escribe para buscar un usuario activo, o deja vacío para desasignar.
+              </p>
+            )}
           </div>
 
           {/* Location */}

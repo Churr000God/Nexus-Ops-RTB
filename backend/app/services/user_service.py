@@ -125,3 +125,23 @@ class UserService:
             )
         )
         await self.db.commit()
+
+    async def search_users(self, query: str, limit: int = 10) -> list[User]:
+        """Busca usuarios activos por nombre o email (case-insensitive)."""
+        from sqlalchemy import or_
+
+        pattern = f"%{query}%"
+        stmt = (
+            select(User)
+            .where(
+                User.is_active.is_(True),
+                or_(
+                    User.full_name.ilike(pattern),
+                    User.email.ilike(pattern),
+                ),
+            )
+            .order_by(User.full_name)
+            .limit(limit)
+        )
+        result = await self.db.scalars(stmt)
+        return list(result.all())

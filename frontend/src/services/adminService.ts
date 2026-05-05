@@ -26,6 +26,13 @@ export const adminService = {
     return requestJson<User[]>("/api/usuarios", { token, signal })
   },
 
+  searchUsers(token: string | null, query: string, signal?: AbortSignal) {
+    const qs = new URLSearchParams()
+    qs.set("q", query)
+    qs.set("limit", "10")
+    return requestJson<User[]>(`/api/usuarios/search?${qs.toString()}`, { token, signal })
+  },
+
   listRoles(token: string | null, signal?: AbortSignal) {
     return requestJson<Role[]>("/api/admin/roles", { token, signal })
   },

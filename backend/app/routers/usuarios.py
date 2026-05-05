@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db, require_permission
@@ -42,6 +42,19 @@ async def list_users(
     service = UserService(db)
     users_with_roles = await service.list_users()
     return [_user_response(user, roles) for user, roles in users_with_roles]
+
+
+@router.get("/search", response_model=list[UserResponse])
+async def search_users(
+    q: str = Query(..., min_length=1, description="Término de búsqueda"),
+    limit: int = Query(10, ge=1, le=50),
+    _: User = Depends(require_permission("user.view")),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserResponse]:
+    """Buscar usuarios activos por nombre o email."""
+    service = UserService(db)
+    users = await service.search_users(q, limit)
+    return [_user_response(user, await service.get_user_roles(user.id)) for user in users]
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
