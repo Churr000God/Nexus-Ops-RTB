@@ -1,5 +1,23 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-05-05 — Autocomplete de usuarios en asignación de equipos
+
+### Backend
+- **Endpoint nuevo:** `GET /api/usuarios/search?q={query}&limit=10` — busca usuarios activos por nombre o email (`ilike`), requiere permiso `user.view`
+- **Service:** `UserService.search_users(query, limit)` en `app/services/user_service.py`
+
+### Frontend
+- **`AssignAssetModal.tsx`**: reemplazado `<select>` nativo por input de búsqueda con dropdown de sugerencias
+  - Debounce 300 ms
+  - Dropdown con fondo sólido (`bg-background`)
+  - Tarjeta de usuario seleccionado con botón para quitar
+- **`adminService.ts`**: nuevo método `searchUsers(token, query)`
+
+### Documentación
+- `docs/cambios_2026-05-05_autocomplete_usuarios_equipos.md`
+
+---
+
 ## 2026-04-30 — Almacén & Equipos: Bloques 1–7 (activos físicos completos)
 
 ### Bloques implementados
