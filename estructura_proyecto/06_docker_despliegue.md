@@ -1,19 +1,21 @@
 # Docker y Despliegue
 
-**Propósito:** Describir los contenedores, `docker-compose`, estrategias de entornos (dev/prod), volúmenes, redes y reverse proxy para un despliegue repetible y automatizado.
+**Propósito:** Describir los contenedores, `docker-compose`, estrategias de entornos (dev/prod), volúmenes, redes y el pipeline CI/CD en AWS para un despliegue automatizado y repetible.
+
+> **Nota importante:** La base de datos de la aplicación vive en **Supabase** (PostgreSQL externo). No hay contenedor `postgres` local para la app. El único contenedor de postgres en Docker es `postgres-n8n`, dedicado exclusivamente a n8n.
 
 ---
 
 ## 1. Servicios en el Compose
 
-| Servicio | Imagen / Build | Puertos | Depende de |
-|----------|---------------|---------|------------|
-| `postgres` | `postgres:16-alpine` | 5432 (interno) | — |
+| Servicio | Imagen / Build | Puertos expuestos | Depende de |
+|----------|---------------|-------------------|------------|
 | `redis` | `redis:7-alpine` | 6379 (interno) | — |
-| `backend` | build `./backend` | 8000 (interno) | postgres, redis |
+| `backend` | build `./backend` | 8000 (interno) | redis |
 | `frontend` | build `./frontend` | 80 (interno) | backend |
-| `n8n` | `n8nio/n8n:latest` | 5678 (interno) | postgres |
-| `proxy` | `nginx:1.27-alpine` o `traefik:v3` | 80/443 (externo) | backend, frontend, n8n |
+| `proxy` | `nginx:1.27-alpine` | 80 / 443 (externo) | backend, frontend |
+| `postgres-n8n` | `postgres:16-alpine` | 5432 (interno) | — |
+| `n8n` | `n8nio/n8n:latest` | 5678 (interno) | postgres-n8n |
 | `cloudflared` | `cloudflare/cloudflared:latest` | — | proxy |
 
 ---
@@ -23,114 +25,105 @@
 ```
 docker/
 ├── nginx/
-│   ├── default.conf                 # Vhost interno (dev)
-│   ├── default.prod.conf            # Vhost de producción con TLS local
-│   └── nginx.conf                   # Base
-├── traefik/                         # Alternativa a Nginx
-│   ├── traefik.yml
-│   └── dynamic.yml
-├── postgres/
-│   └── init.sql                     # Crea DB si no existe
+│   ├── default.conf            # Vhost dev (HTTP)
+│   └── default.prod.conf       # Vhost prod (HTTP→backend, proxy_pass)
 ├── cloudflared/
-│   ├── config.yml                   # (copia del cloudflare_tunnel.yml raíz)
-│   └── credentials.json             # (en .gitignore)
-└── scripts/
-    ├── wait-for-postgres.sh
-    └── entrypoint-backend.sh
+│   ├── config.yml              # Config del túnel (en .gitignore)
+│   └── credentials.json        # Credenciales del túnel (en .gitignore)
+scripts/
+├── init-project.sh             # Arranque completo del stack (dev)
+├── init-dev.ps1                # Implementación PowerShell del arranque
+├── stop.sh                     # Detener stack preservando volúmenes
+├── setup-db.sh                 # Setup completo de BD (migraciones + seed)
+├── backup-db.sh                # Backup comprimido en data/backups/
+├── restore-db.sh               # Restaurar backup
+├── update-safe.sh              # Actualización segura (pull+backup+build+migrate)
+├── health-check.sh             # Verificar estado de todos los servicios
+└── codedeploy/                 # Hooks del pipeline AWS CodeDeploy
+    ├── before_install.sh
+    ├── after_install.sh
+    ├── application_start.sh
+    └── validate_service.sh
 ```
 
 ---
 
 ## 3. `docker-compose.yml` (desarrollo)
 
+El stack de desarrollo usa bind-mounts para hot-reload. La BD apunta a Supabase vía `DATABASE_URL_DOCKER` (relay para Docker/WSL2).
+
 ```yaml
 name: nexus-ops-rtb
 
 services:
-  postgres:
+  postgres-n8n:           # Solo para n8n — no es la BD de la app
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${N8N_DB_NAME}
+      POSTGRES_USER: ${N8N_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${N8N_POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 10s
-      retries: 5
+      - n8n_postgres_data:/var/lib/postgresql/data
 
   redis:
     image: redis:7-alpine
     volumes:
       - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      retries: 5
 
   backend:
-    build:
-      context: ./backend
+    build: { context: ./backend }
     env_file: .env
+    environment:
+      ENV: development
+      DATABASE_URL: ${DATABASE_URL_DOCKER}   # relay WSL2/Docker
     volumes:
       - ./backend:/app
       - ./data/csv:/data/csv
       - ./data/reports:/data/reports
     depends_on:
-      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    ports:
-      - "8000:8000"
-    command: >
-      bash -c "alembic upgrade head &&
-               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports: ["8000:8000"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     env_file: .env
-    depends_on: [backend]
-    ports:
-      - "5173:80"
+    ports: ["5173:80"]
 
   n8n:
     image: n8nio/n8n:latest
     env_file: .env
     environment:
       - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_HOST=postgres-n8n
       - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME}
-      - DB_POSTGRESDB_USER=${POSTGRES_USER}
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
     volumes:
       - ./automations/n8n_data:/home/node/.n8n
-      - ./automations/n8n_flows:/flows
       - ./data/csv:/data/csv
-    depends_on: [postgres]
-    ports:
-      - "5678:5678"
+    depends_on:
+      postgres-n8n: { condition: service_healthy }
+    ports: ["5678:5678"]
 
   proxy:
     image: nginx:1.27-alpine
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    ports:
-      - "80:80"
+    ports: ["80:80"]
     depends_on: [backend, frontend, n8n]
 
 volumes:
-  postgres_data:
+  n8n_postgres_data:
   redis_data:
 ```
 
 ---
 
-## 4. `docker-compose.prod.yml` (overrides)
+## 4. `docker-compose.prod.yml` (overrides de producción)
+
+Activa el target `prod` de los Dockerfiles, elimina bind-mounts, fuerza `DATABASE_URL` directa a Supabase y añade `cloudflared`.
 
 ```yaml
 services:
@@ -138,10 +131,11 @@ services:
     build:
       context: ./backend
       target: prod
-    volumes: []          # sin bind-mount del código
-    command: >
-      bash -c "alembic upgrade head &&
-               uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    environment:
+      ENV: production
+      DATABASE_URL: ${DATABASE_URL}    # URL directa a Supabase (sin relay)
+    volumes: []
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     restart: unless-stopped
 
   frontend:
@@ -154,9 +148,7 @@ services:
     volumes:
       - ./docker/nginx/default.prod.conf:/etc/nginx/conf.d/default.conf:ro
       - ./docker/nginx/certs:/etc/nginx/certs:ro
-    ports:
-      - "80:80"
-      - "443:443"
+    ports: ["80:80", "443:443"]
     restart: unless-stopped
 
   cloudflared:
@@ -169,7 +161,7 @@ services:
     restart: unless-stopped
 ```
 
-Uso:
+Comando para producción:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
@@ -180,164 +172,121 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 ```nginx
 # docker/nginx/default.prod.conf
-upstream backend { server backend:8000; }
+upstream backend  { server backend:8000; }
 upstream frontend { server frontend:80; }
-upstream n8n { server n8n:5678; }
 
 server {
-    listen 443 ssl http2;
-    server_name nexus-ops.local;
-
-    ssl_certificate     /etc/nginx/certs/nexus-ops.crt;
-    ssl_certificate_key /etc/nginx/certs/nexus-ops.key;
-
-    # Restricción a red local + túnel Cloudflare (se confía en x-forwarded-for del túnel)
-    allow 192.168.0.0/16;
-    allow 10.0.0.0/8;
-    allow 172.16.0.0/12;
-    deny  all;
+    listen 80;
+    server_name _;
+    client_max_body_size 50M;
 
     location /api/ {
-        proxy_pass http://backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
-
-    location /n8n/ {
-        auth_basic "n8n";
-        auth_basic_user_file /etc/nginx/.htpasswd_n8n;
-        proxy_pass http://n8n/;
+        proxy_pass http://backend/api/;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
     }
 
     location / {
-        proxy_pass http://frontend;
+        proxy_pass http://frontend/;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
+> `VITE_API_URL` debe estar **vacío** en producción (`VITE_API_URL=`) para que las llamadas del frontend sean paths relativos (`/api/...`) que nginx proxea al backend. Si se pone `http://localhost:8000`, el browser bloquea las peticiones por política de "loopback privado".
+
 ---
 
-## 6. Healthchecks y Restart Policies
+## 6. Variables de Entorno Clave
 
-- Todos los servicios productivos: `restart: unless-stopped`.
-- Healthchecks:
-  - `backend` expone `/health` (liveness) y `/ready` (incluye DB + Redis).
-  - `postgres` y `redis` tienen checks nativos.
-  - `n8n` no expone health oficial — se usa `curl -f http://localhost:5678/` como proxy.
+| Variable | Dev | Prod | Descripción |
+|----------|-----|------|-------------|
+| `DATABASE_URL` | URL directa Supabase | URL directa Supabase | Usada en prod por `docker-compose.prod.yml` |
+| `DATABASE_URL_DOCKER` | URL relay WSL2 | No se usa | Workaround Docker/WSL2 para dev |
+| `VITE_API_URL` | `http://localhost:8000` | `` (vacío) | Se hornea en el bundle de React en build time |
+| `JWT_SECRET` | cualquier string | string largo aleatorio | Secreto para tokens JWT |
+| `REDIS_URL` | `redis://redis:6379` | `redis://redis:6379` | Mismo nombre de servicio en ambos entornos |
 
 ---
 
 ## 7. Volúmenes y Datos Persistentes
 
-| Volumen | Ruta host (dev) | Contenido |
-|---------|-----------------|-----------|
-| `postgres_data` | named volume | DB binaria |
-| `redis_data` | named volume | Cache / colas |
-| `./data/csv` | bind mount | CSV refrescados por n8n |
-| `./data/reports` | bind mount | DOCX/PDF generados |
-| `./automations/n8n_data` | bind mount | Credenciales y config de n8n |
-| `./docker/cloudflared/*` | bind mount | Credenciales del túnel |
+| Volumen / Mount | Contenido | Persistencia |
+|-----------------|-----------|-------------|
+| `n8n_postgres_data` (named) | BD de n8n | Persiste entre reinicios |
+| `redis_data` (named) | Caché y colas | Persiste entre reinicios |
+| `./data/csv` | CSVs generados por n8n | Repositorio / EC2 |
+| `./data/reports` | DOCX/PDF generados | EC2 |
+| `./data/backups` | Backups de Supabase | EC2 (gitignored) |
+| `./automations/n8n_data` | Config y credenciales n8n | EC2 (gitignored) |
+| `./docker/cloudflared/` | Credenciales del túnel | EC2 (gitignored) |
 
 ---
 
-## 8. Redes
+## 8. Healthchecks y Políticas de Restart
 
-- Red interna `nexus_net` (bridge) para que los servicios se resuelvan por nombre.
-- `proxy` y `cloudflared` son los únicos que exponen puertos al host.
-
----
-
-## 9. Variables de Entorno
-
-Referencia completa en `09_variables_entorno.md`. En resumen, se cargan desde `.env` del root con `env_file:` en cada servicio.
+- `backend`: expone `GET /health` → 200 (liveness + DB + Redis).
+- `redis` y `postgres-n8n`: healthchecks nativos de Docker.
+- Todos los servicios de producción: `restart: unless-stopped`.
 
 ---
 
-## 10. CI/CD — GitHub Actions
+## 9. Scripts de Operación
+
+| Script | Cuándo usarlo |
+|--------|--------------|
+| `./scripts/init-project.sh` | Primera vez o reinicio completo en dev |
+| `.\scripts\init-dev.ps1` | Equivalente PowerShell |
+| `./scripts/stop.sh` | Detener sin destruir volúmenes |
+| `./scripts/setup-db.sh` | Aplicar migraciones + seed en BD limpia |
+| `./scripts/backup-db.sh` | Backup manual de Supabase |
+| `./scripts/restore-db.sh` | Restaurar backup |
+| `./scripts/update-safe.sh` | **Actualización de producción** (pull + backup + build + migrate) |
+| `./scripts/health-check.sh` | Verificar estado del stack |
+
+---
+
+## 10. CI/CD — AWS CodePipeline
+
+El despliegue automatizado usa **AWS CodePipeline** con tres etapas: Source (GitHub), Build (CodeBuild) y Deploy (CodeDeploy → EC2).
+
+Para la documentación completa del pipeline ver: [`docs/despliegue_aws_codepipeline.md`](../docs/despliegue_aws_codepipeline.md)
+
+### Flujo resumido
 
 ```
-.github/workflows/
-├── ci.yml                 # Lint + tests en cada PR
-├── build.yml              # Build de imágenes al taggear release
-└── deploy.yml             # SSH → pull → compose up en servidor
+Push a main
+    ↓
+CodePipeline detecta cambio (GitHub webhook)
+    ↓
+CodeBuild (buildspec.yml)
+  • npm --prefix frontend ci
+  • npm --prefix frontend run lint       ← falla el pipeline si hay errores
+  • npm --prefix frontend run typecheck  ← falla el pipeline si hay errores TS
+  • tar -czf /tmp/deploy.tgz ...         ← empaqueta artefacto sin .env/.git/node_modules
+    ↓
+CodeDeploy → EC2 (appspec.yml)
+  • BEFORE_DEPLOY  → before_install.sh  (detiene backend/frontend/proxy)
+  • DEPLOY         → copia archivos a /home/ec2-user/nexus-ops-rtb
+  • AFTER_DEPLOY   → after_install.sh   (linkea .env, permisos)
+                   → application_start.sh (docker build + alembic + up)
+                   → validate_service.sh  (healthchecks HTTP)
 ```
 
-Ejemplo `ci.yml`:
-```yaml
-name: CI
-on: [pull_request]
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -r backend/requirements.txt
-      - run: ruff check backend
-      - run: pytest backend/tests
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
-      - working-directory: frontend
-        run: |
-          npm ci
-          npm run lint
-          npm run test -- --run
-          npm run build
-```
+### Archivos del pipeline
 
----
-
-## 11. Despliegue en el Servidor (flujo)
-
-1. SSH al servidor.
-2. `git pull origin main` (o `scripts/update-repo.sh`).
-3. `docker compose -f docker-compose.yml -f docker-compose.prod.yml pull`.
-4. `docker compose ... up -d --build`.
-5. Verificar `docker compose ps` y `/health`.
-6. Logs: `docker compose logs -f backend`.
-
-Todo encapsulado en `scripts/deploy.sh` (ver `08_scripts_git.md`).
-
----
-
-## 12. Makefile
-
-```makefile
-.PHONY: up down logs ps rebuild migrate seed backup prod-up prod-down
-
-up:
-	docker compose up -d
-
-down:
-	docker compose down
-
-logs:
-	docker compose logs -f --tail=200
-
-ps:
-	docker compose ps
-
-rebuild:
-	docker compose build --no-cache
-
-migrate:
-	docker compose exec backend alembic upgrade head
-
-seed:
-	docker compose exec backend python -m app.scripts.seed
-
-backup:
-	./scripts/backup-db.sh
-
-prod-up:
-	docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-
-prod-down:
-	docker compose -f docker-compose.yml -f docker-compose.prod.yml down
-```
+| Archivo | Propósito |
+|---------|-----------|
+| `buildspec.yml` | Instrucciones para CodeBuild |
+| `appspec.yml` | Instrucciones para CodeDeploy (hooks + destino) |
+| `scripts/codedeploy/before_install.sh` | Para servicios antes de sobreescribir archivos |
+| `scripts/codedeploy/after_install.sh` | Permisos, .env, directorios de datos |
+| `scripts/codedeploy/application_start.sh` | Build Docker + migraciones + stack up |
+| `scripts/codedeploy/validate_service.sh` | Verifica que la app responde correctamente |
