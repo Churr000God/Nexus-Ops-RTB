@@ -1,5 +1,34 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-05-06 — Fix: conteo físico de activos internos sin líneas
+
+### Resumen
+Corrección de bug donde el filtro "Solo Internos" en conteos de tipo PRODUCT siempre mostraba 0 líneas. La causa raíz era doble: (1) todos los productos del catálogo tienen `is_saleable=true`, por lo que ninguno calificaba como "interno"; (2) la lógica de creación del conteo no incluía los equipos registrados en `assets` ni los componentes en `asset_components`.
+
+### Backend
+
+**`AssetService.create_physical_count()` — `assets_service.py`:**
+
+Al crear un conteo de tipo `PRODUCT` se añaden dos bloques adicionales de INSERT en `product_count_lines`:
+
+1. **Equipos activos** (`assets` WHERE `status NOT IN ('RETIRED','DISMANTLED')`):
+   - `is_saleable = False`
+   - `sku = asset_code`, `product_name = name`, `category = asset_type`
+   - `real_qty = 1`, `theoretical_qty = 1` por activo
+
+2. **Componentes instalados** (`asset_components` JOIN `assets` excluyendo retirados/desmantelados):
+   - `is_saleable = False`
+   - Agrupados por `product_id` con `real_qty = SUM(quantity)`
+
+Con estos bloques, el filtro "Solo Internos" del frontend (`is_saleable=false`) muestra correctamente todos los activos fijos y sus componentes instalados. El filtro "Solo Vendibles" (`is_saleable=true`) sigue mostrando solo los productos del catálogo.
+
+### Diagnóstico previo descartado
+- El bug NO era de código en `get_product_count_lines` (el filtro SQL es correcto)
+- El bug NO era de conteos ASSET (esos usan `physical_count_lines`, tabla separada)
+- Los 8 conteos ASSET existentes tenían 0 líneas porque sus `location_filter` no coincidían con la ubicación del único activo ("Almacen") — comportamiento esperado dado los filtros ingresados
+
+---
+
 ## 2026-05-05 — Inventario: diferencia de stock, conteo de productos, ajustes y bitácora
 
 ### Resumen

@@ -700,7 +700,11 @@ def _add_years(d: date, years: int) -> date:
 
 - **`create_physical_count`** — INSERT `PhysicalCount` → `flush()`. Bifurca según `count_type`:
   - `ASSET`: SELECT activos `status NOT IN ('RETIRED', 'DISMANTLED')` con filtro ilike de location → INSERT `PhysicalCountLine` por cada activo (snapshot de `asset_code`, `asset_name`, `location`).
-  - `PRODUCT`: SQL que une `inventory_movements` (para `real_qty` = SUM qty_in−qty_out) y `inventario` (para `theoretical_qty`) → INSERT `ProductCountLine` por cada producto del catálogo activo con snapshots de sku/nombre/is_saleable/categoría.
+  - `PRODUCT`: tres bloques de INSERT en `product_count_lines`:
+    1. **Productos del catálogo** — SQL une `inventory_movements` (real_qty = SUM qty_in−qty_out) y `inventario` (theoretical_qty) → una línea por producto con `is_saleable` del catálogo.
+    2. **Equipos activos** — SELECT `assets` WHERE `status NOT IN ('RETIRED','DISMANTLED')` → línea con `is_saleable=False`, `sku=asset_code`, `real_qty=1`, `theoretical_qty=1`. Permite contar los equipos físicos en la misma sesión de conteo PRODUCT.
+    3. **Componentes instalados** — SELECT `asset_components` JOIN `assets` (excluye retirados/desmantelados) agrupando por `product_id` → línea con `is_saleable=False` y `real_qty=SUM(quantity)`.
+  - El filtro "Solo Internos" (`is_saleable=false`) del frontend muestra los bloques 2 y 3; "Solo Vendibles" muestra el bloque 1.
   - Commit → reload con `selectinload(lines)` + `selectinload(product_lines)`.
 - **`_count_to_read(count)`** — helper privado; bifurca por `count_type`:
   - ASSET: calcula `total/found/not_found/pending` desde `lines`.

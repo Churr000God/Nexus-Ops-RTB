@@ -5,7 +5,7 @@ Cambios:
   2. Índices: asset_id, assigned_at
 
 Revision ID: 20260430_0028
-Revises: 20260428_0021
+Revises: 20260429_0027
 Create Date: 2026-04-30
 """
 
@@ -16,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20260430_0028"
-down_revision: str = "20260428_0021"
+down_revision: str = "20260429_0027"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

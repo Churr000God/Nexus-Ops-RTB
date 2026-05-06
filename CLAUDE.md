@@ -19,10 +19,13 @@ Antes de cualquier acción destructiva sobre datos **siempre pregunta**:
 ### Iniciar el proyecto
 ```bash
 bash ./scripts/init-project.sh          # bash / Git Bash (delega a init-dev.ps1 si hay pwsh)
-.\scripts\init-dev.ps1                  # PowerShell nativo (recomendado en Windows)
+.\scripts\init-dev.ps1                  # PowerShell nativo — levanta todo excepto ngrok
 .\scripts\init-dev.ps1 -SkipRelay       # relay ya corriendo en otra terminal
-.\scripts\init-dev.ps1 -WithFrontend    # incluir contenedor frontend
+.\scripts\init-dev.ps1 -WithNgrok       # incluir ngrok (requiere NGROK_AUTHTOKEN en .env)
+.\scripts\init-dev.ps1 -SkipN8n         # modo ligero: omite n8n y postgres-n8n
 ```
+
+Servicios que levanta por defecto: `redis`, `backend`, `postgres-n8n`, `n8n`, `frontend`, `proxy`.
 
 ### Reconstruir sin perder datos
 ```bash

@@ -505,18 +505,76 @@ class AssetService:
                     theoretical_qty=row["theoretical_qty"],
                     real_qty=float(row["real_qty"]),
                 ))
+
+            # Equipos activos como líneas internas (is_saleable=False, qty=1 c/u)
+            assets_sql = text("""
+                SELECT
+                    asset_code AS sku,
+                    name       AS product_name,
+                    asset_type AS category
+                FROM assets
+                WHERE status NOT IN ('RETIRED', 'DISMANTLED')
+                ORDER BY asset_code
+            """)
+            asset_rows = (await self.db.execute(assets_sql)).mappings().all()
+            for row in asset_rows:
+                self.db.add(ProductCountLine(
+                    count_id=count.id,
+                    product_id=None,
+                    sku=row["sku"],
+                    product_name=row["product_name"],
+                    is_saleable=False,
+                    category=row["category"],
+                    theoretical_qty=1,
+                    real_qty=1,
+                ))
+
+            # Componentes instalados en activos como líneas internas (is_saleable=False)
+            comp_sql = text("""
+                SELECT
+                    p.id        AS product_id,
+                    p.sku,
+                    p.name      AS product_name,
+                    c.name      AS category,
+                    SUM(ac.quantity) AS real_qty
+                FROM asset_components ac
+                JOIN productos p ON p.id = ac.product_id
+                JOIN assets a ON a.id = ac.asset_id
+                    AND a.status NOT IN ('RETIRED', 'DISMANTLED')
+                LEFT JOIN categorias c ON c.id = p.category_id
+                GROUP BY p.id, p.sku, p.name, c.name
+                ORDER BY p.name
+            """)
+            comp_rows = (await self.db.execute(comp_sql)).mappings().all()
+            for row in comp_rows:
+                qty = float(row["real_qty"])
+                self.db.add(ProductCountLine(
+                    count_id=count.id,
+                    product_id=row["product_id"],
+                    sku=row["sku"],
+                    product_name=row["product_name"],
+                    is_saleable=False,
+                    category=row["category"],
+                    theoretical_qty=qty,
+                    real_qty=qty,
+                ))
         else:
-            stmt = select(Asset).where(Asset.status.notin_(["RETIRED", "DISMANTLED"]))
+            asset_where = "status NOT IN ('RETIRED', 'DISMANTLED')"
+            asset_params: dict = {}
             if data.location_filter:
-                stmt = stmt.where(Asset.location.ilike(f"%{data.location_filter}%"))
-            assets = (await self.db.execute(stmt)).scalars().all()
-            for asset in assets:
+                asset_where += " AND location ILIKE :loc"
+                asset_params["loc"] = f"%{data.location_filter}%"
+            asset_sql = text(
+                f"SELECT id, asset_code, name, location FROM assets WHERE {asset_where} ORDER BY asset_code"
+            )
+            asset_rows = (await self.db.execute(asset_sql, asset_params)).mappings().all()
+            for row in asset_rows:
                 self.db.add(PhysicalCountLine(
                     count_id=count.id,
-                    asset_id=asset.id,
-                    asset_code=asset.asset_code,
-                    asset_name=asset.name,
-                    expected_location=asset.location,
+                    asset_id=row["id"],
+                    asset_code=row["asset_code"],
+                    asset_name=row["name"],
+                    expected_location=row["location"],
                 ))
 
         await self.db.commit()

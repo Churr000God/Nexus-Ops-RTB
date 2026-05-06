@@ -3,9 +3,10 @@
 # init-project.sh — Inicialización del entorno de desarrollo Nexus Ops RTB
 #
 # En Windows (PowerShell / pwsh) usa el script nativo:
-#   .\scripts\init-dev.ps1              # modo estándar
+#   .\scripts\init-dev.ps1              # modo estándar (levanta todo excepto ngrok)
 #   .\scripts\init-dev.ps1 -SkipRelay   # relay ya corriendo
-#   .\scripts\init-dev.ps1 -WithFrontend
+#   .\scripts\init-dev.ps1 -WithNgrok   # incluir ngrok (requiere NGROK_AUTHTOKEN)
+#   .\scripts\init-dev.ps1 -SkipN8n     # modo ligero sin n8n/postgres-n8n
 #
 # Desde bash (Git Bash / WSL):
 #   Este script invoca init-dev.ps1 si encuentra pwsh, o guía al usuario.
@@ -45,9 +46,9 @@ if ! bash -c 'exec 3<>/dev/tcp/localhost/5433' 2>/dev/null; then
 fi
 ok "Relay activo."
 
-# Levantar stack (sin postgres — BD está en Supabase)
-log "Levantando Redis y Backend..."
-docker compose up -d --build redis backend
+# Levantar stack (sin postgres — BD app está en Supabase)
+log "Levantando servicios core (redis, backend, postgres-n8n, n8n, frontend, proxy)..."
+docker compose up -d --build redis backend postgres-n8n n8n frontend proxy
 ok "Contenedores levantados."
 
 # Esperar al backend
@@ -70,5 +71,8 @@ ok "Migraciones aplicadas."
 echo ""
 ok "============================================================"
 ok " Inicialización completada."
-ok " API: http://localhost:8000   Docs: http://localhost:8000/docs"
+ok " Frontend  →  http://localhost:5173"
+ok " API       →  http://localhost:8000   Docs: /docs"
+ok " Proxy     →  http://localhost:80"
+ok " n8n       →  http://localhost:5678"
 ok "============================================================"
