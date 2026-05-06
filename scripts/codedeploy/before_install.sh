@@ -6,6 +6,8 @@
 # =============================================================================
 set -euo pipefail
 
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
 APP_DIR=/home/ec2-user/nexus-ops-rtb
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 

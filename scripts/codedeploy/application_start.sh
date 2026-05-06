@@ -12,6 +12,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Docker puede no estar en el PATH de root cuando el script corre vía SSM/CodePipeline
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
 APP_DIR=/home/ec2-user/nexus-ops-rtb
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 
