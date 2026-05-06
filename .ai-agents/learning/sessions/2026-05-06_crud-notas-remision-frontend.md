@@ -38,6 +38,9 @@ Desarrollar el apartado completo de Notas de Remision en la seccion de Ventas, p
 ## Archivos Modificados
 - `frontend/src/pages/NotasRemisionPage.tsx` — reescritura completa con listado, filtros, panel de detalle, modal de creacion/edicion, y acciones CRUD.
 
+## Estado de la Sesion
+✅ **CERRADA** — Cambios documentados, commiteados y subidos al repositorio.
+
 ## Siguiente Paso
 - Conectar la creacion de Notas de Remision con el flujo de cotizaciones (vinculacion `quote-delivery-notes`).
 - Agregar accion de "Emitir" (cambiar estado de DRAFT a ISSUED) si el negocio lo requiere.
