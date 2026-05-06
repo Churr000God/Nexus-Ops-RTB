@@ -19,17 +19,9 @@ phases:
     commands:
       - find scripts -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
       - rm -rf deploy && mkdir -p deploy
-      - tar -czf deploy.tgz
-          --exclude='*/node_modules'
-          --exclude='node_modules'
-          --exclude='.git'
-          --exclude='.env'
-          --exclude='data/backups'
-          --exclude='data/logs'
-          --exclude='deploy'
-          .
-      - tar -xzf deploy.tgz -C deploy
-      - rm deploy.tgz
+      - tar -czf /tmp/deploy.tgz --exclude='*/node_modules' --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='data/backups' --exclude='data/logs' --exclude='deploy' .
+      - tar -xzf /tmp/deploy.tgz -C deploy
+      - rm /tmp/deploy.tgz
 
 artifacts:
   base-directory: deploy
