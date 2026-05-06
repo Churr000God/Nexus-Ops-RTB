@@ -1,0 +1,42 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - cd frontend && npm ci --no-audit --no-fund
+
+  pre_build:
+    commands:
+      - cd frontend && npm run lint
+      - cd frontend && npm run typecheck
+
+  build:
+    commands:
+      - find scripts -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
+      - rm -rf deploy && mkdir -p deploy
+      - tar -czf deploy.tgz
+          --exclude='*/node_modules'
+          --exclude='node_modules'
+          --exclude='.git'
+          --exclude='.env'
+          --exclude='data/backups'
+          --exclude='data/logs'
+          --exclude='deploy'
+          .
+      - tar -xzf deploy.tgz -C deploy
+      - rm deploy.tgz
+
+artifacts:
+  base-directory: deploy
+  files:
+    - '**/*'
+
+cache:
+  paths:
+    - frontend/node_modules/**/*
+    - /root/.npm/**/*
