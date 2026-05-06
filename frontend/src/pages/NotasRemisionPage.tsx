@@ -7,7 +7,6 @@ import {
   Search,
   Trash2,
   X,
-  ChevronDown,
   ChevronUp,
   Save,
   Loader2,
@@ -27,7 +26,6 @@ import { clientesProveedoresService } from "@/services/clientesProveedoresServic
 import type {
   DeliveryNote,
   DeliveryNoteCreate,
-  DeliveryNoteItemCreate,
   DeliveryNoteStatus,
   DeliveryNoteUpdate,
 } from "@/types/ventasLogistica"

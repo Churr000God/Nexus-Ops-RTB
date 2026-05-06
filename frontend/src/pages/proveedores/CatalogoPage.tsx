@@ -369,9 +369,6 @@ export function CatalogoPage() {
   const startItem = total === 0 ? 0 : page * PAGE_SIZE + 1
   const endItem = Math.min((page + 1) * PAGE_SIZE, total)
 
-  const inputCls =
-    "h-8 rounded-[var(--radius-md)] border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-
   return (
     <div className="flex h-full flex-col">
       {/* ── Encabezado ── */}

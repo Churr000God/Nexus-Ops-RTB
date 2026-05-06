@@ -8,7 +8,6 @@ import type {
   PurchaseOrder,
   PurchaseOrderIn,
   PurchaseOrderListItem,
-  POStatus,
   PurchaseRequest,
   PurchaseRequestIn,
   PurchaseRequestListItem,

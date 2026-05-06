@@ -36,8 +36,6 @@ import RutasPage from "@/pages/RutasPage"
 import CfdiPage from "@/pages/CfdiPage"
 import VentasOperacional from "@/pages/VentasOperacional"
 import { VentasPage } from "@/pages/Ventas"
-// Ventas
-import { ReportesVentasPage } from "@/pages/ventas/ReportesVentasPage"
 // Logística
 import { EmpacadoPage } from "@/pages/logistica/EmpacadoPage"
 // Proveedores

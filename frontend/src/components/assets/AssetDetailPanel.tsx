@@ -56,6 +56,17 @@ const OPERATION_COLORS: Record<string, string> = {
 
 type Tab = "info" | "components" | "history" | "assignments" | "children" | "maintenance" | "depreciation"
 
+function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm text-foreground">{value || "—"}</dd>
+    </div>
+  )
+}
+
 interface AssetDetailPanelProps {
   asset: AssetRead
   onClose: () => void
@@ -285,17 +296,6 @@ export function AssetDetailPanel({ asset, onClose, onEdit, onRefresh }: AssetDet
     },
     { key: "location", header: "Ubicación", cell: (r) => r.location ?? "—" },
   ]
-
-  function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
-    return (
-      <div>
-        <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </dt>
-        <dd className="mt-0.5 text-sm text-foreground">{value || "—"}</dd>
-      </div>
-    )
-  }
 
   return (
     <div className="surface-card flex h-full flex-col overflow-hidden">

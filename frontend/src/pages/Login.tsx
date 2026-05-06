@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -10,11 +10,6 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { status, isAuthenticated, login, clearError } = useAuth()
-
-  const redirectTo = useMemo(() => {
-    const fromState = (location.state as { from?: string } | null)?.from
-    return typeof fromState === "string" ? fromState : "/"
-  }, [location.state])
 
   const successMessage = (location.state as { message?: string } | null)?.message ?? null
 

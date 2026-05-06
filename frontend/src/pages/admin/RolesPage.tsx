@@ -107,7 +107,7 @@ function EditPermissionsModal({ role, allPermissions, token, onClose, onSaved }:
   function togglePerm(code: string) {
     setSelectedPerms((prev) => {
       const next = new Set(prev)
-      next.has(code) ? next.delete(code) : next.add(code)
+      if (next.has(code)) { next.delete(code) } else { next.add(code) }
       return next
     })
   }
@@ -276,7 +276,7 @@ function CreateRoleModal({ allPermissions, token, onClose, onCreated }: CreateRo
   function togglePerm(code: string) {
     setSelectedPerms((prev) => {
       const next = new Set(prev)
-      next.has(code) ? next.delete(code) : next.add(code)
+      if (next.has(code)) { next.delete(code) } else { next.add(code) }
       return next
     })
   }

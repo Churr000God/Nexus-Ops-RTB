@@ -7,7 +7,8 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "node_modules/**"],
+    // dist y node_modules estándar; también ignorar archivos de conflicto de Proton Drive
+    ignores: ["dist/**", "node_modules/**", "**/*\\(# Name clash*\\)*"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -23,9 +24,18 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "import/no-unresolved": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          varsIgnorePattern: "^_",
+          argsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
     },
   }
 )
