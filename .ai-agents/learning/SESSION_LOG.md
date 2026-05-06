@@ -80,6 +80,7 @@ Que queda pendiente para la proxima sesion.
 | 2026-04-30 | Mejora de diseño visual de Almacén y Equipos (Inventario & Activos) | frontend | 5 | [2026-04-30_mejora-diseno-almacen-equipos.md](sessions/2026-04-30_mejora-diseno-almacen-equipos.md) |
 | 2026-05-05 | Fix fondo transparente dropdown de instalar componente en Equipos | frontend | 5 | [2026-05-05_fix-bg-dropdown-instalar-componente.md](sessions/2026-05-05_fix-bg-dropdown-instalar-componente.md) |
 | 2026-05-05 | Autocomplete de usuarios en modal de asignacion de equipos | backend + frontend | 5 | [2026-05-05_autocomplete-asignar-usuario-equipos.md](sessions/2026-05-05_autocomplete-asignar-usuario-equipos.md) |
+| 2026-05-06 | CRUD completo de Notas de Remision en frontend | frontend | 5 | [2026-05-06_crud-notas-remision-frontend.md](sessions/2026-05-06_crud-notas-remision-frontend.md) |
 
 ---
 
@@ -87,6 +88,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 24 |
+| Total sesiones | 25 |
 | Errores registrados | 22 |
-| Lecciones documentadas | 30 |
+| Lecciones documentadas | 32 |
