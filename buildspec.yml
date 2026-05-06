@@ -8,12 +8,12 @@ phases:
     runtime-versions:
       nodejs: 20
     commands:
-      - cd frontend && npm ci --no-audit --no-fund
+      - npm --prefix frontend ci --no-audit --no-fund
 
   pre_build:
     commands:
-      - cd frontend && npm run lint
-      - cd frontend && npm run typecheck
+      - npm --prefix frontend run lint
+      - npm --prefix frontend run typecheck
 
   build:
     commands:
