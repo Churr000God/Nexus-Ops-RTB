@@ -521,13 +521,31 @@ class AssetService:
 
         await self.db.commit()
 
-        stmt2 = (
-            select(PhysicalCount)
-            .where(PhysicalCount.id == count.id)
-            .options(selectinload(PhysicalCount.lines), selectinload(PhysicalCount.product_lines))
+        count_sql = text("""
+            SELECT COUNT(*) AS total
+            FROM product_count_lines WHERE count_id = CAST(:cid AS UUID)
+        """ if data.count_type == "PRODUCT" else """
+            SELECT COUNT(*) AS total
+            FROM physical_count_lines WHERE count_id = CAST(:cid AS UUID)
+        """)
+        total_lines = int(
+            (await self.db.execute(count_sql, {"cid": str(count.id)})).scalar_one()
         )
-        count = (await self.db.execute(stmt2)).scalar_one()
-        return self._count_to_read(count)
+        base = dict(
+            id=count.id,
+            count_date=count.count_date,
+            count_type=data.count_type,
+            location_filter=count.location_filter,
+            status=count.status,
+            notes=count.notes,
+            created_by=count.created_by,
+            created_at=count.created_at,
+            confirmed_at=count.confirmed_at,
+            confirmed_by=count.confirmed_by,
+        )
+        if data.count_type == "PRODUCT":
+            return PhysicalCountRead(**base, total_lines=total_lines, uncounted_lines=total_lines)
+        return PhysicalCountRead(**base, total_lines=total_lines, pending_count=total_lines)
 
     async def list_physical_counts(
         self,
@@ -535,17 +553,84 @@ class AssetService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[PhysicalCountRead]:
-        stmt = (
-            select(PhysicalCount)
-            .options(selectinload(PhysicalCount.lines), selectinload(PhysicalCount.product_lines))
-            .order_by(PhysicalCount.count_date.desc(), PhysicalCount.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        where = "WHERE 1=1"
+        params: dict[str, object] = {"lim": limit, "off": offset}
         if status:
-            stmt = stmt.where(PhysicalCount.status == status)
-        counts = (await self.db.execute(stmt)).scalars().all()
-        return [self._count_to_read(c) for c in counts]
+            where += " AND pc.status = :status"
+            params["status"] = status
+
+        sql = text(f"""
+            SELECT
+                pc.id, pc.count_date, pc.count_type, pc.location_filter,
+                pc.status, pc.notes, pc.created_by, pc.created_at,
+                pc.confirmed_at, pc.confirmed_by,
+                COALESCE(al.line_count, 0)    AS asset_total,
+                COALESCE(al.found_count, 0)   AS found_count,
+                COALESCE(al.nf_count, 0)      AS not_found_count,
+                COALESCE(pl.total_lines, 0)   AS product_total,
+                COALESCE(pl.counted_lines, 0) AS counted_lines,
+                COALESCE(pl.discrepancy, 0)   AS discrepancy_lines
+            FROM physical_counts pc
+            LEFT JOIN (
+                SELECT count_id,
+                       COUNT(*) AS line_count,
+                       SUM(CASE WHEN found IS TRUE  THEN 1 ELSE 0 END) AS found_count,
+                       SUM(CASE WHEN found IS FALSE THEN 1 ELSE 0 END) AS nf_count
+                FROM physical_count_lines
+                GROUP BY count_id
+            ) al ON al.count_id = pc.id
+            LEFT JOIN (
+                SELECT count_id,
+                       COUNT(*) AS total_lines,
+                       SUM(CASE WHEN counted_qty IS NOT NULL THEN 1 ELSE 0 END) AS counted_lines,
+                       SUM(CASE WHEN counted_qty IS NOT NULL
+                                  AND ABS(counted_qty::float - real_qty::float) > 0.001
+                                THEN 1 ELSE 0 END) AS discrepancy
+                FROM product_count_lines
+                GROUP BY count_id
+            ) pl ON pl.count_id = pc.id
+            {where}
+            ORDER BY pc.count_date DESC, pc.created_at DESC
+            LIMIT :lim OFFSET :off
+        """)
+        rows = (await self.db.execute(sql, params)).mappings().all()
+        result: list[PhysicalCountRead] = []
+        for r in rows:
+            base = dict(
+                id=r["id"],
+                count_date=r["count_date"],
+                count_type=r["count_type"],
+                location_filter=r["location_filter"],
+                status=r["status"],
+                notes=r["notes"],
+                created_by=r["created_by"],
+                created_at=r["created_at"],
+                confirmed_at=r["confirmed_at"],
+                confirmed_by=r["confirmed_by"],
+            )
+            if r["count_type"] == "PRODUCT":
+                total = int(r["product_total"])
+                counted = int(r["counted_lines"])
+                disc = int(r["discrepancy_lines"])
+                result.append(PhysicalCountRead(
+                    **base,
+                    total_lines=total,
+                    counted_lines=counted,
+                    discrepancy_lines=disc,
+                    uncounted_lines=total - counted,
+                ))
+            else:
+                total = int(r["asset_total"])
+                found = int(r["found_count"])
+                nf = int(r["not_found_count"])
+                result.append(PhysicalCountRead(
+                    **base,
+                    total_lines=total,
+                    found_count=found,
+                    not_found_count=nf,
+                    pending_count=total - found - nf,
+                ))
+        return result
 
     async def get_physical_count_lines(
         self,

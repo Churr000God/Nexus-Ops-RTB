@@ -16,16 +16,16 @@ interface CreateCountModalProps {
 
 const COUNT_TYPES = [
   {
-    value: "ASSET" as const,
-    label: "Activos físicos",
-    description: "Equipos, laptops, herramientas — marca encontrado / no encontrado",
-    icon: Wrench,
-  },
-  {
     value: "PRODUCT" as const,
     label: "Inventario de productos",
     description: "SKUs vendibles e internos — registra cantidad contada por producto",
     icon: Package,
+  },
+  {
+    value: "ASSET" as const,
+    label: "Activos físicos",
+    description: "Equipos, laptops, herramientas — marca encontrado / no encontrado",
+    icon: Wrench,
   },
 ]
 
@@ -33,7 +33,7 @@ export function CreateCountModal({ open, onClose, onSuccess }: CreateCountModalP
   const token = useAuthStore((s) => s.accessToken)
   const today = new Date().toISOString().split("T")[0]
   const [date, setDate] = useState(today)
-  const [countType, setCountType] = useState<"ASSET" | "PRODUCT">("ASSET")
+  const [countType, setCountType] = useState<"ASSET" | "PRODUCT">("PRODUCT")
   const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
   const [saving, setSaving] = useState(false)
@@ -57,7 +57,7 @@ export function CreateCountModal({ open, onClose, onSuccess }: CreateCountModalP
       onClose()
       setLocation("")
       setNotes("")
-      setCountType("ASSET")
+      setCountType("PRODUCT")
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al crear conteo")
     } finally {
