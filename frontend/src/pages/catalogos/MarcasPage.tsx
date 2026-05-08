@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
 import { ApiError } from "@/lib/http"
+import { CACHE_KEYS, STALE, TTL } from "@/lib/queryCache"
 import { cn } from "@/lib/utils"
 import { productosService } from "@/services/productosService"
 import { useAuthStore } from "@/stores/authStore"
@@ -215,7 +216,11 @@ export function MarcasPage() {
     (signal: AbortSignal) => productosService.listBrandsAll(token, signal),
     [token, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const { data: brands, status: brandsStatus } = useApi(brandsFetcher)
+  const { data: brands, status: brandsStatus } = useApi(brandsFetcher, {
+    cacheKey: CACHE_KEYS.MARCAS,
+    staleTime: STALE.CATALOG,
+    cacheTtl: TTL.DAY,
+  })
 
   const filtered = (brands ?? []).filter((b) => {
     const matchesActive = filterActive === "todas" || b.is_active

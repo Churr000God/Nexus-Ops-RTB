@@ -1,5 +1,5 @@
 import { requestJson } from "@/lib/http"
-import { cacheInvalidatePrefix, CACHE_KEYS } from "@/lib/queryCache"
+import { cacheInvalidate, cacheInvalidatePrefix, CACHE_KEYS } from "@/lib/queryCache"
 import type {
   AribaPriceCreate,
   AribaPricePage,
@@ -79,12 +79,16 @@ export const productosService = {
     return requestJson<CategoryRead[]>("/api/categorias?include_inactive=true", { token, signal })
   },
 
-  createCategory(token: string | null, data: CategoryCreate) {
-    return requestJson<CategoryRead>("/api/categorias", { method: "POST", body: data, token })
+  async createCategory(token: string | null, data: CategoryCreate) {
+    const result = await requestJson<CategoryRead>("/api/categorias", { method: "POST", body: data, token })
+    cacheInvalidate(CACHE_KEYS.CATEGORIAS)
+    return result
   },
 
-  updateCategory(token: string | null, id: string, data: CategoryUpdate) {
-    return requestJson<CategoryRead>(`/api/categorias/${id}`, { method: "PATCH", body: data, token })
+  async updateCategory(token: string | null, id: string, data: CategoryUpdate) {
+    const result = await requestJson<CategoryRead>(`/api/categorias/${id}`, { method: "PATCH", body: data, token })
+    cacheInvalidate(CACHE_KEYS.CATEGORIAS)
+    return result
   },
 
   listBrands(token: string | null, signal?: AbortSignal) {
@@ -95,12 +99,16 @@ export const productosService = {
     return requestJson<BrandRead[]>("/api/marcas?include_inactive=true", { token, signal })
   },
 
-  createBrand(token: string | null, data: BrandCreate) {
-    return requestJson<BrandRead>("/api/marcas", { method: "POST", body: data, token })
+  async createBrand(token: string | null, data: BrandCreate) {
+    const result = await requestJson<BrandRead>("/api/marcas", { method: "POST", body: data, token })
+    cacheInvalidate(CACHE_KEYS.MARCAS)
+    return result
   },
 
-  updateBrand(token: string | null, id: string, data: BrandUpdate) {
-    return requestJson<BrandRead>(`/api/marcas/${id}`, { method: "PATCH", body: data, token })
+  async updateBrand(token: string | null, id: string, data: BrandUpdate) {
+    const result = await requestJson<BrandRead>(`/api/marcas/${id}`, { method: "PATCH", body: data, token })
+    cacheInvalidate(CACHE_KEYS.MARCAS)
+    return result
   },
 
   lookupSkuCosts(token: string | null, sku: string, signal?: AbortSignal) {

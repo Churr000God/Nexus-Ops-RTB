@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
 import { ApiError } from "@/lib/http"
+import { CACHE_KEYS, STALE, TTL } from "@/lib/queryCache"
 import { cn } from "@/lib/utils"
 import { productosService } from "@/services/productosService"
 import { useAuthStore } from "@/stores/authStore"
@@ -303,7 +304,11 @@ export function CategoriasPage() {
     (signal: AbortSignal) => productosService.listCategoriesAll(token, signal),
     [token, refreshKey], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const { data: categoriesTree, status: catsStatus } = useApi(categoriesFetcher)
+  const { data: categoriesTree, status: catsStatus } = useApi(categoriesFetcher, {
+    cacheKey: CACHE_KEYS.CATEGORIAS,
+    staleTime: STALE.CATALOG,
+    cacheTtl: TTL.DAY,
+  })
 
   // Full flat list (for parentMap and counts) — ignores collapse
   const flat = flattenTree(categoriesTree ?? [])

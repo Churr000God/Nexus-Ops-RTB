@@ -17,16 +17,23 @@ import {
   Hash,
   StickyNote,
   CheckCircle2,
+  Filter,
+  Banknote,
+  Layers,
+  AlertCircle,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
+import { KpiCard } from "@/components/common/KpiCard"
+import { StatusBadge } from "@/components/common/StatusBadge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import {
   createDeliveryNote,
   getDeliveryNotes,
@@ -45,16 +52,13 @@ import type { ProductRead } from "@/types/productos"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/authStore"
 
-const STATUS_COLORS: Record<DeliveryNoteStatus, string> = {
-  EDICION:  "border-amber-500/30 bg-amber-500/10 text-amber-400",
-  APROBADA: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-  CANCELADA: "border-red-900/30 bg-red-900/10 text-red-600",
-}
-
-const STATUS_LABELS: Record<DeliveryNoteStatus, string> = {
-  EDICION:  "En edición",
-  APROBADA: "Aprobada",
-  CANCELADA: "Cancelada",
+const STATUS_META: Record<
+  DeliveryNoteStatus,
+  { label: string; badge: "warning" | "success" | "error" | "info" | "neutral" }
+> = {
+  EDICION:  { label: "En edición", badge: "warning" },
+  APROBADA: { label: "Aprobada", badge: "success" },
+  CANCELADA: { label: "Cancelada", badge: "error" },
 }
 
 const fmt = new Intl.NumberFormat("es-MX", {
@@ -70,42 +74,40 @@ interface PriceOption {
   colorClass: string
 }
 
+function r2(v: number) {
+  return Math.round(v * 100) / 100
+}
+
 function buildPriceOptions(product: ProductRead): PriceOption[] {
   const opts: PriceOption[] = []
-  if (product.unit_price != null && product.unit_price > 0)
+  // Catálogo = costo_promedio_compra × (1 + margen%) — campo suggested_price del backend
+  if (product.suggested_price != null && product.suggested_price > 0)
     opts.push({
       label: "Catálogo",
-      value: product.unit_price,
+      value: r2(product.suggested_price),
       colorClass:
         "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100",
     })
   if (product.purchase_cost_ariba != null && product.purchase_cost_ariba > 0)
     opts.push({
       label: "Ariba",
-      value: product.purchase_cost_ariba,
+      value: r2(product.purchase_cost_ariba),
       colorClass:
         "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100",
     })
   if (product.purchase_cost_parts != null && product.purchase_cost_parts > 0)
     opts.push({
       label: "Refacciones",
-      value: product.purchase_cost_parts,
+      value: r2(product.purchase_cost_parts),
       colorClass:
         "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100",
     })
   if (product.unit_price_base != null && product.unit_price_base > 0)
     opts.push({
       label: "Base",
-      value: product.unit_price_base,
+      value: r2(product.unit_price_base),
       colorClass:
         "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200",
-    })
-  if (product.suggested_price != null && product.suggested_price > 0)
-    opts.push({
-      label: "Sugerido",
-      value: product.suggested_price,
-      colorClass:
-        "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
     })
   return opts
 }
@@ -208,7 +210,8 @@ export default function NotasRemisionPage() {
           limit: 100,
         }),
       [filterStatus]
-    )
+    ),
+    { cacheKey: `${CACHE_KEYS.NOTAS_REMISION}-${filterStatus}`, staleTime: STALE.MEDIUM },
   )
 
   const notes = (api.data ?? []) as DeliveryNote[]
@@ -223,13 +226,28 @@ export default function NotasRemisionPage() {
     )
   })
 
-  const handleStatusChange = async (note: DeliveryNote, newStatus: "APROBADA" | "CANCELADA") => {
+  // KPIs
+  const kpiTotal = notes.length
+  const kpiEdicion = notes.filter((n) => n.status === "EDICION").length
+  const kpiAprobadas = notes.filter((n) => n.status === "APROBADA").length
+  const kpiMontoTotal = notes.reduce((s, n) => s + n.total, 0)
+
+  const handleStatusChange = async (
+    note: DeliveryNote,
+    newStatus: "APROBADA" | "CANCELADA"
+  ) => {
     setActionLoading(note.delivery_note_id)
     try {
-      const payload: { status: typeof newStatus; cancellation_reason?: string } = { status: newStatus }
+      const payload: {
+        status: typeof newStatus
+        cancellation_reason?: string
+      } = { status: newStatus }
       if (newStatus === "CANCELADA") {
         const reason = window.prompt("Motivo de cancelación:")
-        if (!reason) { setActionLoading(null); return }
+        if (!reason) {
+          setActionLoading(null)
+          return
+        }
         payload.cancellation_reason = reason
       }
       await updateDeliveryNote(note.delivery_note_id, payload)
@@ -240,7 +258,8 @@ export default function NotasRemisionPage() {
       toast.success(labels[newStatus])
       api.refetch()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al cambiar estado"
+      const msg =
+        err instanceof Error ? err.message : "Error al cambiar estado"
       toast.error(msg)
     } finally {
       setActionLoading(null)
@@ -259,7 +278,7 @@ export default function NotasRemisionPage() {
     {
       key: "note_number",
       header: "NR",
-      className: "font-mono text-xs",
+      className: "font-mono text-xs font-semibold",
       cell: (r) => r.note_number,
     },
     {
@@ -270,30 +289,26 @@ export default function NotasRemisionPage() {
     },
     {
       key: "issue_date",
-      header: "Emision",
-      className: "text-xs",
+      header: "Emisión",
+      className: "text-xs text-muted-foreground",
       cell: (r) => String(r.issue_date),
     },
     {
       key: "delivery_date",
       header: "Entrega",
-      className: "text-xs",
+      className: "text-xs text-muted-foreground",
       cell: (r) => r.delivery_date ?? "—",
     },
     {
       key: "status",
       header: "Estado",
-      cell: (r) => (
-        <span
-          className={cn(
-            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
-            STATUS_COLORS[r.status] ??
-              "border-slate-500/30 bg-slate-500/10 text-slate-400"
-          )}
-        >
-          {STATUS_LABELS[r.status] ?? r.status}
-        </span>
-      ),
+      cell: (r) => {
+        const meta = STATUS_META[r.status] ?? {
+          label: r.status,
+          badge: "neutral" as const,
+        }
+        return <StatusBadge variant={meta.badge}>{meta.label}</StatusBadge>
+      },
     },
     {
       key: "customer_po_number",
@@ -304,8 +319,9 @@ export default function NotasRemisionPage() {
     {
       key: "total",
       header: "Total",
+      className: "text-right",
       cell: (r) => (
-        <span className="font-mono text-xs font-semibold text-emerald-400">
+        <span className="font-mono text-xs font-semibold text-emerald-600">
           {fmt.format(r.total)}
         </span>
       ),
@@ -313,8 +329,9 @@ export default function NotasRemisionPage() {
     {
       key: "items",
       header: "Partidas",
+      className: "text-right",
       cell: (r) => (
-        <span className="text-xs text-slate-400">{r.items.length}</span>
+        <span className="text-xs text-muted-foreground">{r.items.length}</span>
       ),
     },
     {
@@ -345,7 +362,7 @@ export default function NotasRemisionPage() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0 text-amber-400 hover:text-amber-300"
+              className="h-7 w-7 p-0 text-amber-600 hover:text-amber-500"
               onClick={() => setModalMode({ type: "edit", note: r })}
               title="Editar"
             >
@@ -356,7 +373,7 @@ export default function NotasRemisionPage() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300"
+              className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-500"
               disabled={actionLoading === r.delivery_note_id}
               onClick={() => void handleStatusChange(r, "APROBADA")}
               title="Aprobar (genera pedido)"
@@ -368,7 +385,7 @@ export default function NotasRemisionPage() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
+              className="h-7 w-7 p-0 text-red-500 hover:text-red-400"
               disabled={actionLoading === r.delivery_note_id}
               onClick={() => handleCancel(r)}
               title="Cancelar"
@@ -383,33 +400,37 @@ export default function NotasRemisionPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6">
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="flex items-center gap-2 text-base font-semibold text-slate-200">
-          <FileText className="h-5 w-5 text-amber-400" />
-          Notas de Remision
+        <h1 className="flex items-center gap-2 text-base font-semibold text-foreground">
+          <FileText className="h-5 w-5 text-amber-500" />
+          Notas de Remisión
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
+            <Input
               value={filterCustomerSearch}
               onChange={(e) => setFilterCustomerSearch(e.target.value)}
               placeholder="Buscar NR, cliente, OC…"
-              className="h-8 w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 text-xs text-slate-300 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/40 sm:w-48"
+              className="h-8 w-full pl-8 text-xs sm:w-56"
             />
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-8 rounded-lg border border-white/10 bg-white/5 px-2 text-xs text-slate-300 focus:outline-none"
-          >
-            <option value="">Todos los estados</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <Filter className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="h-8 rounded-lg border border-input bg-background pl-8 pr-6 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">Todos los estados</option>
+              {Object.entries(STATUS_META).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {canCreate && (
             <Button
               size="sm"
@@ -423,11 +444,42 @@ export default function NotasRemisionPage() {
         </div>
       </div>
 
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard
+          label="Total notas"
+          value={String(kpiTotal)}
+          icon={Layers}
+          tone="blue"
+        />
+        <KpiCard
+          label="En edición"
+          value={String(kpiEdicion)}
+          icon={AlertCircle}
+          tone="orange"
+        />
+        <KpiCard
+          label="Aprobadas"
+          value={String(kpiAprobadas)}
+          icon={CheckCircle2}
+          tone="green"
+        />
+        <KpiCard
+          label="Monto total"
+          value={fmt.format(kpiMontoTotal)}
+          icon={Banknote}
+          tone="purple"
+        />
+      </div>
+
       <DataTable
         columns={columns}
         rows={filteredNotes}
         rowKey={(r) => String(r.delivery_note_id)}
-        emptyLabel="Sin notas de remision"
+        emptyLabel="Sin notas de remisión"
+        selectedRowKey={
+          expandedNoteId ? String(expandedNoteId) : undefined
+        }
       />
 
       {expandedNoteId && (
@@ -461,103 +513,144 @@ function DetailPanel({
   note: DeliveryNote
   onClose: () => void
 }) {
+  const statusMeta = STATUS_META[note.status] ?? {
+    label: note.status,
+    badge: "neutral" as const,
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm">{note.note_number}</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Cliente #{note.customer_id} · Emision: {note.issue_date}
-            </p>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-sm">{note.note_number}</CardTitle>
+              <StatusBadge variant={statusMeta.badge}>
+                {statusMeta.label}
+              </StatusBadge>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span>Cliente #{note.customer_id}</span>
+              <span>·</span>
+              <span>Emisión: {note.issue_date}</span>
+              {note.delivery_date && (
+                <>
+                  <span>·</span>
+                  <span>Entrega: {note.delivery_date}</span>
+                </>
+              )}
+              {note.customer_po_number && (
+                <>
+                  <span>·</span>
+                  <span>OC: {note.customer_po_number}</span>
+                </>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-5">
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-          <div className="rounded-lg border border-border bg-accent/20 p-3">
+          <div className="rounded-xl border border-border bg-accent/30 p-3">
             <p className="text-muted-foreground">Subtotal</p>
-            <p className="mt-0.5 font-mono font-semibold">
+            <p className="mt-0.5 font-mono font-semibold text-foreground">
               {fmt.format(note.subtotal)}
             </p>
           </div>
-          <div className="rounded-lg border border-border bg-accent/20 p-3">
+          <div className="rounded-xl border border-border bg-accent/30 p-3">
             <p className="text-muted-foreground">Impuesto</p>
-            <p className="mt-0.5 font-mono font-semibold">
+            <p className="mt-0.5 font-mono font-semibold text-foreground">
               {fmt.format(note.tax_amount)}
             </p>
           </div>
-          <div className="rounded-lg border border-border bg-accent/20 p-3">
+          <div className="rounded-xl border border-border bg-accent/30 p-3">
             <p className="text-muted-foreground">Total</p>
-            <p className="mt-0.5 font-mono font-semibold text-emerald-400">
+            <p className="mt-0.5 font-mono font-semibold text-emerald-600">
               {fmt.format(note.total)}
             </p>
           </div>
-          <div className="rounded-lg border border-border bg-accent/20 p-3">
+          <div className="rounded-xl border border-border bg-accent/30 p-3">
             <p className="text-muted-foreground">Partidas</p>
-            <p className="mt-0.5 font-mono font-semibold">
+            <p className="mt-0.5 font-mono font-semibold text-foreground">
               {note.items.length}
             </p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="pb-2 pr-3">#</th>
-                <th className="pb-2 pr-3">Descripcion</th>
-                <th className="pb-2 pr-3 text-right">Cantidad</th>
-                <th className="pb-2 pr-3 text-right">Precio</th>
-                <th className="pb-2 pr-3 text-right">Desc.</th>
-                <th className="pb-2 pr-3 text-right">Subtotal</th>
-                <th className="pb-2 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {note.items.map((it, idx) => (
-                <tr key={it.item_id} className="border-b border-border/50">
-                  <td className="py-2 pr-3 text-muted-foreground">{idx + 1}</td>
-                  <td className="py-2 pr-3">
-                    {it.description}
-                    {it.sku && (
-                      <span className="ml-1 text-[10px] text-muted-foreground">
-                        (SKU: {it.sku})
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {it.quantity.toLocaleString("es-MX")}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {fmt.format(it.unit_price)}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {fmt.format(it.discount_amount)}
-                  </td>
-                  <td className="py-2 pr-3 text-right font-mono">
-                    {fmt.format(it.subtotal)}
-                  </td>
-                  <td className="py-2 text-right font-mono">
-                    {fmt.format(it.total)}
-                  </td>
+        {note.items.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-accent/20 p-6 text-center text-sm text-muted-foreground">
+            <Package className="mx-auto h-8 w-8 text-muted-foreground/50" />
+            <p className="mt-2">Sin partidas</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground">
+                  <th className="pb-2 pr-3 font-medium">#</th>
+                  <th className="pb-2 pr-3 font-medium">Descripción</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Cantidad</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Precio</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Desc.</th>
+                  <th className="pb-2 pr-3 text-right font-medium">Subtotal</th>
+                  <th className="pb-2 text-right font-medium">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {note.items.map((it, idx) => (
+                  <tr
+                    key={it.item_id}
+                    className="border-b border-border/50 transition-colors hover:bg-accent/30"
+                  >
+                    <td className="py-2.5 pr-3 text-muted-foreground">
+                      {idx + 1}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <p className="max-w-[240px] truncate text-foreground">
+                        {it.description}
+                      </p>
+                      {it.sku && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          SKU: {it.sku}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right font-mono">
+                      {it.quantity.toLocaleString("es-MX")}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-muted-foreground">
+                      {fmt.format(it.unit_price)}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-muted-foreground">
+                      {fmt.format(it.discount_amount)}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-foreground">
+                      {fmt.format(it.subtotal)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono font-semibold text-emerald-600">
+                      {fmt.format(it.total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {note.notes && (
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Notas:</span>{" "}
-            {note.notes}
-          </p>
+          <div className="flex items-start gap-2 rounded-xl border border-border bg-accent/20 p-3">
+            <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Notas:</span>{" "}
+              {note.notes}
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -590,7 +683,11 @@ function ItemProductCell({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number
+    left: number
+    width: number
+  } | null>(null)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -692,7 +789,7 @@ function ItemProductCell({
           className="h-8 text-xs"
           value={item.description}
           onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder="Descripcion en la partida"
+          placeholder="Descripción en la partida"
         />
 
         {/* Price picker */}
@@ -743,7 +840,7 @@ function ItemProductCell({
         className="h-9 text-xs"
         value={item.description}
         onChange={(e) => onDescriptionChange(e.target.value)}
-        placeholder="Descripcion del producto / servicio"
+        placeholder="Descripción del producto / servicio"
       />
 
       {/* Product search field */}
@@ -875,7 +972,7 @@ function DeliveryNoteFormModal({
           customer_id: existing.customer_id,
           business_name: `Cliente #${existing.customer_id}`,
         } as CustomerRead)
-        // Cargar detalle del cliente en edicion
+        // Cargar detalle del cliente en edición
         clientesProveedoresService
           .getCustomer(token, existing.customer_id)
           .then((d) => setCustomerDetail(d))
@@ -974,7 +1071,7 @@ function DeliveryNoteFormModal({
       return
     }
     if (!form.issue_date) {
-      setError("La fecha de emision es obligatoria")
+      setError("La fecha de emisión es obligatoria")
       return
     }
     if (form.items.length === 0) {
@@ -983,7 +1080,7 @@ function DeliveryNoteFormModal({
     }
     for (const it of form.items) {
       if (!it.description.trim()) {
-        setError("Todas las partidas deben tener descripcion")
+        setError("Todas las partidas deben tener descripción")
         return
       }
       if (it.quantity <= 0) {
@@ -1017,7 +1114,7 @@ function DeliveryNoteFormModal({
           })),
         }
         await updateDeliveryNote(existing.delivery_note_id, payload)
-        toast.success("Nota de remision actualizada")
+        toast.success("Nota de remisión actualizada")
       } else {
         const payload: DeliveryNoteCreate = {
           customer_id: form.customer_id!,
@@ -1039,7 +1136,7 @@ function DeliveryNoteFormModal({
           })),
         }
         await createDeliveryNote(payload)
-        toast.success("Nota de remision creada")
+        toast.success("Nota de remisión creada")
       }
       onSaved()
     } catch (err: unknown) {
@@ -1064,14 +1161,14 @@ function DeliveryNoteFormModal({
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
                 <FileText className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-base font-semibold">
                   {isEdit
-                    ? "Editar Nota de Remision"
-                    : "Nueva Nota de Remision"}
+                    ? "Editar Nota de Remisión"
+                    : "Nueva Nota de Remisión"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {isEdit
@@ -1113,11 +1210,16 @@ function DeliveryNoteFormModal({
                       </div>
                     ) : customerSelected ? (
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2.5">
-                        <span className="font-mono text-xs text-muted-foreground">
-                          #{customerSelected.customer_id}
-                        </span>
+                        {customerSelected.code && (
+                          <span className="shrink-0 rounded border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-violet-400">
+                            {customerSelected.code}
+                          </span>
+                        )}
                         <span className="flex-1 text-sm text-foreground">
                           {customerSelected.business_name}
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          #{customerSelected.customer_id}
                         </span>
                         <button
                           type="button"
@@ -1147,10 +1249,12 @@ function DeliveryNoteFormModal({
                                   onClick={() => selectCustomer(c)}
                                   className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100"
                                 >
-                                  <span className="font-mono text-xs text-slate-500">
-                                    #{c.customer_id}
-                                  </span>
-                                  <span className="text-sm text-slate-900">
+                                  {c.code && (
+                                    <span className="shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-violet-700">
+                                      {c.code}
+                                    </span>
+                                  )}
+                                  <span className="flex-1 truncate text-sm text-slate-900">
                                     {c.business_name}
                                   </span>
                                 </button>
@@ -1165,83 +1269,110 @@ function DeliveryNoteFormModal({
                     {customerDetail && (
                       <div className="rounded-lg border border-border bg-accent/20 p-3 sm:col-span-2 lg:col-span-3">
                         <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                          {customerDetail.contacts && customerDetail.contacts.length > 0 && (
-                            <div className="space-y-0.5">
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                Contacto
-                              </span>
-                              <p className="text-foreground">
-                                {customerDetail.contacts.find((c) => c.is_primary)?.full_name ??
-                                  customerDetail.contacts[0].full_name}
-                              </p>
-                              {(() => {
-                                const primary =
-                                  customerDetail.contacts!.find((c) => c.is_primary) ??
-                                  customerDetail.contacts![0]
-                                return (
-                                  <>
-                                    {primary.role_title && (
-                                      <p className="text-muted-foreground">{primary.role_title}</p>
-                                    )}
-                                    {primary.phone && (
-                                      <p className="text-muted-foreground">{primary.phone}</p>
-                                    )}
-                                    {primary.email && (
-                                      <p className="text-muted-foreground">{primary.email}</p>
-                                    )}
-                                  </>
-                                )
-                              })()}
-                            </div>
-                          )}
-                          {customerDetail.addresses && customerDetail.addresses.length > 0 && (
-                            <div className="space-y-0.5">
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                Direccion
-                              </span>
-                              <p className="text-foreground">
-                                {customerDetail.addresses.find((a) => a.is_default)?.street ??
-                                  customerDetail.addresses[0].street}
-                              </p>
-                              {(() => {
-                                const addr =
-                                  customerDetail.addresses!.find((a) => a.is_default) ??
-                                  customerDetail.addresses![0]
-                                return (
-                                  <>
-                                    {[addr.neighborhood, addr.city, addr.state]
-                                      .filter(Boolean)
-                                      .join(", ") && (
-                                      <p className="text-muted-foreground">
-                                        {[addr.neighborhood, addr.city, addr.state]
-                                          .filter(Boolean)
-                                          .join(", ")}
-                                      </p>
-                                    )}
-                                    {addr.zip_code && (
-                                      <p className="text-muted-foreground">CP {addr.zip_code}</p>
-                                    )}
-                                    {addr.country && (
-                                      <p className="text-muted-foreground">{addr.country}</p>
-                                    )}
-                                  </>
-                                )
-                              })()}
-                            </div>
-                          )}
-                          {customerDetail.tax_data && customerDetail.tax_data.length > 0 && (
-                            <div className="space-y-0.5">
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                Datos fiscales
-                              </span>
-                              <p className="text-foreground">
-                                {customerDetail.tax_data[0].legal_name}
-                              </p>
-                              <p className="font-mono text-muted-foreground">
-                                {customerDetail.tax_data[0].rfc}
-                              </p>
-                            </div>
-                          )}
+                          {customerDetail.contacts &&
+                            customerDetail.contacts.length > 0 && (
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Contacto
+                                </span>
+                                <p className="text-foreground">
+                                  {customerDetail.contacts.find(
+                                    (c) => c.is_primary
+                                  )?.full_name ??
+                                    customerDetail.contacts[0].full_name}
+                                </p>
+                                {(() => {
+                                  const primary =
+                                    customerDetail.contacts!.find(
+                                      (c) => c.is_primary
+                                    ) ?? customerDetail.contacts![0]
+                                  return (
+                                    <>
+                                      {primary.role_title && (
+                                        <p className="text-muted-foreground">
+                                          {primary.role_title}
+                                        </p>
+                                      )}
+                                      {primary.phone && (
+                                        <p className="text-muted-foreground">
+                                          {primary.phone}
+                                        </p>
+                                      )}
+                                      {primary.email && (
+                                        <p className="text-muted-foreground">
+                                          {primary.email}
+                                        </p>
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            )}
+                          {customerDetail.addresses &&
+                            customerDetail.addresses.length > 0 && (
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Dirección
+                                </span>
+                                <p className="text-foreground">
+                                  {customerDetail.addresses.find(
+                                    (a) => a.is_default
+                                  )?.street ??
+                                    customerDetail.addresses[0].street}
+                                </p>
+                                {(() => {
+                                  const addr =
+                                    customerDetail.addresses!.find(
+                                      (a) => a.is_default
+                                    ) ?? customerDetail.addresses![0]
+                                  return (
+                                    <>
+                                      {[
+                                        addr.neighborhood,
+                                        addr.city,
+                                        addr.state,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(", ") && (
+                                        <p className="text-muted-foreground">
+                                          {[
+                                            addr.neighborhood,
+                                            addr.city,
+                                            addr.state,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(", ")}
+                                        </p>
+                                      )}
+                                      {addr.zip_code && (
+                                        <p className="text-muted-foreground">
+                                          CP {addr.zip_code}
+                                        </p>
+                                      )}
+                                      {addr.country && (
+                                        <p className="text-muted-foreground">
+                                          {addr.country}
+                                        </p>
+                                      )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            )}
+                          {customerDetail.tax_data &&
+                            customerDetail.tax_data.length > 0 && (
+                              <div className="space-y-0.5">
+                                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  Datos fiscales
+                                </span>
+                                <p className="text-foreground">
+                                  {customerDetail.tax_data[0].legal_name}
+                                </p>
+                                <p className="font-mono text-muted-foreground">
+                                  {customerDetail.tax_data[0].rfc}
+                                </p>
+                              </div>
+                            )}
                           <div className="space-y-0.5">
                             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                               Info comercial
@@ -1253,7 +1384,7 @@ function DeliveryNoteFormModal({
                               Localidad: {customerDetail.locality}
                             </p>
                             <p className="text-muted-foreground">
-                              Plazo: {customerDetail.payment_terms_days} dias
+                              Plazo: {customerDetail.payment_terms_days} días
                             </p>
                           </div>
                         </div>
@@ -1264,7 +1395,7 @@ function DeliveryNoteFormModal({
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                       <CalendarDays className="h-3 w-3" />
-                      Fecha de emision <span className="text-red-400">*</span>
+                      Fecha de emisión <span className="text-red-400">*</span>
                     </label>
                     <Input
                       type="date"
@@ -1272,17 +1403,6 @@ function DeliveryNoteFormModal({
                       disabled={isEdit}
                       value={form.issue_date}
                       onChange={(e) => set("issue_date", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                      <CalendarDays className="h-3 w-3" />
-                      Fecha de entrega estimada
-                    </label>
-                    <Input
-                      type="date"
-                      value={form.delivery_date}
-                      onChange={(e) => set("delivery_date", e.target.value)}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1295,7 +1415,7 @@ function DeliveryNoteFormModal({
                       onChange={(e) =>
                         set("customer_po_number", e.target.value)
                       }
-                      placeholder="Numero de orden de compra"
+                      placeholder="Número de orden de compra"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1371,7 +1491,7 @@ function DeliveryNoteFormModal({
                           <tr className="border-b border-border text-left text-muted-foreground">
                             <th className="w-8 pb-2 pr-2">#</th>
                             <th className="min-w-[240px] pb-2 pr-2">
-                              Producto / Descripcion *
+                              Producto / Descripción *
                             </th>
                             <th className="w-24 pb-2 pr-2">Cant. *</th>
                             <th className="w-28 pb-2 pr-2">Precio *</th>
@@ -1405,11 +1525,13 @@ function DeliveryNoteFormModal({
                                         product_id: p.id,
                                         sku: p.sku ?? undefined,
                                         description: p.name,
-                                        unit_price:
+                                        unit_price: r2(
+                                          p.suggested_price ??
                                           p.unit_price ??
                                           p.purchase_cost_ariba ??
                                           p.purchase_cost_parts ??
-                                          0,
+                                          0
+                                        ),
                                       })
                                     }
                                     onProductClear={() =>
@@ -1431,7 +1553,8 @@ function DeliveryNoteFormModal({
                                     }
                                     onPriceSelect={(price) =>
                                       updateItem(it.key, {
-                                        unit_price: Math.round(price * 100) / 100,
+                                        unit_price:
+                                          Math.round(price * 100) / 100,
                                       })
                                     }
                                   />
@@ -1461,7 +1584,10 @@ function DeliveryNoteFormModal({
                                     onChange={(e) =>
                                       updateItem(it.key, {
                                         unit_price:
-                                          Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
+                                          Math.round(
+                                            (parseFloat(e.target.value) || 0) *
+                                              100
+                                          ) / 100,
                                       })
                                     }
                                   />
@@ -1476,7 +1602,10 @@ function DeliveryNoteFormModal({
                                     onChange={(e) =>
                                       updateItem(it.key, {
                                         discount_amount:
-                                          Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
+                                          Math.round(
+                                            (parseFloat(e.target.value) || 0) *
+                                              100
+                                          ) / 100,
                                       })
                                     }
                                   />
@@ -1704,7 +1833,7 @@ function DeliveryNoteFormModal({
                         </div>
                         <div className="flex justify-between border-t border-border pt-2">
                           <span className="font-medium">Total estimado</span>
-                          <span className="font-mono font-semibold text-emerald-400">
+                          <span className="font-mono font-semibold text-emerald-600">
                             {fmt.format(total)}
                           </span>
                         </div>
@@ -1740,7 +1869,7 @@ function DeliveryNoteFormModal({
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 <Save className="mr-1.5 h-3.5 w-3.5" />
-                {isEdit ? "Guardar cambios" : "Crear Nota de Remision"}
+                {isEdit ? "Guardar cambios" : "Crear Nota de Remisión"}
               </Button>
             </div>
           </form>

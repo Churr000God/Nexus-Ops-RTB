@@ -3,12 +3,16 @@ import { CheckCircle2, Truck, XCircle } from "lucide-react"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { useApi } from "@/hooks/useApi"
+import { CACHE_KEYS, STALE, TTL } from "@/lib/queryCache"
 import { getCarriers } from "@/services/ventasLogisticaService"
 import type { Carrier } from "@/types/ventasLogistica"
 import { cn } from "@/lib/utils"
 
 export default function FleterasPage() {
-  const api = useApi(useCallback((_signal: AbortSignal) => getCarriers(false), []))
+  const api = useApi(
+    useCallback((_signal: AbortSignal) => getCarriers(false), []),
+    { cacheKey: CACHE_KEYS.CARRIERS, staleTime: STALE.CATALOG, cacheTtl: TTL.DAY },
+  )
   const carriers = (api.data ?? []) as Carrier[]
 
   const columns: DataTableColumn<Carrier>[] = [

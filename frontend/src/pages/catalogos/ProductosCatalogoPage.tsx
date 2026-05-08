@@ -34,6 +34,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useApi } from "@/hooks/useApi"
 import { ApiError } from "@/lib/http"
+import { CACHE_KEYS, STALE, TTL } from "@/lib/queryCache"
 import { cn } from "@/lib/utils"
 import { inventarioService } from "@/services/inventarioService"
 import { productosService } from "@/services/productosService"
@@ -1142,9 +1143,20 @@ export function ProductosCatalogoPage() {
     [token],
   )
 
-  const { data: productsData, status: productsStatus } = useApi(productsFetcher)
-  const { data: categories } = useApi(categoriesFetcher)
-  const { data: brands } = useApi(brandsFetcher)
+  const { data: productsData, status: productsStatus } = useApi(productsFetcher, {
+    cacheKey: `${CACHE_KEYS.PRODUCTOS}-${filterStatus}-${debouncedSearch}-${filterCategory}-${filterBrand}-${filterSaleable}-${page}`,
+    staleTime: STALE.MEDIUM,
+  })
+  const { data: categories } = useApi(categoriesFetcher, {
+    cacheKey: CACHE_KEYS.CATEGORIAS,
+    staleTime: STALE.CATALOG,
+    cacheTtl: TTL.DAY,
+  })
+  const { data: brands } = useApi(brandsFetcher, {
+    cacheKey: CACHE_KEYS.MARCAS,
+    staleTime: STALE.CATALOG,
+    cacheTtl: TTL.DAY,
+  })
 
   const rows = productsData?.items ?? []
   const total = productsData?.total ?? 0

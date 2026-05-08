@@ -21,6 +21,7 @@ export const CACHE_KEYS = {
   CARRIERS: "carriers",
   SAT_CLAVES: "sat-claves",
   INVENTARIO: "inventario",
+  PEDIDOS: "pedidos",
 } as const
 
 const LS_PREFIX = "nexus-cache:"

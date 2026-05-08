@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useApi } from "@/hooks/useApi"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import { getOrders, updateOrder, packOrderItem } from "@/services/ventasLogisticaService"
 import type { Order, OrderItem, OrderUpdate } from "@/types/ventasLogistica"
 import { cn } from "@/lib/utils"
@@ -319,7 +320,8 @@ export default function PedidosPage() {
           limit: 150,
         }),
       [filterStatus, filterPacking]
-    )
+    ),
+    { cacheKey: `${CACHE_KEYS.PEDIDOS}-${filterStatus}-${filterPacking}`, staleTime: STALE.MEDIUM },
   )
 
   const orders = (ordersApi.data ?? []) as Order[]

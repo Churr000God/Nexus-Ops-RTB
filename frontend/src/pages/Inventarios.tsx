@@ -30,6 +30,7 @@ import { AjusteModal } from "@/components/assets/AjusteModal"
 import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { useFilters } from "@/hooks/useFilters"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import { formatCurrencyMXN, formatNumber } from "@/lib/utils"
 import { assetsService } from "@/services/assetsService"
 import { inventarioService } from "@/services/inventarioService"
@@ -287,7 +288,10 @@ export function AlmacenPage() {
     (signal: AbortSignal) => assetsService.getKpisV2(token, signal),
     [token],
   )
-  const { data: kpisV2 } = useApi(kpisFetcher)
+  const { data: kpisV2 } = useApi(kpisFetcher, {
+    cacheKey: `${CACHE_KEYS.INVENTARIO}-kpis`,
+    staleTime: STALE.SHORT,
+  })
 
   const vendibleFetcher = useCallback(
     (signal: AbortSignal) =>
@@ -325,8 +329,14 @@ export function AlmacenPage() {
     [token, filterStatus, debouncedSearch, categoryFilter, sortBy, sortOrder, page],
   )
 
-  const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher)
-  const { data: interno, status: internoStatus } = useApi(internoFetcher)
+  const { data: vendible, status: vendibleStatus } = useApi(vendibleFetcher, {
+    cacheKey: `${CACHE_KEYS.INVENTARIO}-v-${filterStatus}-${debouncedSearch}-${categoryFilter}-${sortBy}-${sortOrder}-${page}`,
+    staleTime: STALE.MEDIUM,
+  })
+  const { data: interno, status: internoStatus } = useApi(internoFetcher, {
+    cacheKey: `${CACHE_KEYS.INVENTARIO}-i-${filterStatus}-${debouncedSearch}-${categoryFilter}-${sortBy}-${sortOrder}-${page}`,
+    staleTime: STALE.MEDIUM,
+  })
 
   const MOV_PAGE_SIZE = 50
   const movFetcher = useCallback(

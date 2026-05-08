@@ -1,4 +1,5 @@
 import { requestJson } from "@/lib/http"
+import { cacheInvalidatePrefix, CACHE_KEYS } from "@/lib/queryCache"
 import type {
   CatalogoListResponse,
   CustomerAddress,
@@ -101,16 +102,20 @@ export const clientesProveedoresService = {
     return requestJson<CustomerDetail>(`/api/clientes/${customerId}`, { token, signal })
   },
 
-  createCustomer(token: string | null, data: CustomerCreate) {
-    return requestJson<CustomerRead>("/api/clientes", { method: "POST", body: data, token })
+  async createCustomer(token: string | null, data: CustomerCreate) {
+    const result = await requestJson<CustomerRead>("/api/clientes", { method: "POST", body: data, token })
+    cacheInvalidatePrefix(CACHE_KEYS.CLIENTES)
+    return result
   },
 
-  updateCustomer(token: string | null, customerId: number, data: CustomerUpdate) {
-    return requestJson<CustomerRead>(`/api/clientes/${customerId}`, {
+  async updateCustomer(token: string | null, customerId: number, data: CustomerUpdate) {
+    const result = await requestJson<CustomerRead>(`/api/clientes/${customerId}`, {
       method: "PATCH",
       body: data,
       token,
     })
+    cacheInvalidatePrefix(CACHE_KEYS.CLIENTES)
+    return result
   },
 
   addCustomerTaxData(token: string | null, customerId: number, data: CustomerTaxDataCreate) {
@@ -212,16 +217,20 @@ export const clientesProveedoresService = {
     return requestJson<SupplierDetail>(`/api/proveedores/${supplierId}`, { token, signal })
   },
 
-  createSupplier(token: string | null, data: SupplierCreate) {
-    return requestJson<SupplierRead>("/api/proveedores", { method: "POST", body: data, token })
+  async createSupplier(token: string | null, data: SupplierCreate) {
+    const result = await requestJson<SupplierRead>("/api/proveedores", { method: "POST", body: data, token })
+    cacheInvalidatePrefix(CACHE_KEYS.PROVEEDORES)
+    return result
   },
 
-  updateSupplier(token: string | null, supplierId: number, data: SupplierUpdate) {
-    return requestJson<SupplierRead>(`/api/proveedores/${supplierId}`, {
+  async updateSupplier(token: string | null, supplierId: number, data: SupplierUpdate) {
+    const result = await requestJson<SupplierRead>(`/api/proveedores/${supplierId}`, {
       method: "PATCH",
       body: data,
       token,
     })
+    cacheInvalidatePrefix(CACHE_KEYS.PROVEEDORES)
+    return result
   },
 
   addSupplierTaxData(token: string | null, supplierId: number, data: SupplierTaxDataCreate) {

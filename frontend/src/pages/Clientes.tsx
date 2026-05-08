@@ -27,6 +27,7 @@ import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
 import { ApiError } from "@/lib/http"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import { useAuthStore } from "@/stores/authStore"
 import type {
   CustomerAddress,
@@ -1277,7 +1278,11 @@ export function ClientesPage() {
     [token, search, soloActivos, customerTypeFilter, localityFilter]
   )
 
-  const { data, status, error, refetch } = useApi(fetchCustomers, { enabled: canView })
+  const { data, status, error, refetch } = useApi(fetchCustomers, {
+    enabled: canView,
+    cacheKey: `${CACHE_KEYS.CLIENTES}-${search}-${soloActivos}-${customerTypeFilter}-${localityFilter}`,
+    staleTime: STALE.LONG,
+  })
 
   const kpi = useMemo(() => {
     const items = data?.items ?? []

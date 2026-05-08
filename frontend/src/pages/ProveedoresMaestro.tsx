@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import { ApiError } from "@/lib/http"
 import { useAuthStore } from "@/stores/authStore"
 import type {
@@ -1555,7 +1556,11 @@ export function ProveedoresMaestroPage() {
     [token, search, soloActivos, supplierType, locality]
   )
 
-  const { data, status, error, refetch } = useApi(fetchSuppliers, { enabled: canView })
+  const { data, status, error, refetch } = useApi(fetchSuppliers, {
+    enabled: canView,
+    cacheKey: `${CACHE_KEYS.PROVEEDORES}-${search}-${soloActivos}-${supplierType}-${locality}`,
+    staleTime: STALE.LONG,
+  })
 
   const kpi = useMemo(() => {
     const items = data?.items ?? []

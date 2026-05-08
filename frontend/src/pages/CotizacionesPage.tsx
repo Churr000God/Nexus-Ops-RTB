@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
+import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import { approveQuote, getQuotes, rejectQuote } from "@/services/ventasLogisticaService"
 import type { Quote } from "@/types/ventasLogistica"
 import { cn } from "@/lib/utils"
@@ -36,7 +37,8 @@ export default function CotizacionesPage() {
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
   const quotesApi = useApi(
-    useCallback((_signal: AbortSignal) => getQuotes({ status: filterStatus || undefined, limit: 100 }), [filterStatus])
+    useCallback((_signal: AbortSignal) => getQuotes({ status: filterStatus || undefined, limit: 100 }), [filterStatus]),
+    { cacheKey: `${CACHE_KEYS.COTIZACIONES}-${filterStatus}`, staleTime: STALE.MEDIUM },
   )
 
   const quotes = (quotesApi.data ?? []) as Quote[]
