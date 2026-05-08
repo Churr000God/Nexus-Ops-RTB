@@ -70,6 +70,8 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0020 | 2026-04-29 | frontend | medio | TS2322 `"neutral"` no asignable a `KpiTone` local en Inventarios.tsx rompe docker build | resuelto | [ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md](resolutions/ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md) |
 | ERR-0021 | 2026-05-08 | frontend | alto | 401 Unauthorized en delivery-notes: requestJson no inyectaba token automáticamente | resuelto | [ERR-0021_requestjson-sin-token-auto-delivery-notes.md](resolutions/ERR-0021_requestjson-sin-token-auto-delivery-notes.md) |
 | ERR-0022 | 2026-05-08 | frontend | alto | 422 en POST delivery-notes: doble serialización JSON — servicios pre-stringifican body y requestJson volvía a serializar | resuelto | [ERR-0022_double-json-stringify-body.md](resolutions/ERR-0022_double-json-stringify-body.md) |
+| ERR-0023 | 2026-05-08 | backend | alto | CORS 500 en GET /orders: MissingGreenlet — `milestones` no eager-loaded en `get_orders()`, OrderOut lo serializa | resuelto | [ERR-0023_missinggreenlet-milestones-get-orders.md](resolutions/ERR-0023_missinggreenlet-milestones-get-orders.md) |
+| ERR-0024 | 2026-05-08 | backend+db | medio | inventory_movements contaminaba stock real: movimientos teóricos (NR) insertados en la tabla que alimenta v_inventory_current | resuelto | [ERR-0024_inventory-movements-contamina-stock-real.md](resolutions/ERR-0024_inventory-movements-contamina-stock-real.md) |
 
 ---
 
