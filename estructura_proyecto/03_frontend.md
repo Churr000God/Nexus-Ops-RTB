@@ -12,11 +12,9 @@
 | `vite` | Build y dev server |
 | `typescript` | Tipado estático |
 | `react-router-dom` | Ruteo SPA |
-| `@tanstack/react-query` | Cache de data server-side |
 | `zustand` | State global (filtros, auth) |
-| `axios` | Cliente HTTP |
+| `fetch` (nativo) | Cliente HTTP — helper `requestJson` en `src/lib/http.ts` |
 | `recharts` | Gráficas principales |
-| `chart.js` + `react-chartjs-2` | Complemento para casos avanzados |
 | `tailwindcss`, `postcss`, `autoprefixer` | Estilos |
 | `shadcn/ui` + `lucide-react` | Componentes + iconos |
 | `date-fns` | Manejo de fechas |
@@ -25,6 +23,24 @@
 | `react-hook-form` | Formularios |
 | `vitest`, `@testing-library/react` | Tests unitarios |
 | `eslint`, `prettier` | Linter y formato |
+
+### Data fetching y caché
+
+No se usa TanStack Query. El stack propio es:
+
+- **`useApi(fetcher, options?)`** — hook genérico; maneja loading/error/data + AbortSignal
+- **`queryCache.ts`** — caché híbrido memoria + localStorage; activado por opciones `cacheKey` / `staleTime` / `cacheTtl` en `useApi`
+- **`requestJson<T>(path, options)`** — helper `fetch` con auto-inyección de JWT y serialización de body
+
+```typescript
+// Ejemplo de uso con caché
+const { data, refetch } = useApi(
+  useCallback((signal) => myService.list(token, signal), [token, filter]),
+  { cacheKey: `${CACHE_KEYS.X}-${filter}`, staleTime: STALE.MEDIUM }
+)
+```
+
+`refetch()` siempre bypasea el caché. Los servicios llaman `cacheInvalidate/cacheInvalidatePrefix` tras mutaciones.
 
 ---
 
