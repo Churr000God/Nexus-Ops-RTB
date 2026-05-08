@@ -171,8 +171,8 @@ function noteToForm(note: DeliveryNote): FormState {
       sku: it.sku ?? undefined,
       description: it.description,
       quantity: it.quantity,
-      unit_price: it.unit_price,
-      discount_amount: it.discount_amount,
+      unit_price: Math.round(it.unit_price * 100) / 100,
+      discount_amount: Math.round(it.discount_amount * 100) / 100,
       tax_rate: it.tax_rate,
       notes: it.notes ?? undefined,
     })),
@@ -588,15 +588,26 @@ function ItemProductCell({
   }, [])
 
   useLayoutEffect(() => {
-    if (open && searchInputRef.current) {
-      const rect = searchInputRef.current.getBoundingClientRect()
-      setDropdownPos({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: Math.max(rect.width, 320),
-      })
-    } else {
-      setDropdownPos(null)
+    function updatePos() {
+      if (open && searchInputRef.current) {
+        const rect = searchInputRef.current.getBoundingClientRect()
+        setDropdownPos({
+          top: rect.bottom + 4,
+          left: rect.left,
+          width: Math.max(rect.width, 320),
+        })
+      } else {
+        setDropdownPos(null)
+      }
+    }
+    updatePos()
+    if (open) {
+      window.addEventListener("scroll", updatePos, true)
+      window.addEventListener("resize", updatePos)
+      return () => {
+        window.removeEventListener("scroll", updatePos, true)
+        window.removeEventListener("resize", updatePos)
+      }
     }
   }, [open, results])
 
@@ -979,6 +990,16 @@ function DeliveryNoteFormModal({
           customer_po_number: form.customer_po_number || undefined,
           customer_po_date: form.customer_po_date || undefined,
           notes: form.notes || undefined,
+          items: form.items.map((it) => ({
+            product_id: it.product_id,
+            sku: it.sku,
+            description: it.description,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            discount_amount: it.discount_amount || undefined,
+            tax_rate: it.tax_rate,
+            notes: it.notes,
+          })),
         }
         await updateDeliveryNote(existing.delivery_note_id, payload)
         toast.success("Nota de remision actualizada")
@@ -1309,7 +1330,6 @@ function DeliveryNoteFormModal({
                     variant="outline"
                     className="h-8 gap-1.5 text-xs"
                     onClick={addItem}
-                    disabled={isEdit}
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Agregar partida
@@ -1396,7 +1416,7 @@ function DeliveryNoteFormModal({
                                     }
                                     onPriceSelect={(price) =>
                                       updateItem(it.key, {
-                                        unit_price: price,
+                                        unit_price: Math.round(price * 100) / 100,
                                       })
                                     }
                                   />
@@ -1420,13 +1440,13 @@ function DeliveryNoteFormModal({
                                   <Input
                                     type="number"
                                     min={0}
-                                    step="0.01"
+                                    step="any"
                                     className="h-8 text-xs"
                                     value={it.unit_price}
                                     onChange={(e) =>
                                       updateItem(it.key, {
                                         unit_price:
-                                          parseFloat(e.target.value) || 0,
+                                          Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
                                       })
                                     }
                                   />
@@ -1435,13 +1455,13 @@ function DeliveryNoteFormModal({
                                   <Input
                                     type="number"
                                     min={0}
-                                    step="0.01"
+                                    step="any"
                                     className="h-8 text-xs"
                                     value={it.discount_amount}
                                     onChange={(e) =>
                                       updateItem(it.key, {
                                         discount_amount:
-                                          parseFloat(e.target.value) || 0,
+                                          Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
                                       })
                                     }
                                   />
@@ -1450,7 +1470,7 @@ function DeliveryNoteFormModal({
                                   <Input
                                     type="number"
                                     min={0}
-                                    step="0.01"
+                                    step="any"
                                     className="h-8 text-xs"
                                     value={it.tax_rate}
                                     onChange={(e) =>
