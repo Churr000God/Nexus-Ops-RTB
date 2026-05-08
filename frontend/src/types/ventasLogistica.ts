@@ -40,13 +40,9 @@ export interface CarrierUpdate {
 // ─── Delivery Notes ──────────────────────────────────────────────────────────
 
 export type DeliveryNoteStatus =
-  | 'DRAFT'
-  | 'ISSUED'
-  | 'DELIVERED'
-  | 'TRANSFORMED'
-  | 'PARTIALLY_INVOICED'
-  | 'INVOICED'
-  | 'CANCELLED'
+  | 'EDICION'
+  | 'APROBADA'
+  | 'CANCELADA'
 
 export interface DeliveryNoteItem {
   item_id: number
@@ -120,6 +116,7 @@ export interface DeliveryNoteUpdate {
   customer_po_date?: string
   notes?: string
   cancellation_reason?: string
+  items?: DeliveryNoteItemCreate[]
 }
 
 // ─── Quotes ──────────────────────────────────────────────────────────────────

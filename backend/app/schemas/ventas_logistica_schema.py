@@ -106,6 +106,7 @@ class DeliveryNoteUpdate(BaseModel):
     customer_po_date: date | None = None
     notes: str | None = None
     cancellation_reason: str | None = None
+    items: list[DeliveryNoteItemCreate] | None = None
 
 
 class DeliveryNoteResponse(BaseModel):

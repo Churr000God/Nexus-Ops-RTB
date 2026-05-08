@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from app.models.ops_models import InventoryMovement
 from app.models.ventas_logistica_models import (
     CFDI,
     CFDIItem,
@@ -63,6 +64,11 @@ from app.schemas.ventas_logistica_schema import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_DN_VALID_TRANSITIONS: dict[str, set[str]] = {
+    "EDICION":  {"APROBADA", "CANCELADA"},
+    "APROBADA": {"CANCELADA"},
+}
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -174,7 +180,8 @@ async def create_delivery_note(
         text("SELECT COALESCE(MAX(delivery_note_id), 0) + 1 FROM delivery_notes")
     )
     seq = result.scalar()
-    note_number = f"NR-{datetime.now(timezone.utc).year}-{seq:05d}"
+    year = datetime.now(timezone.utc).year
+    note_number = f"NR-{year}-{seq:05d}"
 
     items_data = [i.model_dump() for i in data.items]
     subtotal, tax, total = await _calc_dn_totals(items_data)
@@ -192,6 +199,7 @@ async def create_delivery_note(
         subtotal=subtotal,
         tax_amount=tax,
         total=total,
+        status="EDICION",
     )
     db.add(note)
     await db.flush()
@@ -202,35 +210,172 @@ async def create_delivery_note(
         disc = item_data.get("discount_amount", 0)
         rate = item_data.get("tax_rate", 0.16)
         sub = qty * price - disc
-        item = DeliveryNoteItem(
+        db.add(DeliveryNoteItem(
             delivery_note_id=note.delivery_note_id,
             subtotal=round(sub, 4),
             tax_amount=round(sub * rate, 4),
             total=round(sub * (1 + rate), 4),
             **item_data,
-        )
-        db.add(item)
+        ))
 
     await db.commit()
-    await db.refresh(note)
-    return note
+    result2 = await db.execute(
+        select(DeliveryNote)
+        .options(selectinload(DeliveryNote.items))
+        .where(DeliveryNote.delivery_note_id == note.delivery_note_id)
+    )
+    return result2.scalar_one()
 
 
 async def update_delivery_note(
-    db: AsyncSession, note_id: int, data: DeliveryNoteUpdate
+    db: AsyncSession, note_id: int, data: DeliveryNoteUpdate, user_id: UUID | None = None
 ) -> DeliveryNote | None:
     note = await get_delivery_note(db, note_id)
     if not note:
         return None
-    updates = data.model_dump(exclude_none=True)
-    if "status" in updates and updates["status"] == "CANCELLED":
-        updates["cancelled_at"] = _now()
+
+    updates = data.model_dump(exclude_none=True, exclude={"items"})
+    transitioning_to_aprobada = False
+    prev_status = note.status
+
+    if "status" in updates:
+        new_status = updates["status"]
+        allowed = _DN_VALID_TRANSITIONS.get(note.status, set())
+        if new_status not in allowed:
+            raise ValueError(f"Transición no permitida: {note.status} → {new_status}")
+        if new_status == "CANCELADA":
+            updates["cancelled_at"] = _now()
+        elif new_status == "APROBADA":
+            transitioning_to_aprobada = True
+
     for field, value in updates.items():
         setattr(note, field, value)
     note.updated_at = _now()
+
+    order_items_src: list[dict]
+    if data.items is not None:
+        await db.execute(
+            text("DELETE FROM delivery_note_items WHERE delivery_note_id = :id"),
+            {"id": note_id},
+        )
+        items_data = [i.model_dump() for i in data.items]
+        subtotal, tax, total = await _calc_dn_totals(items_data)
+        note.subtotal = subtotal
+        note.tax_amount = tax
+        note.total = total
+        for item_data in items_data:
+            qty = item_data["quantity"]
+            price = item_data["unit_price"]
+            disc = item_data.get("discount_amount", 0)
+            rate = item_data.get("tax_rate", 0.16)
+            sub = qty * price - disc
+            db.add(DeliveryNoteItem(
+                delivery_note_id=note_id,
+                subtotal=round(sub, 4),
+                tax_amount=round(sub * rate, 4),
+                total=round(sub * (1 + rate), 4),
+                **item_data,
+            ))
+        order_items_src = items_data
+    else:
+        order_items_src = [
+            {
+                "product_id": it.product_id,
+                "sku": it.sku,
+                "description": it.description,
+                "quantity": it.quantity,
+                "unit_price": it.unit_price,
+                "discount_amount": it.discount_amount,
+                "tax_rate": it.tax_rate,
+                "notes": it.notes,
+            }
+            for it in note.items
+        ]
+
+    if transitioning_to_aprobada:
+        year = datetime.now(timezone.utc).year
+        order_seq_r = await db.execute(
+            text("SELECT COALESCE(MAX(order_id), 0) + 1 FROM orders")
+        )
+        order_seq = order_seq_r.scalar()
+        order = Order(
+            order_number=f"PED-{year}-{order_seq:05d}",
+            customer_id=note.customer_id,
+            sales_rep_id=note.sales_rep_id,
+            order_date=note.issue_date,
+            requested_delivery_date=note.delivery_date,
+            shipping_address_id=note.shipping_address_id,
+            subtotal=note.subtotal,
+            tax_amount=note.tax_amount,
+            total=note.total,
+            internal_notes=f"Generado desde {note.note_number}",
+            status="CREATED",
+        )
+        db.add(order)
+        await db.flush()
+        for idx, item_data in enumerate(order_items_src):
+            qty = item_data["quantity"]
+            price = item_data["unit_price"]
+            disc = item_data.get("discount_amount", 0)
+            rate = item_data.get("tax_rate", 0.16)
+            disc_pct = round((disc / (qty * price)) * 100, 4) if qty * price > 0 else 0.0
+            sub = qty * price - disc
+            db.add(OrderItem(
+                order_id=order.order_id,
+                product_id=item_data.get("product_id"),
+                sku=item_data.get("sku"),
+                description=item_data["description"],
+                quantity_ordered=qty,
+                unit_price=price,
+                discount_pct=disc_pct,
+                tax_rate=rate,
+                subtotal=round(sub, 4),
+                tax_amount=round(sub * rate, 4),
+                total=round(sub * (1 + rate), 4),
+                notes=item_data.get("notes"),
+                sort_order=idx,
+            ))
+
+        # ── Stock teórico: salida al confirmar la NR ────────────────────────
+        now = _now()
+        for item_data in order_items_src:
+            pid = item_data.get("product_id")
+            if not pid:
+                continue
+            qty = item_data["quantity"]
+            # Solo actualiza inventario.outbound_theoretical — no inventory_movements
+            # (los movimientos en esa tabla afectan quantity_on_hand en la vista real)
+            await db.execute(
+                text("""
+                    UPDATE inventario
+                    SET outbound_theoretical = COALESCE(outbound_theoretical, 0) + :qty,
+                        theoretical_qty      = COALESCE(inbound_theoretical, 0)
+                                             - (COALESCE(outbound_theoretical, 0) + :qty),
+                        updated_on           = NOW()
+                    WHERE product_id = CAST(:pid AS UUID)
+                """),
+                {"qty": qty, "pid": str(pid)},
+            )
+
+    # ── Stock teórico: reversión al cancelar una NR aprobada ────────────────
+    if data.status == "CANCELADA" and prev_status == "APROBADA":
+        for it in note.items:
+            if not it.product_id:
+                continue
+            await db.execute(
+                text("""
+                    UPDATE inventario
+                    SET outbound_theoretical = GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
+                        theoretical_qty      = COALESCE(inbound_theoretical, 0)
+                                             - GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
+                        updated_on           = NOW()
+                    WHERE product_id = CAST(:pid AS UUID)
+                """),
+                {"qty": it.quantity, "pid": str(it.product_id)},
+            )
+
     await db.commit()
-    await db.refresh(note)
-    return note
+    return await get_delivery_note(db, note_id)
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +510,37 @@ async def approve_quote(
         changed_by=user_id,
         notes=data.notes,
     ))
+    await _deduct_theoretical_inventory(db, quote_id)
     await db.commit()
     await db.refresh(quote)
     return quote
+
+
+async def _deduct_theoretical_inventory(db: AsyncSession, quote_id: int) -> None:
+    """Resta del inventario teórico la cantidad de cada partida aprobada en la cotización.
+
+    Actualiza outbound_theoretical y recalcula theoretical_qty para cada fila
+    de inventario que tenga product_id coincidente con un ítem de la cotización.
+    Solo afecta filas existentes en la tabla inventario; no crea nuevas filas.
+    """
+    await db.execute(
+        text("""
+            UPDATE inventario inv
+            SET
+                outbound_theoretical = COALESCE(inv.outbound_theoretical, 0) + agg.total_qty,
+                theoretical_qty      = COALESCE(inv.inbound_theoretical,  0)
+                                       - (COALESCE(inv.outbound_theoretical, 0) + agg.total_qty)
+            FROM (
+                SELECT product_id, SUM(CAST(quantity AS NUMERIC)) AS total_qty
+                FROM quote_items
+                WHERE quote_id    = CAST(:quote_id AS BIGINT)
+                  AND product_id IS NOT NULL
+                GROUP BY product_id
+            ) agg
+            WHERE inv.product_id = agg.product_id
+        """),
+        {"quote_id": quote_id},
+    )
 
 
 async def reject_quote(
@@ -436,7 +609,7 @@ async def list_orders(
     limit: int = 50,
     offset: int = 0,
 ) -> list[Order]:
-    q = select(Order).options(selectinload(Order.items))
+    q = select(Order).options(selectinload(Order.items), selectinload(Order.milestones))
     if customer_id:
         q = q.where(Order.customer_id == customer_id)
     if status:
@@ -472,8 +645,7 @@ async def update_order(db: AsyncSession, order_id: int, data: OrderUpdate) -> Or
         setattr(order, field, value)
     order.updated_at = _now()
     await db.commit()
-    await db.refresh(order)
-    return order
+    return await get_order(db, order_id)
 
 
 async def pack_order_item(
@@ -490,6 +662,9 @@ async def pack_order_item(
         return None
     if data.quantity_packed > item.quantity_ordered:
         return None
+
+    # Delta para no duplicar si se llama varias veces
+    qty_delta = data.quantity_packed - item.quantity_packed
     item.quantity_packed = data.quantity_packed
     item.updated_at = _now()
 
@@ -513,6 +688,54 @@ async def pack_order_item(
         else:
             order.packing_status = "IN_PROGRESS"
         order.updated_at = _now()
+
+    # ── Stock real: salida/reversión proporcional al delta empacado ─────────
+    if qty_delta != 0 and item.product_id:
+        now = _now()
+        if qty_delta > 0:
+            db.add(InventoryMovement(
+                product_id=item.product_id,
+                movement_type="Salida",
+                qty_out=qty_delta,
+                moved_on=now,
+                origin="EMPAQUE",
+                observations=f"Empacado {item.sku or ''}: {item.description}",
+                created_by_user_id=user_id,
+            ))
+            await db.execute(
+                text("""
+                    UPDATE inventario
+                    SET outbound_real = COALESCE(outbound_real, 0) + :qty,
+                        real_qty      = COALESCE(inbound_real, 0)
+                                      - (COALESCE(outbound_real, 0) + :qty),
+                        updated_on    = NOW()
+                    WHERE product_id = CAST(:pid AS UUID)
+                """),
+                {"qty": qty_delta, "pid": str(item.product_id)},
+            )
+        else:
+            # Corrección hacia abajo: devuelve unidades al stock real
+            revert = abs(qty_delta)
+            db.add(InventoryMovement(
+                product_id=item.product_id,
+                movement_type="Entrada",
+                qty_in=revert,
+                moved_on=now,
+                origin="EMPAQUE_CORRECCION",
+                observations=f"Corrección empaque {item.sku or ''}: {item.description}",
+                created_by_user_id=user_id,
+            ))
+            await db.execute(
+                text("""
+                    UPDATE inventario
+                    SET outbound_real = GREATEST(COALESCE(outbound_real, 0) - :qty, 0),
+                        real_qty      = COALESCE(inbound_real, 0)
+                                      - GREATEST(COALESCE(outbound_real, 0) - :qty, 0),
+                        updated_on    = NOW()
+                    WHERE product_id = CAST(:pid AS UUID)
+                """),
+                {"qty": revert, "pid": str(item.product_id)},
+            )
 
     await db.commit()
     await db.refresh(item)

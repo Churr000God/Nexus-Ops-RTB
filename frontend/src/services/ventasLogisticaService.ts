@@ -1,4 +1,5 @@
 import { requestJson } from "@/lib/http"
+import { cacheInvalidate, CACHE_KEYS } from "@/lib/queryCache"
 import type {
   CFDI,
   CFDICancelRequest,
@@ -82,8 +83,11 @@ export const getDeliveryNotes = (params: DeliveryNoteListParams = {}) => {
 export const getDeliveryNote = (id: number) =>
   requestJson<DeliveryNote>(`${BASE}/delivery-notes/${id}`)
 
-export const createDeliveryNote = (data: DeliveryNoteCreate) =>
-  requestJson<DeliveryNote>(`${BASE}/delivery-notes`, { method: "POST", body: JSON.stringify(data) })
+export const createDeliveryNote = async (data: DeliveryNoteCreate) => {
+  const result = await requestJson<DeliveryNote>(`${BASE}/delivery-notes`, { method: "POST", body: JSON.stringify(data) })
+  cacheInvalidate(CACHE_KEYS.NOTAS_REMISION)
+  return result
+}
 
 export const updateDeliveryNote = (id: number, data: DeliveryNoteUpdate) =>
   requestJson<DeliveryNote>(`${BASE}/delivery-notes/${id}`, { method: "PATCH", body: JSON.stringify(data) })
@@ -109,14 +113,20 @@ export const getQuotes = (params: QuoteListParams = {}) => {
 export const getQuote = (id: number) =>
   requestJson<Quote>(`${BASE}/quotes/${id}`)
 
-export const createQuote = (data: QuoteCreate) =>
-  requestJson<Quote>(`${BASE}/quotes`, { method: "POST", body: JSON.stringify(data) })
+export const createQuote = async (data: QuoteCreate) => {
+  const result = await requestJson<Quote>(`${BASE}/quotes`, { method: "POST", body: JSON.stringify(data) })
+  cacheInvalidate(CACHE_KEYS.COTIZACIONES)
+  return result
+}
 
 export const updateQuote = (id: number, data: QuoteUpdate) =>
   requestJson<Quote>(`${BASE}/quotes/${id}`, { method: "PATCH", body: JSON.stringify(data) })
 
-export const approveQuote = (id: number, data: QuoteApprove = {}) =>
-  requestJson<Quote>(`${BASE}/quotes/${id}/approve`, { method: "POST", body: JSON.stringify(data) })
+export const approveQuote = async (id: number, data: QuoteApprove = {}) => {
+  const result = await requestJson<Quote>(`${BASE}/quotes/${id}/approve`, { method: "POST", body: JSON.stringify(data) })
+  cacheInvalidate(CACHE_KEYS.COTIZACIONES)
+  return result
+}
 
 export const rejectQuote = (id: number, data: QuoteReject) =>
   requestJson<Quote>(`${BASE}/quotes/${id}/reject`, { method: "POST", body: JSON.stringify(data) })

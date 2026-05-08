@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Hash,
   StickyNote,
+  CheckCircle2,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -45,23 +46,15 @@ import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/authStore"
 
 const STATUS_COLORS: Record<DeliveryNoteStatus, string> = {
-  DRAFT: "border-slate-500/30 bg-slate-500/10 text-slate-400",
-  ISSUED: "border-blue-500/30 bg-blue-500/10 text-blue-400",
-  DELIVERED: "border-teal-500/30 bg-teal-500/10 text-teal-400",
-  TRANSFORMED: "border-violet-500/30 bg-violet-500/10 text-violet-400",
-  PARTIALLY_INVOICED: "border-amber-500/30 bg-amber-500/10 text-amber-400",
-  INVOICED: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-  CANCELLED: "border-red-900/30 bg-red-900/10 text-red-600",
+  EDICION:  "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  APROBADA: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  CANCELADA: "border-red-900/30 bg-red-900/10 text-red-600",
 }
 
 const STATUS_LABELS: Record<DeliveryNoteStatus, string> = {
-  DRAFT: "Borrador",
-  ISSUED: "Emitida",
-  DELIVERED: "Entregada",
-  TRANSFORMED: "Transformada",
-  PARTIALLY_INVOICED: "Parcialmente facturada",
-  INVOICED: "Facturada",
-  CANCELLED: "Cancelada",
+  EDICION:  "En edición",
+  APROBADA: "Aprobada",
+  CANCELADA: "Cancelada",
 }
 
 const fmt = new Intl.NumberFormat("es-MX", {
@@ -230,26 +223,36 @@ export default function NotasRemisionPage() {
     )
   })
 
-  const handleCancel = async (note: DeliveryNote) => {
-    if (!canManage) {
-      toast.error("No tienes permiso para cancelar notas de remision")
-      return
-    }
-    const reason = window.prompt("Motivo de cancelacion:")
-    if (!reason) return
+  const handleStatusChange = async (note: DeliveryNote, newStatus: "APROBADA" | "CANCELADA") => {
     setActionLoading(note.delivery_note_id)
     try {
-      await updateDeliveryNote(note.delivery_note_id, {
-        status: "CANCELLED",
-        cancellation_reason: reason,
-      })
-      toast.success("Nota de remision cancelada")
+      const payload: { status: typeof newStatus; cancellation_reason?: string } = { status: newStatus }
+      if (newStatus === "CANCELADA") {
+        const reason = window.prompt("Motivo de cancelación:")
+        if (!reason) { setActionLoading(null); return }
+        payload.cancellation_reason = reason
+      }
+      await updateDeliveryNote(note.delivery_note_id, payload)
+      const labels: Record<string, string> = {
+        APROBADA: "Nota aprobada — pedido generado",
+        CANCELADA: "Nota de remisión cancelada",
+      }
+      toast.success(labels[newStatus])
       api.refetch()
-    } catch {
-      toast.error("No se pudo cancelar la nota de remision")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al cambiar estado"
+      toast.error(msg)
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const handleCancel = (note: DeliveryNote) => {
+    if (!canManage) {
+      toast.error("No tienes permiso para cancelar notas de remisión")
+      return
+    }
+    void handleStatusChange(note, "CANCELADA")
   }
 
   const columns: DataTableColumn<DeliveryNote>[] = [
@@ -338,7 +341,7 @@ export default function NotasRemisionPage() {
               <Eye className="h-3.5 w-3.5" />
             )}
           </Button>
-          {canManage && ["DRAFT", "ISSUED"].includes(r.status) && (
+          {canManage && r.status === "EDICION" && (
             <Button
               size="sm"
               variant="ghost"
@@ -349,7 +352,19 @@ export default function NotasRemisionPage() {
               <Pencil className="h-3.5 w-3.5" />
             </Button>
           )}
-          {canManage && ["DRAFT", "ISSUED"].includes(r.status) && (
+          {canManage && r.status === "EDICION" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300"
+              disabled={actionLoading === r.delivery_note_id}
+              onClick={() => void handleStatusChange(r, "APROBADA")}
+              title="Aprobar (genera pedido)"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {canManage && ["EDICION", "APROBADA"].includes(r.status) && (
             <Button
               size="sm"
               variant="ghost"

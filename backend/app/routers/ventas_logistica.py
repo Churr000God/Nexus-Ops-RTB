@@ -142,8 +142,11 @@ async def create_delivery_note(data: DeliveryNoteCreate, db: DbDep, user: UserDe
 
 @router.patch("/delivery-notes/{note_id}", response_model=DeliveryNoteResponse,
               dependencies=[Depends(require_permission("delivery_note.manage"))])
-async def update_delivery_note(note_id: int, data: DeliveryNoteUpdate, db: DbDep, _: UserDep):
-    result = await svc.update_delivery_note(db, note_id, data)
+async def update_delivery_note(note_id: int, data: DeliveryNoteUpdate, db: DbDep, user: UserDep):
+    try:
+        result = await svc.update_delivery_note(db, note_id, data, user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not result:
         raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
     return result
