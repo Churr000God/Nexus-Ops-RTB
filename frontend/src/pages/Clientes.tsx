@@ -18,7 +18,7 @@ import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { EmptyState } from "@/components/common/EmptyState"
-import { EntityMap, type MapMarkerItem } from "@/components/common/EntityMap"
+import { EntityMap, MapLegend, type MapMarkerItem } from "@/components/common/EntityMap"
 import { KpiCard } from "@/components/common/KpiCard"
 import { ViewToggle } from "@/components/common/ViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -1504,35 +1504,58 @@ export function ClientesPage() {
           {/* Scrollable content */}
           <div className="flex-1 min-w-0 overflow-hidden">
             {viewMode === "map" ? (
-              <div className="h-full rounded-[var(--radius-md)] overflow-hidden border">
-                {geoLoading ? (
-                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                    Cargando ubicaciones…
+              <div className="flex h-full flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Map className="h-3.5 w-3.5" />
+                    <span>Vista de mapa</span>
+                    <span className="rounded-full border border-border bg-accent/30 px-2 py-0.5 text-[10px]">
+                      {geoItems.length} registros
+                    </span>
                   </div>
-                ) : (
-                  <EntityMap
-                    items={geoItems.map((c): MapMarkerItem => ({
-                      id: c.customer_id,
-                      name: c.business_name,
-                      code: c.code,
-                      isActive: c.is_active,
-                      badge: c.customer_type === "COMPANY" ? "Empresa" : "Persona",
-                      badgeColor: "#3b82f6",
-                      extraInfo: [
-                        c.locality === "LOCAL" ? "Nacional" : "Extranjero",
-                        c.currency,
-                        c.payment_terms_days > 0 ? `${c.payment_terms_days}d plazo` : "Contado",
-                        c.is_active ? "Activo" : "Inactivo",
-                      ],
-                      address: c.default_address,
-                    }))}
-                    colorFor={(item) => (item.isActive ? "#3b82f6" : "#64748b")}
-                    onSelect={(id) => {
-                      void loadDetail(id)
-                    }}
-                    selectedId={selectedId}
+                  <MapLegend
+                    items={[
+                      { label: "Empresa", color: "#3b82f6", shape: "pin" },
+                      { label: "Persona", color: "#3b82f6", shape: "pin" },
+                      { label: "Activo", color: "#3b82f6" },
+                      { label: "Inactivo", color: "#94a3b8" },
+                    ]}
                   />
-                )}
+                </div>
+                <div className="flex-1 overflow-hidden rounded-2xl border shadow-soft-sm">
+                  {geoLoading ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                      <p>Cargando ubicaciones…</p>
+                    </div>
+                  ) : (
+                    <EntityMap
+                      items={geoItems.map((c): MapMarkerItem => ({
+                        id: c.customer_id,
+                        name: c.business_name,
+                        code: c.code,
+                        isActive: c.is_active,
+                        badge: c.customer_type === "COMPANY" ? "Empresa" : "Persona",
+                        badgeColor: c.customer_type === "COMPANY" ? "#3b82f6" : "#8b5cf6",
+                        extraInfo: [
+                          c.locality === "LOCAL" ? "Nacional" : "Extranjero",
+                          c.currency,
+                          c.payment_terms_days > 0 ? `${c.payment_terms_days}d plazo` : "Contado",
+                          c.is_active ? "Activo" : "Inactivo",
+                        ],
+                        address: c.default_address,
+                      }))}
+                      colorFor={(item) => {
+                        if (!item.isActive) return "#94a3b8"
+                        return item.badge === "Empresa" ? "#3b82f6" : "#8b5cf6"
+                      }}
+                      onSelect={(id) => {
+                        void loadDetail(id)
+                      }}
+                      selectedId={selectedId}
+                    />
+                  )}
+                </div>
               </div>
             ) : viewMode === "table" ? (
               <DataTable

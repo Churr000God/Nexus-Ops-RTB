@@ -182,6 +182,40 @@ function ensureTooltipStyle() {
   document.head.appendChild(style)
 }
 
+export type LegendItem = {
+  label: string
+  color: string
+  shape?: "circle" | "pin"
+}
+
+export function MapLegend({ items }: { items: LegendItem[] }) {
+  return (
+    <div className="rounded-lg border border-border bg-card/90 px-3 py-2 shadow-soft-sm backdrop-blur-sm">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Leyenda
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {items.map((it) => (
+          <div key={it.label} className="flex items-center gap-2">
+            {it.shape === "pin" ? (
+              <svg width="12" height="16" viewBox="0 0 26 34" fill="none">
+                <path d="M13 0C5.82 0 0 5.82 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.82 20.18 0 13 0z" fill={it.color} />
+                <circle cx="13" cy="13" r="5" fill="white" fillOpacity="0.9" />
+              </svg>
+            ) : (
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: it.color }}
+              />
+            )}
+            <span className="text-[11px] text-foreground">{it.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 type EntityMapProps = {
   items: MapMarkerItem[]
   colorFor: (item: MapMarkerItem) => string
@@ -336,34 +370,44 @@ export function EntityMap({
 
       {/* Progress overlay */}
       {geocoding && (
-        <div className="absolute left-1/2 top-3 z-[1000] -translate-x-1/2 rounded-lg border border-border bg-background/90 px-4 py-2 text-xs shadow-xl backdrop-blur-sm">
-          Geocodificando…&nbsp;
-          <span className="font-semibold text-primary">
-            {progress.done}/{progress.total}
+        <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-xl border border-border bg-card/95 px-5 py-2.5 text-xs shadow-soft-lg backdrop-blur-md">
+          <span className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
+            </span>
+            Geocodificando…
+            <span className="font-semibold text-primary">
+              {progress.done}/{progress.total}
+            </span>
           </span>
         </div>
       )}
 
       {/* Stats chip */}
       {!geocoding && coordsMap.size > 0 && (
-        <div className="absolute bottom-6 left-3 z-[1000] flex flex-col gap-1">
-          <span className="rounded-md border border-border bg-background/85 px-2.5 py-1 text-[11px] backdrop-blur-sm">
-            {coordsMap.size} ubicaciones
+        <div className="absolute bottom-5 left-4 z-[1000] flex flex-col gap-1.5">
+          <div className="rounded-lg border border-border bg-card/90 px-3 py-1.5 text-[11px] shadow-soft-sm backdrop-blur-sm">
+            <span className="font-semibold text-foreground">{coordsMap.size}</span>
+            <span className="text-muted-foreground"> ubicaciones</span>
             {withoutAddress > 0 && (
-              <span className="ml-1 text-muted-foreground">· {withoutAddress} sin datos</span>
+              <span className="ml-1.5 text-muted-foreground">· {withoutAddress} sin datos</span>
             )}
-          </span>
-          <span className="rounded-md border border-border bg-background/85 px-2.5 py-1 text-[11px] text-amber-400/80 backdrop-blur-sm">
-            Pin punteado = ubicación aproximada (CP fiscal)
-          </span>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg border border-border bg-card/90 px-3 py-1.5 text-[11px] shadow-soft-sm backdrop-blur-sm">
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <circle cx="5" cy="5" r="4" fill="none" stroke="#d97706" strokeWidth="1" strokeDasharray="2 1" />
+            </svg>
+            <span className="text-amber-600">Pin punteado = ubicación aproximada (CP fiscal)</span>
+          </div>
         </div>
       )}
 
       {/* No geocodable addresses */}
       {!geocoding && coordsMap.size === 0 && withAddress.length === 0 && items.length > 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="rounded-lg border border-border bg-background/80 px-5 py-3 text-center text-sm backdrop-blur-sm">
-            <p className="font-medium">Sin ubicaciones disponibles</p>
+          <div className="rounded-xl border border-border bg-card/90 px-6 py-4 text-center text-sm shadow-soft-md backdrop-blur-sm">
+            <p className="font-medium text-foreground">Sin ubicaciones disponibles</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Registra direcciones o datos fiscales con CP para ver pines en el mapa
             </p>
