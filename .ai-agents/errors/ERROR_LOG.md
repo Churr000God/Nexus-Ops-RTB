@@ -68,6 +68,8 @@ Que hacer para evitar que vuelva a ocurrir.
 | ERR-0018 | 2026-04-25 | docker | medio | ngrok se reinicia en bucle: dominio hardcodeado pertenece a otra cuenta (ERR_NGROK_320) | resuelto | [ERR-0018_ngrok-dominio-cuenta-incorrecta.md](resolutions/ERR-0018_ngrok-dominio-cuenta-incorrecta.md) |
 | ERR-0019 | 2026-04-25 | docker | medio | Fix ERR-0018 reemplazó dominio de producción con el de desarrollo causando el mismo error | resuelto | [ERR-0019_ngrok-dominio-prod-reemplazado-por-dev.md](resolutions/ERR-0019_ngrok-dominio-prod-reemplazado-por-dev.md) |
 | ERR-0020 | 2026-04-29 | frontend | medio | TS2322 `"neutral"` no asignable a `KpiTone` local en Inventarios.tsx rompe docker build | resuelto | [ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md](resolutions/ERR-0020_ts2322-neutral-no-asignable-KpiTone-Inventarios.md) |
+| ERR-0021 | 2026-05-08 | frontend | alto | 401 Unauthorized en delivery-notes: requestJson no inyectaba token automáticamente | resuelto | [ERR-0021_requestjson-sin-token-auto-delivery-notes.md](resolutions/ERR-0021_requestjson-sin-token-auto-delivery-notes.md) |
+| ERR-0022 | 2026-05-08 | frontend | alto | 422 en POST delivery-notes: doble serialización JSON — servicios pre-stringifican body y requestJson volvía a serializar | resuelto | [ERR-0022_double-json-stringify-body.md](resolutions/ERR-0022_double-json-stringify-body.md) |
 
 ---
 
@@ -75,8 +77,8 @@ Que hacer para evitar que vuelva a ocurrir.
 
 | Metrica | Valor |
 |---------|-------|
-| Total errores registrados | 20 |
-| Resueltos | 20 |
+| Total errores registrados | 22 |
+| Resueltos | 22 |
 | Pendientes | 0 |
 | Workarounds | 0 |
 
