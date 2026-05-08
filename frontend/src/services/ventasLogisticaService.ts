@@ -1,4 +1,4 @@
-import { requestJson } from "@/lib/http"
+import { requestBlob, requestJson } from "@/lib/http"
 import { cacheInvalidate, CACHE_KEYS } from "@/lib/queryCache"
 import type {
   CFDI,
@@ -91,6 +91,15 @@ export const createDeliveryNote = async (data: DeliveryNoteCreate) => {
 
 export const updateDeliveryNote = (id: number, data: DeliveryNoteUpdate) =>
   requestJson<DeliveryNote>(`${BASE}/delivery-notes/${id}`, { method: "PATCH", body: JSON.stringify(data) })
+
+export const downloadDeliveryNotePdf = (id: number) =>
+  requestBlob(`${BASE}/delivery-notes/${id}/pdf`)
+
+export const sendDeliveryNoteEmail = (id: number, toEmail: string) =>
+  requestJson<{ message: string }>(`${BASE}/delivery-notes/${id}/send-email`, {
+    method: "POST",
+    body: { to_email: toEmail },
+  })
 
 // ─── Quotes ──────────────────────────────────────────────────────────────────
 

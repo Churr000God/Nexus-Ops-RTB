@@ -21,6 +21,9 @@ import {
   Banknote,
   Layers,
   AlertCircle,
+  Download,
+  Mail,
+  Send,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -36,7 +39,9 @@ import { usePermission } from "@/hooks/usePermission"
 import { CACHE_KEYS, STALE } from "@/lib/queryCache"
 import {
   createDeliveryNote,
+  downloadDeliveryNotePdf,
   getDeliveryNotes,
+  sendDeliveryNoteEmail,
   updateDeliveryNote,
 } from "@/services/ventasLogisticaService"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
@@ -518,6 +523,43 @@ function DetailPanel({
     badge: "neutral" as const,
   }
 
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const [showEmailInput, setShowEmailInput] = useState(false)
+  const [emailTo, setEmailTo] = useState("")
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const { blob, filename } = await downloadDeliveryNotePdf(note.delivery_note_id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error("No se pudo generar el PDF")
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailTo.trim()) return
+    setEmailLoading(true)
+    try {
+      await sendDeliveryNoteEmail(note.delivery_note_id, emailTo.trim())
+      toast.success(`NR enviada a ${emailTo.trim()}`)
+      setShowEmailInput(false)
+      setEmailTo("")
+    } catch {
+      toast.error("No se pudo enviar el correo")
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
@@ -547,13 +589,69 @@ function DetailPanel({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* PDF download */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={pdfLoading}
+              onClick={() => void handleDownloadPdf()}
+              title="Descargar PDF"
+            >
+              {pdfLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">PDF</span>
+            </Button>
+            {/* Email */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setShowEmailInput((v) => !v)}
+              title="Enviar por correo"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Correo</span>
+            </Button>
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+        {/* Email input row */}
+        {showEmailInput && (
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              type="email"
+              placeholder="correo@ejemplo.com"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void handleSendEmail()}
+              className="h-7 flex-1 text-xs"
+              autoFocus
+            />
+            <Button
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={emailLoading || !emailTo.trim()}
+              onClick={() => void handleSendEmail()}
+            >
+              {emailLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              Enviar
+            </Button>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from app.models.clientes_proveedores_models import CustomerMaster
 from app.models.ops_models import InventoryMovement
 from app.models.ventas_logistica_models import (
     CFDI,
@@ -171,6 +172,34 @@ async def get_delivery_note(db: AsyncSession, note_id: int) -> DeliveryNote | No
         .where(DeliveryNote.delivery_note_id == note_id)
     )
     return result.scalar_one_or_none()
+
+
+async def get_delivery_note_for_pdf(
+    db: AsyncSession, note_id: int
+) -> tuple[DeliveryNote, CustomerMaster] | None:
+    """Load a delivery note + its customer (with tax_data and contacts) for PDF generation."""
+    note_res = await db.execute(
+        select(DeliveryNote)
+        .options(selectinload(DeliveryNote.items))
+        .where(DeliveryNote.delivery_note_id == note_id)
+    )
+    note = note_res.scalar_one_or_none()
+    if not note:
+        return None
+
+    customer_res = await db.execute(
+        select(CustomerMaster)
+        .options(
+            selectinload(CustomerMaster.tax_data),
+            selectinload(CustomerMaster.contacts),
+        )
+        .where(CustomerMaster.customer_id == note.customer_id)
+    )
+    customer = customer_res.scalar_one_or_none()
+    if not customer:
+        return None
+
+    return note, customer
 
 
 async def create_delivery_note(

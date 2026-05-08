@@ -133,6 +133,10 @@ class DeliveryNoteResponse(BaseModel):
     updated_at: datetime
 
 
+class DeliveryNoteEmailRequest(BaseModel):
+    to_email: str
+
+
 # ---------------------------------------------------------------------------
 # Quotes
 # ---------------------------------------------------------------------------

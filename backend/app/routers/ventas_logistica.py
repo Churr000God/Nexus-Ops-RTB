@@ -9,7 +9,7 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db, require_permission
@@ -19,6 +19,7 @@ from app.schemas.ventas_logistica_schema import (
     CarrierResponse,
     CarrierUpdate,
     CFDICancelRequest,
+    DeliveryNoteEmailRequest,
     CFDICancellationRow,
     CFDICreate,
     CFDIResponse,
@@ -58,6 +59,8 @@ from app.schemas.ventas_logistica_schema import (
     TrackingEventResponse,
 )
 from app.services import ventas_logistica_service as svc
+from app.services.delivery_note_pdf_service import generate_delivery_note_pdf
+from app.services.email_service import EmailError, send_delivery_note_email
 
 router = APIRouter(prefix="/api/ventas-logistica", tags=["Ventas & Logística"])
 
@@ -150,6 +153,55 @@ async def update_delivery_note(note_id: int, data: DeliveryNoteUpdate, db: DbDep
     if not result:
         raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
     return result
+
+
+@router.get(
+    "/delivery-notes/{note_id}/pdf",
+    dependencies=[Depends(require_permission("delivery_note.manage"))],
+    response_class=Response,
+    summary="Descargar PDF de una Nota de Remisión",
+)
+async def download_delivery_note_pdf(note_id: int, db: DbDep, _: UserDep):
+    result = await svc.get_delivery_note_for_pdf(db, note_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
+    note, customer = result
+    pdf_bytes = await generate_delivery_note_pdf(note, customer)
+    filename = f"{note.note_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/delivery-notes/{note_id}/send-email",
+    dependencies=[Depends(require_permission("delivery_note.manage"))],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Enviar Nota de Remisión por correo",
+)
+async def send_delivery_note_email_endpoint(
+    note_id: int,
+    data: DeliveryNoteEmailRequest,
+    db: DbDep,
+    _: UserDep,
+):
+    result = await svc.get_delivery_note_for_pdf(db, note_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
+    note, customer = result
+    pdf_bytes = await generate_delivery_note_pdf(note, customer)
+    try:
+        await send_delivery_note_email(
+            to_email=data.to_email,
+            note_number=note.note_number,
+            customer_name=customer.business_name,
+            pdf_bytes=pdf_bytes,
+        )
+    except EmailError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {"message": f"Email enviado a {data.to_email}"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

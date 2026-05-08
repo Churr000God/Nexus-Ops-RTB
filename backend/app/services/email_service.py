@@ -186,6 +186,93 @@ def _build_text(report_title: str, period: str) -> str:
     )
 
 
+async def send_delivery_note_email(
+    *,
+    to_email: str,
+    note_number: str,
+    customer_name: str,
+    pdf_bytes: bytes,
+) -> None:
+    """Send a delivery note PDF via MailerSend."""
+    if not settings.MAILERSEND_API_TOKEN:
+        raise EmailError(
+            "MAILERSEND_API_TOKEN no configurado en las variables de entorno."
+        )
+
+    subject = f"Nota de Remisión {note_number} — Refacciones Tomás Badillo"
+    html_body = f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/></head>
+<body style="font-family:Arial,sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px">
+  <div style="background:linear-gradient(135deg,#002B5B,#159895);padding:24px 32px;border-radius:8px 8px 0 0">
+    <h1 style="color:#ad9551;margin:0;font-size:20px;text-transform:uppercase;letter-spacing:0.5px">
+      Refacciones Tomás Badillo S.A. de C.V.
+    </h1>
+    <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:12px">
+      RFC: RTB181127HC7 &nbsp;|&nbsp; T. 55 4004 4707 &nbsp;|&nbsp; refacrtb.com.mx
+    </p>
+  </div>
+  <div style="background:#f9fafb;padding:24px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 12px;font-size:15px">Estimado cliente <strong>{customer_name}</strong>,</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:13px;line-height:1.6">
+      Adjunto encontrará la <strong>Nota de Remisión <span style="color:#002B5B">{note_number}</span></strong>
+      en formato PDF. Por favor revísela y confirme su recepción.
+    </p>
+    <p style="margin:0 0 20px;color:#9ca3af;font-size:11px">
+      Este documento no es un CFDI fiscal. Para cualquier aclaración comuníquese con su ejecutivo de ventas.
+    </p>
+    <p style="color:#9ca3af;font-size:11px;margin:0">
+      Correo generado automáticamente por Nexus Ops RTB. No responder a este mensaje.
+    </p>
+  </div>
+</body>
+</html>"""
+
+    payload = {
+        "from": {
+            "email": settings.MAILERSEND_FROM_EMAIL,
+            "name": settings.MAILERSEND_FROM_NAME,
+        },
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "html": html_body,
+        "text": (
+            f"Nota de Remisión {note_number} — Refacciones Tomás Badillo\n\n"
+            f"Estimado cliente {customer_name},\n\n"
+            f"Adjunto encontrará la Nota de Remisión {note_number} en formato PDF.\n\n"
+            "Este documento no es un CFDI fiscal.\n"
+            "Correo generado automáticamente por Nexus Ops RTB."
+        ),
+        "attachments": [
+            {
+                "filename": f"{note_number}.pdf",
+                "content": base64.b64encode(pdf_bytes).decode(),
+                "disposition": "attachment",
+            }
+        ],
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            _MAILERSEND_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {settings.MAILERSEND_API_TOKEN}",
+                "Content-Type": "application/json",
+            },
+        )
+
+    if resp.status_code not in (200, 202):
+        logger.error("MailerSend NR error %s: %s", resp.status_code, resp.text[:300])
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text
+        raise EmailError(f"MailerSend respondió {resp.status_code}: {detail}")
+
+    logger.info("NR %s enviada a %s via MailerSend", note_number, to_email)
+
+
 async def send_password_reset_email(to_email: str, reset_url: str) -> None:
     if not settings.MAILERSEND_API_TOKEN:
         logger.warning("MAILERSEND_API_TOKEN no configurado — email de reset omitido")
