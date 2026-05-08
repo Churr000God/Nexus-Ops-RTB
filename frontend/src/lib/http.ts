@@ -14,6 +14,17 @@ export class ApiError extends Error {
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
+function getStoredToken(): string | null {
+  try {
+    const raw = localStorage.getItem("nexus-ops-auth")
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { state?: { accessToken?: string | null } }
+    return parsed?.state?.accessToken ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function requestJson<T>(
   path: string,
   opts?: {
@@ -30,15 +41,18 @@ export async function requestJson<T>(
     ...(opts?.headers ?? {}),
   }
 
-  if (opts?.token) {
-    headers.Authorization = `Bearer ${opts.token}`
+  const token = opts?.token ?? getStoredToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
   }
 
   const res = await fetch(url, {
     method: opts?.method ?? "GET",
     headers,
     credentials: "include",
-    body: opts?.body ? JSON.stringify(opts.body) : undefined,
+    body: opts?.body
+      ? (typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body))
+      : undefined,
     signal: opts?.signal,
   })
 
@@ -73,8 +87,9 @@ export async function requestBlob(
   const url = `${env.apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`
   const headers: Record<string, string> = {}
 
-  if (opts?.token) {
-    headers.Authorization = `Bearer ${opts.token}`
+  const token = opts?.token ?? getStoredToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
   }
 
   const res = await fetch(url, {
