@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import {
   Eye,
   FileText,
@@ -39,7 +39,7 @@ import type {
   DeliveryNoteStatus,
   DeliveryNoteUpdate,
 } from "@/types/ventasLogistica"
-import type { CustomerRead } from "@/types/clientesProveedores"
+import type { CustomerDetail, CustomerRead } from "@/types/clientesProveedores"
 import type { ProductRead } from "@/types/productos"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/authStore"
@@ -84,35 +84,35 @@ function buildPriceOptions(product: ProductRead): PriceOption[] {
       label: "Catálogo",
       value: product.unit_price,
       colorClass:
-        "border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20",
+        "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100",
     })
   if (product.purchase_cost_ariba != null && product.purchase_cost_ariba > 0)
     opts.push({
       label: "Ariba",
       value: product.purchase_cost_ariba,
       colorClass:
-        "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20",
+        "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100",
     })
   if (product.purchase_cost_parts != null && product.purchase_cost_parts > 0)
     opts.push({
       label: "Refacciones",
       value: product.purchase_cost_parts,
       colorClass:
-        "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
+        "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100",
     })
   if (product.unit_price_base != null && product.unit_price_base > 0)
     opts.push({
       label: "Base",
       value: product.unit_price_base,
       colorClass:
-        "border-slate-500/40 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20",
+        "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200",
     })
   if (product.suggested_price != null && product.suggested_price > 0)
     opts.push({
       label: "Sugerido",
       value: product.suggested_price,
       colorClass:
-        "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20",
+        "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
     })
   return opts
 }
@@ -574,6 +574,8 @@ function ItemProductCell({
   const [open, setOpen] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null)
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -584,6 +586,19 @@ function ItemProductCell({
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
+
+  useLayoutEffect(() => {
+    if (open && searchInputRef.current) {
+      const rect = searchInputRef.current.getBoundingClientRect()
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: Math.max(rect.width, 320),
+      })
+    } else {
+      setDropdownPos(null)
+    }
+  }, [open, results])
 
   function handleQueryChange(q: string) {
     setQuery(q)
@@ -671,7 +686,7 @@ function ItemProductCell({
                     className={cn(
                       "rounded border px-2 py-1 text-[10px] font-medium transition-all",
                       opt.colorClass,
-                      isActive && "ring-1 ring-white/30 brightness-125"
+                      isActive && "ring-1 ring-black/20 brightness-95"
                     )}
                     title={`Aplicar ${opt.label}`}
                   >
@@ -709,6 +724,7 @@ function ItemProductCell({
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
+          ref={searchInputRef}
           className="h-8 pl-8 text-[11px]"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
@@ -718,59 +734,67 @@ function ItemProductCell({
         {loading && (
           <Loader2 className="absolute right-2.5 top-2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
         )}
+      </div>
 
-        {open && results.length > 0 && (
-          <ul className="absolute left-0 z-50 mt-1 max-h-60 w-full min-w-[280px] overflow-auto rounded-md border border-border bg-popover shadow-xl">
-            {results.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    selectProduct(p)
-                  }}
-                  className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-accent"
-                >
-                  <div className="flex items-center gap-2">
-                    {p.sku && (
-                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                        {p.sku}
-                      </span>
-                    )}
-                    <span className="truncate text-xs text-foreground">
-                      {p.name}
-                    </span>
-                  </div>
-                  {(p.brand ?? p.category) && (
-                    <span className="text-[10px] text-muted-foreground">
-                      {[p.brand, p.category].filter(Boolean).join(" · ")}
+      {/* Fixed dropdown overlay */}
+      {open && results.length > 0 && dropdownPos && (
+        <ul
+          className="fixed z-[100] max-h-60 overflow-auto rounded-lg border border-border bg-white shadow-2xl"
+          style={{
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
+        >
+          {results.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  selectProduct(p)
+                }}
+                className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-slate-100"
+              >
+                <div className="flex items-center gap-2">
+                  {p.sku && (
+                    <span className="shrink-0 font-mono text-[10px] text-slate-500">
+                      {p.sku}
                     </span>
                   )}
-                  <div className="mt-0.5 flex flex-wrap gap-1">
-                    {p.unit_price != null && p.unit_price > 0 && (
-                      <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 text-[9px] text-violet-300">
-                        Catálogo: {fmt.format(p.unit_price)}
+                  <span className="truncate text-xs text-slate-900">
+                    {p.name}
+                  </span>
+                </div>
+                {(p.brand ?? p.category) && (
+                  <span className="text-[10px] text-slate-500">
+                    {[p.brand, p.category].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {p.unit_price != null && p.unit_price > 0 && (
+                    <span className="rounded border border-violet-200 bg-violet-50 px-1 text-[9px] text-violet-700">
+                      Catálogo: {fmt.format(p.unit_price)}
+                    </span>
+                  )}
+                  {p.purchase_cost_ariba != null &&
+                    p.purchase_cost_ariba > 0 && (
+                      <span className="rounded border border-blue-200 bg-blue-50 px-1 text-[9px] text-blue-700">
+                        Ariba: {fmt.format(p.purchase_cost_ariba)}
                       </span>
                     )}
-                    {p.purchase_cost_ariba != null &&
-                      p.purchase_cost_ariba > 0 && (
-                        <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1 text-[9px] text-blue-300">
-                          Ariba: {fmt.format(p.purchase_cost_ariba)}
-                        </span>
-                      )}
-                    {p.purchase_cost_parts != null &&
-                      p.purchase_cost_parts > 0 && (
-                        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 text-[9px] text-amber-300">
-                          Refacc: {fmt.format(p.purchase_cost_parts)}
-                        </span>
-                      )}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  {p.purchase_cost_parts != null &&
+                    p.purchase_cost_parts > 0 && (
+                      <span className="rounded border border-amber-200 bg-amber-50 px-1 text-[9px] text-amber-700">
+                        Refacc: {fmt.format(p.purchase_cost_parts)}
+                      </span>
+                    )}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Notes */}
       <Input
@@ -808,6 +832,9 @@ function DeliveryNoteFormModal({
   const [customerSelected, setCustomerSelected] = useState<CustomerRead | null>(
     null
   )
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(
+    null
+  )
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -816,16 +843,22 @@ function DeliveryNoteFormModal({
       setError(null)
       setCustomerSearch("")
       setCustomerResults([])
+      setCustomerDetail(null)
       if (existing) {
         setCustomerSelected({
           customer_id: existing.customer_id,
           business_name: `Cliente #${existing.customer_id}`,
         } as CustomerRead)
+        // Cargar detalle del cliente en edicion
+        clientesProveedoresService
+          .getCustomer(token, existing.customer_id)
+          .then((d) => setCustomerDetail(d))
+          .catch(() => setCustomerDetail(null))
       } else {
         setCustomerSelected(null)
       }
     }
-  }, [mode, existing])
+  }, [mode, existing, token])
 
   function handleCustomerSearch(q: string) {
     setCustomerSearch(q)
@@ -853,10 +886,16 @@ function DeliveryNoteFormModal({
     setForm((prev) => ({ ...prev, customer_id: c.customer_id }))
     setCustomerSearch("")
     setCustomerResults([])
+    // Cargar detalle completo del cliente
+    clientesProveedoresService
+      .getCustomer(token, c.customer_id)
+      .then((d) => setCustomerDetail(d))
+      .catch(() => setCustomerDetail(null))
   }
 
   function clearCustomer() {
     setCustomerSelected(null)
+    setCustomerDetail(null)
     setForm((prev) => ({ ...prev, customer_id: null }))
     setCustomerSearch("")
     setCustomerResults([])
@@ -1064,18 +1103,18 @@ function DeliveryNoteFormModal({
                           placeholder="Buscar cliente por nombre…"
                         />
                         {customerResults.length > 0 && (
-                          <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border bg-popover shadow-lg">
+                          <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border bg-white shadow-xl">
                             {customerResults.map((c) => (
                               <li key={c.customer_id}>
                                 <button
                                   type="button"
                                   onClick={() => selectCustomer(c)}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100"
                                 >
-                                  <span className="font-mono text-xs text-muted-foreground">
+                                  <span className="font-mono text-xs text-slate-500">
                                     #{c.customer_id}
                                   </span>
-                                  <span className="text-sm text-foreground">
+                                  <span className="text-sm text-slate-900">
                                     {c.business_name}
                                   </span>
                                 </button>
@@ -1083,6 +1122,105 @@ function DeliveryNoteFormModal({
                             ))}
                           </ul>
                         )}
+                      </div>
+                    )}
+
+                    {/* Customer detail card */}
+                    {customerDetail && (
+                      <div className="rounded-lg border border-border bg-accent/20 p-3 sm:col-span-2 lg:col-span-3">
+                        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                          {customerDetail.contacts && customerDetail.contacts.length > 0 && (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Contacto
+                              </span>
+                              <p className="text-foreground">
+                                {customerDetail.contacts.find((c) => c.is_primary)?.full_name ??
+                                  customerDetail.contacts[0].full_name}
+                              </p>
+                              {(() => {
+                                const primary =
+                                  customerDetail.contacts!.find((c) => c.is_primary) ??
+                                  customerDetail.contacts![0]
+                                return (
+                                  <>
+                                    {primary.role_title && (
+                                      <p className="text-muted-foreground">{primary.role_title}</p>
+                                    )}
+                                    {primary.phone && (
+                                      <p className="text-muted-foreground">{primary.phone}</p>
+                                    )}
+                                    {primary.email && (
+                                      <p className="text-muted-foreground">{primary.email}</p>
+                                    )}
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          )}
+                          {customerDetail.addresses && customerDetail.addresses.length > 0 && (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Direccion
+                              </span>
+                              <p className="text-foreground">
+                                {customerDetail.addresses.find((a) => a.is_default)?.street ??
+                                  customerDetail.addresses[0].street}
+                              </p>
+                              {(() => {
+                                const addr =
+                                  customerDetail.addresses!.find((a) => a.is_default) ??
+                                  customerDetail.addresses![0]
+                                return (
+                                  <>
+                                    {[addr.neighborhood, addr.city, addr.state]
+                                      .filter(Boolean)
+                                      .join(", ") && (
+                                      <p className="text-muted-foreground">
+                                        {[addr.neighborhood, addr.city, addr.state]
+                                          .filter(Boolean)
+                                          .join(", ")}
+                                      </p>
+                                    )}
+                                    {addr.zip_code && (
+                                      <p className="text-muted-foreground">CP {addr.zip_code}</p>
+                                    )}
+                                    {addr.country && (
+                                      <p className="text-muted-foreground">{addr.country}</p>
+                                    )}
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          )}
+                          {customerDetail.tax_data && customerDetail.tax_data.length > 0 && (
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Datos fiscales
+                              </span>
+                              <p className="text-foreground">
+                                {customerDetail.tax_data[0].legal_name}
+                              </p>
+                              <p className="font-mono text-muted-foreground">
+                                {customerDetail.tax_data[0].rfc}
+                              </p>
+                            </div>
+                          )}
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Info comercial
+                            </span>
+                            <p className="text-foreground">
+                              Tipo: {customerDetail.customer_type}
+                            </p>
+                            <p className="text-muted-foreground">
+                              Localidad: {customerDetail.locality}
+                            </p>
+                            <p className="text-muted-foreground">
+                              Plazo: {customerDetail.payment_terms_days} dias
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
