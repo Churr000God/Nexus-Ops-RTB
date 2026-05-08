@@ -43,6 +43,11 @@ from app.schemas.clientes_proveedores_schema import (
     SupplierProductCreate,
     SupplierProductPriceUpdate,
     SupplierProductRead,
+    CustomerGeoItem,
+    CustomerGeoResponse,
+    GeoAddress,
+    SupplierGeoItem,
+    SupplierGeoResponse,
     SupplierRead,
     SupplierTaxDataCreate,
     SupplierTaxDataRead,
@@ -764,3 +769,115 @@ class ClientesProveedoresService:
             for sp, s, p in rows
         ]
         return CatalogoListResponse(total=total, items=items)
+
+    # =========================================================================
+    # GEO — datos de ubicación para vista de mapa
+    # =========================================================================
+
+    @staticmethod
+    def _valid_zip(zc: str | None) -> str | None:
+        """Devuelve el zip_code si parece válido (5 dígitos, no todo ceros)."""
+        if not zc:
+            return None
+        clean = zc.strip()
+        if len(clean) < 4 or clean.replace("0", "") == "":
+            return None
+        return clean
+
+    def _geo_from_address(self, addr: object) -> GeoAddress:
+        return GeoAddress(
+            street=getattr(addr, "street", ""),
+            city=getattr(addr, "city", None),
+            state=getattr(addr, "state", None),
+            country=getattr(addr, "country", "México"),
+            zip_code=getattr(addr, "zip_code", None),
+            is_approximate=False,
+        )
+
+    def _geo_from_zip(self, zc: str) -> GeoAddress:
+        return GeoAddress(
+            street="",
+            city=None,
+            state=None,
+            country="México",
+            zip_code=zc,
+            is_approximate=True,
+        )
+
+    async def get_customers_geo(self) -> CustomerGeoResponse:
+        stmt = (
+            select(CustomerMaster)
+            .options(
+                selectinload(CustomerMaster.addresses),
+                selectinload(CustomerMaster.tax_data),
+            )
+            .order_by(CustomerMaster.business_name)
+        )
+        customers = (await self.db.execute(stmt)).scalars().all()
+        items: list[CustomerGeoItem] = []
+        for c in customers:
+            addr = next((a for a in c.addresses if a.is_default), None) or (
+                c.addresses[0] if c.addresses else None
+            )
+            if addr:
+                geo = self._geo_from_address(addr)
+            else:
+                # Fallback: usar CP del dato fiscal principal
+                tax = next((t for t in c.tax_data if t.is_default), None) or (
+                    c.tax_data[0] if c.tax_data else None
+                )
+                valid_zc = self._valid_zip(tax.zip_code if tax else None)
+                geo = self._geo_from_zip(valid_zc) if valid_zc else None
+
+            items.append(
+                CustomerGeoItem(
+                    customer_id=c.customer_id,
+                    code=c.code,
+                    business_name=c.business_name,
+                    is_active=c.is_active,
+                    customer_type=c.customer_type,
+                    locality=c.locality,
+                    currency=c.currency,
+                    payment_terms_days=c.payment_terms_days,
+                    default_address=geo,
+                )
+            )
+        return CustomerGeoResponse(items=items)
+
+    async def get_suppliers_geo(self) -> SupplierGeoResponse:
+        stmt = (
+            select(SupplierMaster)
+            .options(
+                selectinload(SupplierMaster.addresses),
+                selectinload(SupplierMaster.tax_data),
+            )
+            .order_by(SupplierMaster.business_name)
+        )
+        suppliers = (await self.db.execute(stmt)).scalars().all()
+        items: list[SupplierGeoItem] = []
+        for s in suppliers:
+            addr = next((a for a in s.addresses if a.is_default), None) or (
+                s.addresses[0] if s.addresses else None
+            )
+            if addr:
+                geo = self._geo_from_address(addr)
+            else:
+                tax = next((t for t in s.tax_data if t.is_default), None) or (
+                    s.tax_data[0] if s.tax_data else None
+                )
+                valid_zc = self._valid_zip(tax.zip_code if tax else None)
+                geo = self._geo_from_zip(valid_zc) if valid_zc else None
+
+            items.append(
+                SupplierGeoItem(
+                    supplier_id=s.supplier_id,
+                    code=s.code,
+                    business_name=s.business_name,
+                    is_active=s.is_active,
+                    supplier_type=s.supplier_type,
+                    locality=s.locality,
+                    currency=s.currency,
+                    default_address=geo,
+                )
+            )
+        return SupplierGeoResponse(items=items)

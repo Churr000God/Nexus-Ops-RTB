@@ -2,7 +2,7 @@
 
 **Migración:** 0014  
 **Fecha de implementación inicial:** 2026-04-28  
-**Última actualización:** 2026-04-30
+**Última actualización:** 2026-05-08
 
 ---
 
@@ -260,6 +260,8 @@ Un producto está **vinculado** cuando `product_id IS NOT NULL` (existe match co
 |--------|------|-------------|
 | GET | `/api/proveedores` | Listado paginado (`search`, `solo_activos`, `supplier_type`, `locality`, `is_occasional`) |
 | GET | `/api/proveedores/catalogo` | Catálogo cross-proveedor (`search`, `supplier_id`, `solo_vinculados`) |
+| GET | `/api/clientes/geo` | Payload para vista de mapa (`CustomerGeoResponse`) |
+| GET | `/api/proveedores/geo` | Payload para vista de mapa (`SupplierGeoResponse`) |
 | GET | `/api/proveedores/{id}` | Detalle con tax_data, addresses, contacts, current_products |
 | POST | `/api/proveedores` | Crear proveedor — **409 si código duplicado** |
 | PATCH | `/api/proveedores/{id}` | Editar datos generales |
@@ -274,7 +276,7 @@ Un producto está **vinculado** cuando `product_id IS NOT NULL` (existe match co
 | POST | `/api/proveedores/{id}/products` | Agregar producto al catálogo |
 | PUT | `/api/proveedores/{id}/products/{sp_id}/price` | Actualizar precio (SCD Type 2) |
 
-> **Orden crítico en el router:** `/catalogo` debe registrarse **antes** de `/{supplier_id}` para que FastAPI no lo interprete como un ID numérico.
+> **Orden crítico en el router:** `/geo` y `/catalogo` deben registrarse **antes** de `/{id}` en sus respectivos routers para que FastAPI no los interprete como path params numéricos.
 
 ---
 
@@ -375,7 +377,44 @@ Mismo layout master-detail con 4 pestañas:
 | Contactos | CRUD con edición inline |
 | Catálogo | Tabla de `current_products` del proveedor; modal para actualizar precio (SCD Type 2) |
 
-### 8.3 Catálogo Cross-Proveedor (`/proveedores/catalogo`)
+### 8.3 Vista Mapa (ambas páginas)
+
+Tercer modo de visualización accesible mediante `ViewToggle` (tabla / tarjetas / mapa).
+
+**Implementación:**
+- Leaflet.js + OpenStreetMap (sin API key). Paquetes: `leaflet` + `@types/leaflet`.
+- Geocodificación en cliente con **Nominatim** (OSM, límite 1 req/seg). No hay lat/lng en la BD.
+- Cache de coordenadas en `Map<string, [lat,lon] | null>` a nivel de módulo JS — persiste entre re-renders y cambios de vista.
+- Carga lazy: el fetch a `/geo` ocurre solo la primera vez que se activa el tab de mapa (`geoLoadedRef`).
+
+**Estrategias de geocodificación** (en orden de especificidad):
+1. `ciudad, estado, país`
+2. `CP, ciudad, país`
+3. `ciudad, país`
+4. `CP, país` ← fallback principal cuando no hay dirección registrada
+5. `estado, país`
+
+**Fuente de datos:**
+- Prioridad 1: `customer_addresses` / `supplier_addresses` (tabla vacía en producción actual).
+- Fallback: CP del dato fiscal predeterminado (`customer_tax_data.zip_code` / `supplier_tax_data.zip_code`). Los CPs `00000` se descartan con `_valid_zip()`.
+- Pins con anillo punteado SVG = ubicación aproximada (geocodificada por CP fiscal).
+
+**Color de pins:**
+| Entidad | Color |
+|---------|-------|
+| Cliente activo | `#3b82f6` (azul) |
+| Cliente inactivo | `#64748b` (gris) |
+| Proveedor GOODS activo | `#3b82f6` (azul) |
+| Proveedor SERVICES activo | `#8b5cf6` (violeta) |
+| Proveedor BOTH activo | `#14b8a6` (teal) |
+| Proveedor inactivo | `#64748b` (gris) |
+
+**Tooltip:** card dark-theme (fondo `#0f172a`) con nombre, código, badge tipo, localidad/moneda, y label `(aprox.)` en ámbar para pins aproximados.  
+**Clic en pin:** selecciona la entidad y abre su panel de detalle.
+
+**Estado actual de datos:** 0 direcciones registradas; 1 cliente con CP fiscal válido (`64000`). Los pines aparecerán a medida que se registren direcciones reales o CPs válidos.
+
+### 8.4 Catálogo Cross-Proveedor (`/proveedores/catalogo`)
 
 Vista consolidada de todos los precios vigentes de todos los proveedores:
 
@@ -426,6 +465,7 @@ Toast: "Ya existe un proveedor con el código 'CORDMARK'"
 | `KpiCard` | Inline en páginas | Card de métrica con icono y label |
 | `CostBadge` / `LinkedBadge` / `AvailableBadge` | `CatalogoPage.tsx` | Badges de estado en catálogo |
 | `ProductoComparativaCard` | `CatalogoPage.tsx` | Tarjeta de producto en vista grid |
+| `EntityMap` | `components/common/EntityMap.tsx` | Mapa interactivo reutilizable (Leaflet + Nominatim geocoding) |
 
 ---
 
@@ -470,5 +510,6 @@ AppShell main (h-screen overflow-hidden)
 | `frontend/src/pages/Clientes.tsx` | Página completa de clientes |
 | `frontend/src/pages/ProveedoresMaestro.tsx` | Página completa de proveedores |
 | `frontend/src/pages/proveedores/CatalogoPage.tsx` | Catálogo cross-proveedor |
-| `frontend/src/components/common/ViewToggle.tsx` | Toggle tabla/tarjetas |
+| `frontend/src/components/common/ViewToggle.tsx` | Toggle tabla/tarjetas/mapa |
 | `frontend/src/components/common/EmptyState.tsx` | Estado vacío |
+| `frontend/src/components/common/EntityMap.tsx` | Componente mapa genérico (Leaflet, Nominatim, cache, SVG pins) |

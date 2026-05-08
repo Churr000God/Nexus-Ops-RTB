@@ -325,3 +325,45 @@ export type SupplierProductPriceUpdate = {
   moq?: number | null
   is_preferred?: boolean | null
 }
+
+// ─── Geo — mapa interactivo ────────────────────────────────────────────────
+
+export type GeoAddressItem = {
+  street: string
+  city: string | null
+  state: string | null
+  country: string
+  zip_code: string | null
+  is_approximate: boolean
+}
+
+export type CustomerGeoItem = {
+  customer_id: number
+  code: string
+  business_name: string
+  is_active: boolean
+  customer_type: string
+  locality: string
+  currency: string
+  payment_terms_days: number
+  default_address: GeoAddressItem | null
+}
+
+export type CustomerGeoResponse = {
+  items: CustomerGeoItem[]
+}
+
+export type SupplierGeoItem = {
+  supplier_id: number
+  code: string
+  business_name: string
+  is_active: boolean
+  supplier_type: string
+  locality: string
+  currency: string
+  default_address: GeoAddressItem | null
+}
+
+export type SupplierGeoResponse = {
+  items: SupplierGeoItem[]
+}

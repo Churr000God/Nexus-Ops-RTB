@@ -27,6 +27,8 @@ import type {
   SupplierProductCreate,
   SupplierProductPriceUpdate,
   SupplierRead,
+  CustomerGeoResponse,
+  SupplierGeoResponse,
   SupplierTaxData,
   SupplierTaxDataCreate,
   SupplierUpdate,
@@ -331,5 +333,13 @@ export const clientesProveedoresService = {
       `/api/proveedores/${supplierId}/products/${supplierProductId}/price`,
       { method: "PUT", body: data, token }
     )
+  },
+
+  getCustomersGeo(token: string | null, signal?: AbortSignal) {
+    return requestJson<CustomerGeoResponse>("/api/clientes/geo", { token, signal })
+  },
+
+  getSuppliersGeo(token: string | null, signal?: AbortSignal) {
+    return requestJson<SupplierGeoResponse>("/api/proveedores/geo", { token, signal })
   },
 }

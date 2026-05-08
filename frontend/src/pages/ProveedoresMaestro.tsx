@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   CheckCircle2,
   DollarSign,
   LayoutGrid,
   List,
+  Map,
   MapPin,
   Package,
   Pencil,
@@ -20,6 +21,7 @@ import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { EmptyState } from "@/components/common/EmptyState"
+import { EntityMap, type MapMarkerItem } from "@/components/common/EntityMap"
 import { KpiCard } from "@/components/common/KpiCard"
 import { ViewToggle } from "@/components/common/ViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -34,6 +36,7 @@ import type {
   SupplierAddressCreate,
   SupplierContactCreate,
   SupplierDetail,
+  SupplierGeoItem,
   SupplierProduct,
   SupplierRead,
   SupplierTaxDataCreate,
@@ -1513,12 +1516,28 @@ export function ProveedoresMaestroPage() {
   const [soloActivos, setSoloActivos] = useState(true)
   const [supplierType, setSupplierType] = useState("")
   const [locality, setLocality] = useState("")
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
+  const [viewMode, setViewMode] = useState<"table" | "grid" | "map">("table")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<SupplierDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+
+  // Geo data for map view — loaded lazily once
+  const [geoItems, setGeoItems] = useState<SupplierGeoItem[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
+  const geoLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (viewMode !== "map" || geoLoadedRef.current || !canView) return
+    geoLoadedRef.current = true
+    setGeoLoading(true)
+    clientesProveedoresService
+      .getSuppliersGeo(token)
+      .then((r) => setGeoItems(r.items))
+      .catch(() => toast.error("Error al cargar ubicaciones de proveedores"))
+      .finally(() => setGeoLoading(false))
+  }, [viewMode, canView, token])
 
   const fetchSuppliers = useCallback(
     (signal: AbortSignal) =>
@@ -1648,9 +1667,10 @@ export function ProveedoresMaestroPage() {
             options={[
               { value: "table", label: "Tabla", icon: List },
               { value: "grid", label: "Tarjetas", icon: LayoutGrid },
+              { value: "map", label: "Mapa", icon: Map },
             ]}
             active={viewMode}
-            onChange={setViewMode}
+            onChange={(v) => setViewMode(v as "table" | "grid" | "map")}
           />
           {canManage && (
             <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
@@ -1764,7 +1784,57 @@ export function ProveedoresMaestroPage() {
 
           {/* Scrollable content */}
           <div className="flex-1 min-w-0 overflow-hidden">
-            {viewMode === "table" ? (
+            {viewMode === "map" ? (
+              <div className="h-full rounded-[var(--radius-md)] overflow-hidden border">
+                {geoLoading ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Cargando ubicaciones…
+                  </div>
+                ) : (
+                  <EntityMap
+                    items={geoItems.map((s): MapMarkerItem => {
+                      const typeColors: Record<string, string> = {
+                        GOODS: "#3b82f6",
+                        SERVICES: "#8b5cf6",
+                        BOTH: "#14b8a6",
+                      }
+                      const typeLabels: Record<string, string> = {
+                        GOODS: "Bienes",
+                        SERVICES: "Servicios",
+                        BOTH: "Mixto",
+                      }
+                      return {
+                        id: s.supplier_id,
+                        name: s.business_name,
+                        code: s.code,
+                        isActive: s.is_active,
+                        badge: typeLabels[s.supplier_type] ?? s.supplier_type,
+                        badgeColor: typeColors[s.supplier_type] ?? "#64748b",
+                        extraInfo: [
+                          s.locality === "LOCAL" ? "Nacional" : "Extranjero",
+                          s.currency,
+                          s.is_active ? "Activo" : "Inactivo",
+                        ],
+                        address: s.default_address,
+                      }
+                    })}
+                    colorFor={(item) => {
+                      if (!item.isActive) return "#64748b"
+                      const typeColors: Record<string, string> = {
+                        Bienes: "#3b82f6",
+                        Servicios: "#8b5cf6",
+                        Mixto: "#14b8a6",
+                      }
+                      return typeColors[item.badge ?? ""] ?? "#3b82f6"
+                    }}
+                    onSelect={(id) => {
+                      void loadDetail(id)
+                    }}
+                    selectedId={selectedId}
+                  />
+                )}
+              </div>
+            ) : viewMode === "table" ? (
               <DataTable
                 columns={columns}
                 rows={filteredItems}

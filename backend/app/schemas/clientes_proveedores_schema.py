@@ -413,3 +413,48 @@ class SupplierDetail(SupplierRead):
 class SupplierListResponse(BaseModel):
     total: int
     items: list[SupplierRead]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Geo — payloads para vista de mapa
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class GeoAddress(BaseModel):
+    street: str
+    city: str | None
+    state: str | None
+    country: str
+    zip_code: str | None
+    is_approximate: bool = False
+
+
+class CustomerGeoItem(BaseModel):
+    customer_id: int
+    code: str
+    business_name: str
+    is_active: bool
+    customer_type: str
+    locality: str
+    currency: str
+    payment_terms_days: int
+    default_address: GeoAddress | None
+
+
+class CustomerGeoResponse(BaseModel):
+    items: list[CustomerGeoItem]
+
+
+class SupplierGeoItem(BaseModel):
+    supplier_id: int
+    code: str
+    business_name: str
+    is_active: bool
+    supplier_type: str
+    locality: str
+    currency: str
+    default_address: GeoAddress | None
+
+
+class SupplierGeoResponse(BaseModel):
+    items: list[SupplierGeoItem]

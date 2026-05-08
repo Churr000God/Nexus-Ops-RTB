@@ -1,5 +1,53 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-05-08 — Vista de mapa interactivo en Clientes y Proveedores
+
+### Resumen
+Se agregó un tercer modo de visualización (tabla / tarjetas / **mapa**) en las páginas `/clientes` y `/proveedores`. El mapa muestra pins geolocalizados para cada entidad con tooltip dark-theme al hover y apertura del panel de detalle al hacer clic.
+
+### Backend
+
+**`backend/app/schemas/clientes_proveedores_schema.py`:**
+- Nuevos schemas Pydantic: `GeoAddress`, `CustomerGeoItem`, `CustomerGeoResponse`, `SupplierGeoItem`, `SupplierGeoResponse`.
+- `GeoAddress.is_approximate: bool` distingue ubicaciones geocodificadas por CP fiscal vs. dirección real.
+
+**`backend/app/services/clientes_proveedores_service.py`:**
+- `_valid_zip()`: filtra CPs inválidos (`00000`, vacíos, todo ceros).
+- `_geo_from_address()` / `_geo_from_zip()`: construyen `GeoAddress` desde dirección real o fallback por CP fiscal.
+- `get_customers_geo()` / `get_suppliers_geo()`: cargan `addresses` + `tax_data` con `selectinload`; devuelven la dirección predeterminada o el CP fiscal válido como fallback.
+
+**`backend/app/routers/clientes_proveedores.py`:**
+- `GET /api/clientes/geo` registrado antes de `/{customer_id}`.
+- `GET /api/proveedores/geo` registrado antes de `/{supplier_id}`.
+
+### Frontend
+
+**`frontend/src/components/common/EntityMap.tsx`** (nuevo):
+- Leaflet.js + OpenStreetMap tiles (sin API key).
+- Geocodificación Nominatim con 5 estrategias en cascada (ciudad+estado → CP+ciudad → ciudad → CP → estado).
+- Cache `Map<string, coords>` a nivel de módulo JS para no repetir llamadas entre re-renders.
+- `cancelRef` para abortar geocodificación al desmontar.
+- Pins SVG con anillo punteado para ubicaciones aproximadas.
+- Overlay de progreso `N/Total` durante geocodificación.
+- Chip de estadísticas y leyenda al pie del mapa.
+- Props: `items`, `colorFor`, `onSelect`, `selectedId`, `className`.
+
+**`frontend/src/pages/Clientes.tsx`** y **`ProveedoresMaestro.tsx`:**
+- `viewMode` extendido de `"table" | "grid"` a `"table" | "grid" | "map"`.
+- `ViewToggle` con icono `Map` como tercera opción.
+- `geoLoadedRef` garantiza que `/geo` solo se llama la primera vez que se activa el mapa.
+
+**`frontend/package.json`:** se agregaron `leaflet` y `@types/leaflet`.
+
+### Diagnóstico de datos (2026-05-08)
+- `customer_addresses`: 0 registros. `supplier_addresses`: 0 registros.
+- CP fiscal en `customer_tax_data`: 119 × `00000` (placeholder) + 1 × `64000` válido.
+- CP fiscal en `supplier_tax_data`: 145 × `00000`.
+- El único pin visible actualmente es el cliente con CP `64000` (Monterrey).
+- Los pines se poblarán progresivamente al registrar direcciones reales o CPs válidos.
+
+---
+
 ## 2026-05-06 — Fix: conteo físico de activos internos sin líneas
 
 ### Resumen

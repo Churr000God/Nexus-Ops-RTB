@@ -30,6 +30,8 @@ from app.schemas.clientes_proveedores_schema import (
     SupplierProductCreate,
     SupplierProductPriceUpdate,
     SupplierProductRead,
+    CustomerGeoResponse,
+    SupplierGeoResponse,
     SupplierRead,
     SupplierTaxDataCreate,
     SupplierTaxDataRead,
@@ -97,6 +99,14 @@ async def list_clientes(
         customer_type=customer_type,
         locality=locality,
     )
+
+
+@clientes_router.get("/geo", response_model=CustomerGeoResponse)
+async def get_clientes_geo(
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("customer.view")),
+) -> CustomerGeoResponse:
+    return await svc.get_customers_geo()
 
 
 @clientes_router.get("/{customer_id}", response_model=CustomerDetail)
@@ -331,6 +341,14 @@ async def list_catalogo_cross(
         supplier_id=supplier_id,
         solo_vinculados=solo_vinculados,
     )
+
+
+@proveedores_router.get("/geo", response_model=SupplierGeoResponse)
+async def get_proveedores_geo(
+    svc: ClientesProveedoresService = Depends(_svc),
+    _: User = Depends(require_permission("supplier.view")),
+) -> SupplierGeoResponse:
+    return await svc.get_suppliers_geo()
 
 
 @proveedores_router.get("/{supplier_id}", response_model=SupplierDetail)

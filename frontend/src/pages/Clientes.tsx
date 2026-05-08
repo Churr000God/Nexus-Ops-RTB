@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Building2,
   CheckCircle2,
   LayoutGrid,
   List,
+  Map,
   MapPin,
   Pencil,
   Plus,
@@ -17,6 +18,7 @@ import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { EmptyState } from "@/components/common/EmptyState"
+import { EntityMap, type MapMarkerItem } from "@/components/common/EntityMap"
 import { KpiCard } from "@/components/common/KpiCard"
 import { ViewToggle } from "@/components/common/ViewToggle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -31,6 +33,7 @@ import type {
   CustomerAddressCreate,
   CustomerContactCreate,
   CustomerDetail,
+  CustomerGeoItem,
   CustomerRead,
   CustomerTaxDataCreate,
 } from "@/types/clientesProveedores"
@@ -1235,12 +1238,28 @@ export function ClientesPage() {
   const [soloActivos, setSoloActivos] = useState(true)
   const [customerTypeFilter, setCustomerTypeFilter] = useState("")
   const [localityFilter, setLocalityFilter] = useState("")
-  const [viewMode, setViewMode] = useState<"table" | "grid">("table")
+  const [viewMode, setViewMode] = useState<"table" | "grid" | "map">("table")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [detail, setDetail] = useState<CustomerDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+
+  // Geo data for map view — loaded lazily once and kept in a ref
+  const [geoItems, setGeoItems] = useState<CustomerGeoItem[]>([])
+  const [geoLoading, setGeoLoading] = useState(false)
+  const geoLoadedRef = useRef(false)
+
+  useEffect(() => {
+    if (viewMode !== "map" || geoLoadedRef.current || !canView) return
+    geoLoadedRef.current = true
+    setGeoLoading(true)
+    clientesProveedoresService
+      .getCustomersGeo(token)
+      .then((r) => setGeoItems(r.items))
+      .catch(() => toast.error("Error al cargar ubicaciones de clientes"))
+      .finally(() => setGeoLoading(false))
+  }, [viewMode, canView, token])
 
   const fetchCustomers = useCallback(
     (signal: AbortSignal) =>
@@ -1374,9 +1393,10 @@ export function ClientesPage() {
             options={[
               { value: "table", label: "Tabla", icon: List },
               { value: "grid", label: "Tarjetas", icon: LayoutGrid },
+              { value: "map", label: "Mapa", icon: Map },
             ]}
             active={viewMode}
-            onChange={setViewMode}
+            onChange={(v) => setViewMode(v as "table" | "grid" | "map")}
           />
           {canManage && (
             <Button size="sm" onClick={() => setShowNewModal(true)} className="gap-1.5">
@@ -1483,7 +1503,38 @@ export function ClientesPage() {
 
           {/* Scrollable content */}
           <div className="flex-1 min-w-0 overflow-hidden">
-            {viewMode === "table" ? (
+            {viewMode === "map" ? (
+              <div className="h-full rounded-[var(--radius-md)] overflow-hidden border">
+                {geoLoading ? (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Cargando ubicaciones…
+                  </div>
+                ) : (
+                  <EntityMap
+                    items={geoItems.map((c): MapMarkerItem => ({
+                      id: c.customer_id,
+                      name: c.business_name,
+                      code: c.code,
+                      isActive: c.is_active,
+                      badge: c.customer_type === "COMPANY" ? "Empresa" : "Persona",
+                      badgeColor: "#3b82f6",
+                      extraInfo: [
+                        c.locality === "LOCAL" ? "Nacional" : "Extranjero",
+                        c.currency,
+                        c.payment_terms_days > 0 ? `${c.payment_terms_days}d plazo` : "Contado",
+                        c.is_active ? "Activo" : "Inactivo",
+                      ],
+                      address: c.default_address,
+                    }))}
+                    colorFor={(item) => (item.isActive ? "#3b82f6" : "#64748b")}
+                    onSelect={(id) => {
+                      void loadDetail(id)
+                    }}
+                    selectedId={selectedId}
+                  />
+                )}
+              </div>
+            ) : viewMode === "table" ? (
               <DataTable
                 columns={columns}
                 rows={filteredItems}
