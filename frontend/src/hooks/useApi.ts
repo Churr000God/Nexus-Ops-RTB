@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
+import { cacheGet, cacheSet } from "@/lib/queryCache"
 import type { ApiError } from "@/lib/http"
 
 export type ApiStatus = "idle" | "loading" | "success" | "error"
@@ -14,6 +15,9 @@ export type UseApiResult<T> = {
 type UseApiOptions = {
   enabled?: boolean
   keepPreviousData?: boolean
+  cacheKey?: string
+  staleTime?: number
+  cacheTtl?: number
 }
 
 export function useApi<T>(
@@ -23,6 +27,9 @@ export function useApi<T>(
 ): UseApiResult<T> {
   const enabled = options?.enabled ?? true
   const keepPreviousData = options?.keepPreviousData ?? true
+  const cacheKey = options?.cacheKey
+  const staleTime = options?.staleTime ?? 0
+  const cacheTtl = options?.cacheTtl
   const depsKey = JSON.stringify(deps)
 
   const [data, setData] = useState<T | null>(null)
@@ -31,8 +38,12 @@ export function useApi<T>(
 
   const requestId = useRef(0)
   const [refreshIndex, setRefreshIndex] = useState(0)
+  // tracks whether the pending effect was triggered by an explicit refetch()
+  // call so we can bypass the cache even when staleTime has not elapsed
+  const isManualRefetch = useRef(false)
 
   const refetch = useCallback(() => {
+    isManualRefetch.current = true
     setRefreshIndex((v) => v + 1)
   }, [])
 
@@ -44,6 +55,21 @@ export function useApi<T>(
         if (!keepPreviousData) setData(null)
       })
       return
+    }
+
+    const bypassCache = isManualRefetch.current
+    isManualRefetch.current = false
+
+    if (!bypassCache && cacheKey && staleTime > 0) {
+      const cached = cacheGet<T>(cacheKey, staleTime)
+      if (cached !== null) {
+        queueMicrotask(() => {
+          setData(cached)
+          setStatus("success")
+          setError(null)
+        })
+        return
+      }
     }
 
     const controller = new AbortController()
@@ -59,6 +85,9 @@ export function useApi<T>(
       .then((result) => {
         if (controller.signal.aborted) return
         if (currentId !== requestId.current) return
+        if (cacheKey) {
+          cacheSet(cacheKey, result, cacheTtl !== undefined ? { ttl: cacheTtl } : undefined)
+        }
         setData(result)
         setStatus("success")
       })
@@ -70,7 +99,7 @@ export function useApi<T>(
       })
 
     return () => controller.abort()
-  }, [fetcher, enabled, keepPreviousData, refreshIndex, depsKey])
+  }, [fetcher, enabled, keepPreviousData, cacheKey, staleTime, cacheTtl, refreshIndex, depsKey])
 
   return { data, status, error, refetch }
 }
