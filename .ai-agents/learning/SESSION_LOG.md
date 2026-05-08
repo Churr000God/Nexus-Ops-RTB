@@ -81,6 +81,8 @@ Que queda pendiente para la proxima sesion.
 | 2026-05-05 | Fix fondo transparente dropdown de instalar componente en Equipos | frontend | 5 | [2026-05-05_fix-bg-dropdown-instalar-componente.md](sessions/2026-05-05_fix-bg-dropdown-instalar-componente.md) |
 | 2026-05-05 | Autocomplete de usuarios en modal de asignacion de equipos | backend + frontend | 5 | [2026-05-05_autocomplete-asignar-usuario-equipos.md](sessions/2026-05-05_autocomplete-asignar-usuario-equipos.md) |
 | 2026-05-06 | CRUD completo de Notas de Remision en frontend | frontend | 5 | [2026-05-06_crud-notas-remision-frontend.md](sessions/2026-05-06_crud-notas-remision-frontend.md) |
+| 2026-05-07 | Mejora responsive de pestaña Costos en Catálogos | frontend | 5 | [2026-05-07_mejora-responsive-costos.md](sessions/2026-05-07_mejora-responsive-costos.md) |
+| 2026-05-08 | Mejora UI del formulario de Notas de Remision — responsive y partidas | frontend | 5 | [2026-05-08_mejora-ui-notas-remision-responsive.md](sessions/2026-05-08_mejora-ui-notas-remision-responsive.md) |
 
 ---
 
@@ -88,6 +90,6 @@ Que queda pendiente para la proxima sesion.
 
 | Metrica | Valor |
 |---------|-------|
-| Total sesiones | 25 |
+| Total sesiones | 27 |
 | Errores registrados | 22 |
 | Lecciones documentadas | 32 |

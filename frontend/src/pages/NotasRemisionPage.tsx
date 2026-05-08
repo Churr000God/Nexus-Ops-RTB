@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Eye,
   FileText,
+  Package,
   Pencil,
   Plus,
   Search,
@@ -10,11 +11,19 @@ import {
   ChevronUp,
   Save,
   Loader2,
+  Calculator,
+  User,
+  CalendarDays,
+  Hash,
+  StickyNote,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { DataTable, type DataTableColumn } from "@/components/common/DataTable"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { useApi } from "@/hooks/useApi"
 import { usePermission } from "@/hooks/usePermission"
 import {
@@ -23,6 +32,7 @@ import {
   updateDeliveryNote,
 } from "@/services/ventasLogisticaService"
 import { clientesProveedoresService } from "@/services/clientesProveedoresService"
+import { productosService } from "@/services/productosService"
 import type {
   DeliveryNote,
   DeliveryNoteCreate,
@@ -30,6 +40,7 @@ import type {
   DeliveryNoteUpdate,
 } from "@/types/ventasLogistica"
 import type { CustomerRead } from "@/types/clientesProveedores"
+import type { ProductRead } from "@/types/productos"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/authStore"
 
@@ -58,6 +69,54 @@ const fmt = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 })
 
+// ─── Price options helper ────────────────────────────────────────────────────
+
+interface PriceOption {
+  label: string
+  value: number
+  colorClass: string
+}
+
+function buildPriceOptions(product: ProductRead): PriceOption[] {
+  const opts: PriceOption[] = []
+  if (product.unit_price != null && product.unit_price > 0)
+    opts.push({
+      label: "Catálogo",
+      value: product.unit_price,
+      colorClass:
+        "border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20",
+    })
+  if (product.purchase_cost_ariba != null && product.purchase_cost_ariba > 0)
+    opts.push({
+      label: "Ariba",
+      value: product.purchase_cost_ariba,
+      colorClass:
+        "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20",
+    })
+  if (product.purchase_cost_parts != null && product.purchase_cost_parts > 0)
+    opts.push({
+      label: "Refacciones",
+      value: product.purchase_cost_parts,
+      colorClass:
+        "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
+    })
+  if (product.unit_price_base != null && product.unit_price_base > 0)
+    opts.push({
+      label: "Base",
+      value: product.unit_price_base,
+      colorClass:
+        "border-slate-500/40 bg-slate-500/10 text-slate-300 hover:bg-slate-500/20",
+    })
+  if (product.suggested_price != null && product.suggested_price > 0)
+    opts.push({
+      label: "Sugerido",
+      value: product.suggested_price,
+      colorClass:
+        "border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20",
+    })
+  return opts
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type ModalMode = { type: "create" } | { type: "edit"; note: DeliveryNote }
@@ -72,6 +131,7 @@ interface FormItem {
   discount_amount: number
   tax_rate: number
   notes?: string
+  _product?: ProductRead
 }
 
 interface FormState {
@@ -160,7 +220,6 @@ export default function NotasRemisionPage() {
 
   const notes = (api.data ?? []) as DeliveryNote[]
 
-  // Filter by customer search locally (we fetch all and filter)
   const filteredNotes = notes.filter((n) => {
     if (!filterCustomerSearch.trim()) return true
     const q = filterCustomerSearch.toLowerCase()
@@ -202,9 +261,9 @@ export default function NotasRemisionPage() {
     },
     {
       key: "customer_id",
-      header: "Cliente ID",
+      header: "Cliente",
       className: "text-xs",
-      cell: (r) => String(r.customer_id),
+      cell: (r) => `#${r.customer_id}`,
     },
     {
       key: "issue_date",
@@ -308,7 +367,7 @@ export default function NotasRemisionPage() {
   ]
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="flex items-center gap-2 text-base font-semibold text-slate-200">
           <FileText className="h-5 w-5 text-amber-400" />
@@ -321,7 +380,7 @@ export default function NotasRemisionPage() {
               value={filterCustomerSearch}
               onChange={(e) => setFilterCustomerSearch(e.target.value)}
               placeholder="Buscar NR, cliente, OC…"
-              className="h-8 w-48 rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 text-xs text-slate-300 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+              className="h-8 w-full rounded-lg border border-white/10 bg-white/5 pl-8 pr-3 text-xs text-slate-300 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500/40 sm:w-48"
             />
           </div>
           <select
@@ -388,94 +447,338 @@ function DetailPanel({
   onClose: () => void
 }) {
   return (
-    <div className="surface-card space-y-4 p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">{note.note_number}</p>
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm">{note.note_number}</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Cliente #{note.customer_id} · Emision: {note.issue_date}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <p className="text-muted-foreground">Subtotal</p>
+            <p className="mt-0.5 font-mono font-semibold">
+              {fmt.format(note.subtotal)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <p className="text-muted-foreground">Impuesto</p>
+            <p className="mt-0.5 font-mono font-semibold">
+              {fmt.format(note.tax_amount)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <p className="text-muted-foreground">Total</p>
+            <p className="mt-0.5 font-mono font-semibold text-emerald-400">
+              {fmt.format(note.total)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <p className="text-muted-foreground">Partidas</p>
+            <p className="mt-0.5 font-mono font-semibold">
+              {note.items.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="pb-2 pr-3">#</th>
+                <th className="pb-2 pr-3">Descripcion</th>
+                <th className="pb-2 pr-3 text-right">Cantidad</th>
+                <th className="pb-2 pr-3 text-right">Precio</th>
+                <th className="pb-2 pr-3 text-right">Desc.</th>
+                <th className="pb-2 pr-3 text-right">Subtotal</th>
+                <th className="pb-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {note.items.map((it, idx) => (
+                <tr key={it.item_id} className="border-b border-border/50">
+                  <td className="py-2 pr-3 text-muted-foreground">{idx + 1}</td>
+                  <td className="py-2 pr-3">
+                    {it.description}
+                    {it.sku && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        (SKU: {it.sku})
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {it.quantity.toLocaleString("es-MX")}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {fmt.format(it.unit_price)}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {fmt.format(it.discount_amount)}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-mono">
+                    {fmt.format(it.subtotal)}
+                  </td>
+                  <td className="py-2 text-right font-mono">
+                    {fmt.format(it.total)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {note.notes && (
           <p className="text-xs text-muted-foreground">
-            Cliente ID: {note.customer_id} · Emision: {note.issue_date}
+            <span className="font-medium text-foreground">Notas:</span>{" "}
+            {note.notes}
           </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
-      <div className="grid gap-2 text-xs sm:grid-cols-4">
-        <div className="rounded-lg border border-border bg-accent/20 p-3">
-          <p className="text-muted-foreground">Subtotal</p>
-          <p className="mt-0.5 font-mono font-semibold">{fmt.format(note.subtotal)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-accent/20 p-3">
-          <p className="text-muted-foreground">Impuesto</p>
-          <p className="mt-0.5 font-mono font-semibold">{fmt.format(note.tax_amount)}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-accent/20 p-3">
-          <p className="text-muted-foreground">Total</p>
-          <p className="mt-0.5 font-mono font-semibold text-emerald-400">
-            {fmt.format(note.total)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-accent/20 p-3">
-          <p className="text-muted-foreground">Partidas</p>
-          <p className="mt-0.5 font-mono font-semibold">{note.items.length}</p>
-        </div>
-      </div>
+// ─── Item Product Search Cell ────────────────────────────────────────────────
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="pb-2 pr-3">#</th>
-              <th className="pb-2 pr-3">Descripcion</th>
-              <th className="pb-2 pr-3 text-right">Cantidad</th>
-              <th className="pb-2 pr-3 text-right">Precio</th>
-              <th className="pb-2 pr-3 text-right">Desc.</th>
-              <th className="pb-2 pr-3 text-right">Subtotal</th>
-              <th className="pb-2 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {note.items.map((it, idx) => (
-              <tr key={it.item_id} className="border-b border-border/50">
-                <td className="py-2 pr-3 text-muted-foreground">{idx + 1}</td>
-                <td className="py-2 pr-3">
-                  {it.description}
-                  {it.sku && (
-                    <span className="ml-1 text-[10px] text-muted-foreground">
-                      (SKU: {it.sku})
+function ItemProductCell({
+  item,
+  token,
+  onProductSelect,
+  onProductClear,
+  onDescriptionChange,
+  onNotesChange,
+  onPriceSelect,
+}: {
+  item: FormItem
+  token: string | null
+  onProductSelect: (product: ProductRead) => void
+  onProductClear: () => void
+  onDescriptionChange: (desc: string) => void
+  onNotesChange: (notes: string) => void
+  onPriceSelect: (price: number) => void
+}) {
+  const [query, setQuery] = useState("")
+  const [results, setResults] = useState<ProductRead[]>([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  function handleQueryChange(q: string) {
+    setQuery(q)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (q.trim().length < 2) {
+      setResults([])
+      setOpen(false)
+      return
+    }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const res = await productosService.listProducts(token, {
+          search: q.trim(),
+          limit: 10,
+          solo_activos: true,
+        })
+        setResults(res.items)
+        setOpen(res.items.length > 0)
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+  }
+
+  function selectProduct(p: ProductRead) {
+    setQuery("")
+    setResults([])
+    setOpen(false)
+    onProductSelect(p)
+  }
+
+  const priceOptions = item._product ? buildPriceOptions(item._product) : []
+
+  if (item._product) {
+    return (
+      <div className="space-y-2">
+        {/* Product chip */}
+        <div className="flex items-start gap-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-3 py-2">
+          <Package className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-400" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-foreground">
+              {item._product.name}
+            </p>
+            {item._product.sku && (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {item._product.sku}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onProductClear}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Desvincular producto"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Description override */}
+        <Input
+          className="h-8 text-xs"
+          value={item.description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          placeholder="Descripcion en la partida"
+        />
+
+        {/* Price picker */}
+        {priceOptions.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Precio a cobrar
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {priceOptions.map((opt) => {
+                const isActive = Math.abs(item.unit_price - opt.value) < 0.001
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => onPriceSelect(opt.value)}
+                    className={cn(
+                      "rounded border px-2 py-1 text-[10px] font-medium transition-all",
+                      opt.colorClass,
+                      isActive && "ring-1 ring-white/30 brightness-125"
+                    )}
+                    title={`Aplicar ${opt.label}`}
+                  >
+                    {opt.label}: {fmt.format(opt.value)}
+                    {isActive && " ✓"}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        <Input
+          className="h-7 text-[11px]"
+          value={item.notes ?? ""}
+          onChange={(e) => onNotesChange(e.target.value || "")}
+          placeholder="Notas de partida"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2" ref={wrapRef}>
+      {/* Description (free text, doubles as search trigger) */}
+      <Input
+        className="h-9 text-xs"
+        value={item.description}
+        onChange={(e) => onDescriptionChange(e.target.value)}
+        placeholder="Descripcion del producto / servicio"
+      />
+
+      {/* Product search field */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          className="h-8 pl-8 text-[11px]"
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          placeholder="Buscar por SKU o nombre del catálogo…"
+        />
+        {loading && (
+          <Loader2 className="absolute right-2.5 top-2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        )}
+
+        {open && results.length > 0 && (
+          <ul className="absolute left-0 z-50 mt-1 max-h-60 w-full min-w-[280px] overflow-auto rounded-md border border-border bg-popover shadow-xl">
+            {results.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectProduct(p)
+                  }}
+                  className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-accent"
+                >
+                  <div className="flex items-center gap-2">
+                    {p.sku && (
+                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                        {p.sku}
+                      </span>
+                    )}
+                    <span className="truncate text-xs text-foreground">
+                      {p.name}
+                    </span>
+                  </div>
+                  {(p.brand ?? p.category) && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {[p.brand, p.category].filter(Boolean).join(" · ")}
                     </span>
                   )}
-                </td>
-                <td className="py-2 pr-3 text-right font-mono">
-                  {it.quantity.toLocaleString("es-MX")}
-                </td>
-                <td className="py-2 pr-3 text-right font-mono">
-                  {fmt.format(it.unit_price)}
-                </td>
-                <td className="py-2 pr-3 text-right font-mono">
-                  {fmt.format(it.discount_amount)}
-                </td>
-                <td className="py-2 pr-3 text-right font-mono">
-                  {fmt.format(it.subtotal)}
-                </td>
-                <td className="py-2 text-right font-mono">
-                  {fmt.format(it.total)}
-                </td>
-              </tr>
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {p.unit_price != null && p.unit_price > 0 && (
+                      <span className="rounded border border-violet-500/30 bg-violet-500/10 px-1 text-[9px] text-violet-300">
+                        Catálogo: {fmt.format(p.unit_price)}
+                      </span>
+                    )}
+                    {p.purchase_cost_ariba != null &&
+                      p.purchase_cost_ariba > 0 && (
+                        <span className="rounded border border-blue-500/30 bg-blue-500/10 px-1 text-[9px] text-blue-300">
+                          Ariba: {fmt.format(p.purchase_cost_ariba)}
+                        </span>
+                      )}
+                    {p.purchase_cost_parts != null &&
+                      p.purchase_cost_parts > 0 && (
+                        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 text-[9px] text-amber-300">
+                          Refacc: {fmt.format(p.purchase_cost_parts)}
+                        </span>
+                      )}
+                  </div>
+                </button>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        )}
       </div>
 
-      {note.notes && (
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Notas:</span> {note.notes}
-        </p>
-      )}
+      {/* Notes */}
+      <Input
+        className="h-7 text-[11px]"
+        value={item.notes ?? ""}
+        onChange={(e) => onNotesChange(e.target.value || "")}
+        placeholder="Notas de partida"
+      />
     </div>
   )
 }
@@ -500,10 +803,11 @@ function DeliveryNoteFormModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Customer search
   const [customerSearch, setCustomerSearch] = useState("")
   const [customerResults, setCustomerResults] = useState<CustomerRead[]>([])
-  const [customerSelected, setCustomerSelected] = useState<CustomerRead | null>(null)
+  const [customerSelected, setCustomerSelected] = useState<CustomerRead | null>(
+    null
+  )
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -680,23 +984,30 @@ function DeliveryNoteFormModal({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative z-10 h-full overflow-y-auto flex items-start justify-center p-4 pt-6">
-        <div className="relative z-10 surface-card w-full max-w-4xl space-y-5 p-6 mb-10">
+      <div className="relative z-10 flex h-full items-start justify-center overflow-y-auto p-2 sm:p-4 md:p-6">
+        <div className="relative z-10 mb-4 w-full max-w-5xl space-y-5 rounded-2xl border bg-card p-4 shadow-soft-lg sm:p-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-base font-semibold">
-                {isEdit ? "Editar Nota de Remision" : "Nueva Nota de Remision"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {isEdit
-                  ? existing?.note_number
-                  : "Documento informal de entrega"}
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-base font-semibold">
+                  {isEdit
+                    ? "Editar Nota de Remision"
+                    : "Nueva Nota de Remision"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {isEdit
+                    ? existing?.note_number
+                    : "Documento informal de entrega"}
+                </p>
+              </div>
             </div>
             <button
               onClick={onClose}
-              className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mt-0.5 shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
@@ -704,281 +1015,351 @@ function DeliveryNoteFormModal({
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* General data */}
-            <fieldset className="space-y-3">
-              <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Datos generales
-              </legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {/* Cliente */}
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Cliente <span className="text-red-400">*</span>
-                  </label>
-                  {isEdit ? (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-accent/20 px-3 py-2">
-                      <span className="text-sm text-foreground">
-                        Cliente #{existing?.customer_id}
-                      </span>
-                    </div>
-                  ) : customerSelected ? (
-                    <div className="flex items-center gap-2 rounded-md border border-border bg-accent/20 px-3 py-2">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        #{customerSelected.customer_id}
-                      </span>
-                      <span className="flex-1 text-sm text-foreground">
-                        {customerSelected.business_name}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={clearCustomer}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                        value={customerSearch}
-                        onChange={(e) => handleCustomerSearch(e.target.value)}
-                        placeholder="Buscar cliente por nombre…"
-                      />
-                      {customerResults.length > 0 && (
-                        <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-background shadow-lg">
-                          {customerResults.map((c) => (
-                            <li key={c.customer_id}>
-                              <button
-                                type="button"
-                                onClick={() => selectCustomer(c)}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
-                              >
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  #{c.customer_id}
-                                </span>
-                                <span className="text-sm text-foreground">
-                                  {c.business_name}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </div>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <User className="h-3.5 w-3.5" />
+                  Datos generales
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {/* Cliente */}
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      Cliente <span className="text-red-400">*</span>
+                    </label>
+                    {isEdit ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2.5">
+                        <User className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm text-foreground">
+                          Cliente #{existing?.customer_id}
+                        </span>
+                      </div>
+                    ) : customerSelected ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2.5">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          #{customerSelected.customer_id}
+                        </span>
+                        <span className="flex-1 text-sm text-foreground">
+                          {customerSelected.business_name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={clearCustomer}
+                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          className="pl-9"
+                          value={customerSearch}
+                          onChange={(e) =>
+                            handleCustomerSearch(e.target.value)
+                          }
+                          placeholder="Buscar cliente por nombre…"
+                        />
+                        {customerResults.length > 0 && (
+                          <ul className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-border bg-popover shadow-lg">
+                            {customerResults.map((c) => (
+                              <li key={c.customer_id}>
+                                <button
+                                  type="button"
+                                  onClick={() => selectCustomer(c)}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                                >
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    #{c.customer_id}
+                                  </span>
+                                  <span className="text-sm text-foreground">
+                                    {c.business_name}
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Fecha de emision <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    disabled={isEdit}
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-                    value={form.issue_date}
-                    onChange={(e) => set("issue_date", e.target.value)}
-                  />
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <CalendarDays className="h-3 w-3" />
+                      Fecha de emision <span className="text-red-400">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      required
+                      disabled={isEdit}
+                      value={form.issue_date}
+                      onChange={(e) => set("issue_date", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <CalendarDays className="h-3 w-3" />
+                      Fecha de entrega estimada
+                    </label>
+                    <Input
+                      type="date"
+                      value={form.delivery_date}
+                      onChange={(e) => set("delivery_date", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <Hash className="h-3 w-3" />
+                      OC Cliente
+                    </label>
+                    <Input
+                      value={form.customer_po_number}
+                      onChange={(e) =>
+                        set("customer_po_number", e.target.value)
+                      }
+                      placeholder="Numero de orden de compra"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <CalendarDays className="h-3 w-3" />
+                      Fecha OC
+                    </label>
+                    <Input
+                      type="date"
+                      value={form.customer_po_date}
+                      onChange={(e) =>
+                        set("customer_po_date", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <StickyNote className="h-3 w-3" />
+                      Notas
+                    </label>
+                    <textarea
+                      className="flex w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm shadow-soft-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+                      rows={2}
+                      value={form.notes}
+                      onChange={(e) => set("notes", e.target.value)}
+                      placeholder="Observaciones generales…"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Fecha de entrega estimada
-                  </label>
-                  <input
-                    type="date"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={form.delivery_date}
-                    onChange={(e) => set("delivery_date", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    OC Cliente
-                  </label>
-                  <input
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={form.customer_po_number}
-                    onChange={(e) =>
-                      set("customer_po_number", e.target.value)
-                    }
-                    placeholder="Numero de orden de compra"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Fecha OC
-                  </label>
-                  <input
-                    type="date"
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    value={form.customer_po_date}
-                    onChange={(e) => set("customer_po_date", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Notas
-                  </label>
-                  <textarea
-                    className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    rows={2}
-                    value={form.notes}
-                    onChange={(e) => set("notes", e.target.value)}
-                    placeholder="Observaciones generales…"
-                  />
-                </div>
-              </div>
-            </fieldset>
+              </CardContent>
+            </Card>
 
             {/* Items */}
-            <fieldset className="space-y-3">
-              <div className="flex items-center justify-between">
-                <legend className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Partidas
-                </legend>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1 text-xs"
-                  onClick={addItem}
-                >
-                  <Plus className="h-3 w-3" />
-                  Agregar partida
-                </Button>
-              </div>
-
-              {form.items.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-accent/10 p-6 text-center text-sm text-muted-foreground">
-                  No hay partidas. Presiona "Agregar partida" para comenzar.
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Package className="h-3.5 w-3.5" />
+                    Partidas
+                    <Badge variant="secondary" className="text-[10px]">
+                      {form.items.length}
+                    </Badge>
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={addItem}
+                    disabled={isEdit}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Agregar partida
+                  </Button>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border text-left text-muted-foreground">
-                        <th className="pb-2 pr-2 w-8">#</th>
-                        <th className="pb-2 pr-2 min-w-[180px]">Descripcion *</th>
-                        <th className="pb-2 pr-2 w-24">Cantidad *</th>
-                        <th className="pb-2 pr-2 w-28">Precio *</th>
-                        <th className="pb-2 pr-2 w-24">Descuento</th>
-                        <th className="pb-2 pr-2 w-20">IVA %</th>
-                        <th className="pb-2 pr-2 w-20 text-right">Subtotal</th>
-                        <th className="pb-2 w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {form.items.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-accent/20 p-8 text-center">
+                    <Package className="mx-auto h-8 w-8 text-muted-foreground/50" />
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      No hay partidas.
+                    </p>
+                    <p className="text-xs text-muted-foreground/70">
+                      Presiona "Agregar partida" para comenzar.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop table */}
+                    <div className="hidden overflow-x-auto lg:block">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-border text-left text-muted-foreground">
+                            <th className="w-8 pb-2 pr-2">#</th>
+                            <th className="min-w-[240px] pb-2 pr-2">
+                              Producto / Descripcion *
+                            </th>
+                            <th className="w-24 pb-2 pr-2">Cant. *</th>
+                            <th className="w-28 pb-2 pr-2">Precio *</th>
+                            <th className="w-24 pb-2 pr-2">Descuento</th>
+                            <th className="w-20 pb-2 pr-2">IVA %</th>
+                            <th className="w-24 pb-2 pr-2 text-right">
+                              Subtotal
+                            </th>
+                            <th className="w-8 pb-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.items.map((it, idx) => {
+                            const lineSub =
+                              it.quantity * it.unit_price - it.discount_amount
+                            return (
+                              <tr
+                                key={it.key}
+                                className="border-b border-border/50 align-top transition-colors hover:bg-accent/20"
+                              >
+                                <td className="py-2.5 pr-2 text-muted-foreground">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <ItemProductCell
+                                    item={it}
+                                    token={token}
+                                    onProductSelect={(p) =>
+                                      updateItem(it.key, {
+                                        _product: p,
+                                        product_id: p.id,
+                                        sku: p.sku ?? undefined,
+                                        description: p.name,
+                                        unit_price:
+                                          p.unit_price ??
+                                          p.purchase_cost_ariba ??
+                                          p.purchase_cost_parts ??
+                                          0,
+                                      })
+                                    }
+                                    onProductClear={() =>
+                                      updateItem(it.key, {
+                                        _product: undefined,
+                                        product_id: undefined,
+                                        sku: undefined,
+                                      })
+                                    }
+                                    onDescriptionChange={(desc) =>
+                                      updateItem(it.key, {
+                                        description: desc,
+                                      })
+                                    }
+                                    onNotesChange={(notes) =>
+                                      updateItem(it.key, {
+                                        notes: notes || undefined,
+                                      })
+                                    }
+                                    onPriceSelect={(price) =>
+                                      updateItem(it.key, {
+                                        unit_price: price,
+                                      })
+                                    }
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <Input
+                                    type="number"
+                                    min={0.0001}
+                                    step="any"
+                                    className="h-8 text-xs"
+                                    value={it.quantity}
+                                    onChange={(e) =>
+                                      updateItem(it.key, {
+                                        quantity:
+                                          parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    className="h-8 text-xs"
+                                    value={it.unit_price}
+                                    onChange={(e) =>
+                                      updateItem(it.key, {
+                                        unit_price:
+                                          parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    className="h-8 text-xs"
+                                    value={it.discount_amount}
+                                    onChange={(e) =>
+                                      updateItem(it.key, {
+                                        discount_amount:
+                                          parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    className="h-8 text-xs"
+                                    value={it.tax_rate}
+                                    onChange={(e) =>
+                                      updateItem(it.key, {
+                                        tax_rate:
+                                          parseFloat(e.target.value) || 0,
+                                      })
+                                    }
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-2 text-right font-mono">
+                                  {fmt.format(lineSub)}
+                                </td>
+                                <td className="py-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeItem(it.key)}
+                                    className="rounded p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400"
+                                    title="Eliminar partida"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile / tablet cards */}
+                    <div className="space-y-3 lg:hidden">
                       {form.items.map((it, idx) => {
                         const lineSub =
                           it.quantity * it.unit_price - it.discount_amount
                         return (
-                          <tr
+                          <div
                             key={it.key}
-                            className="border-b border-border/50"
+                            className="rounded-xl border border-border bg-accent/20 p-3.5 sm:p-4"
                           >
-                            <td className="py-2 pr-2 text-muted-foreground align-top">
-                              {idx + 1}
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <input
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={it.description}
-                                onChange={(e) =>
-                                  updateItem(it.key, {
-                                    description: e.target.value,
-                                  })
-                                }
-                                placeholder="Descripcion del producto / servicio"
-                              />
-                              <div className="mt-1 flex gap-1">
-                                <input
-                                  className="h-6 w-20 rounded-md border border-input bg-background px-2 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                  value={it.sku ?? ""}
-                                  onChange={(e) =>
-                                    updateItem(it.key, {
-                                      sku: e.target.value || undefined,
-                                    })
-                                  }
-                                  placeholder="SKU"
-                                />
-                                <input
-                                  className="h-6 flex-1 rounded-md border border-input bg-background px-2 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                  value={it.notes ?? ""}
-                                  onChange={(e) =>
-                                    updateItem(it.key, {
-                                      notes: e.target.value || undefined,
-                                    })
-                                  }
-                                  placeholder="Notas de partida"
-                                />
-                              </div>
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <input
-                                type="number"
-                                min={0.0001}
-                                step="any"
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={it.quantity}
-                                onChange={(e) =>
-                                  updateItem(it.key, {
-                                    quantity:
-                                      parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={it.unit_price}
-                                onChange={(e) =>
-                                  updateItem(it.key, {
-                                    unit_price:
-                                      parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={it.discount_amount}
-                                onChange={(e) =>
-                                  updateItem(it.key, {
-                                    discount_amount:
-                                      parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="py-2 pr-2 align-top">
-                              <input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                value={it.tax_rate}
-                                onChange={(e) =>
-                                  updateItem(it.key, {
-                                    tax_rate:
-                                      parseFloat(e.target.value) || 0,
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="py-2 pr-2 align-top text-right font-mono">
-                              {fmt.format(lineSub)}
-                            </td>
-                            <td className="py-2 align-top">
+                            <div className="mb-3 flex items-center justify-between">
+                              <Badge
+                                variant="outline"
+                                className="h-5 text-[10px]"
+                              >
+                                Partida {idx + 1}
+                              </Badge>
                               <button
                                 type="button"
                                 onClick={() => removeItem(it.key)}
@@ -987,53 +1368,204 @@ function DeliveryNoteFormModal({
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
-                            </td>
-                          </tr>
+                            </div>
+
+                            <div className="mb-3">
+                              <ItemProductCell
+                                item={it}
+                                token={token}
+                                onProductSelect={(p) =>
+                                  updateItem(it.key, {
+                                    _product: p,
+                                    product_id: p.id,
+                                    sku: p.sku ?? undefined,
+                                    description: p.name,
+                                    unit_price:
+                                      p.unit_price ??
+                                      p.purchase_cost_ariba ??
+                                      p.purchase_cost_parts ??
+                                      0,
+                                  })
+                                }
+                                onProductClear={() =>
+                                  updateItem(it.key, {
+                                    _product: undefined,
+                                    product_id: undefined,
+                                    sku: undefined,
+                                  })
+                                }
+                                onDescriptionChange={(desc) =>
+                                  updateItem(it.key, {
+                                    description: desc,
+                                  })
+                                }
+                                onNotesChange={(notes) =>
+                                  updateItem(it.key, {
+                                    notes: notes || undefined,
+                                  })
+                                }
+                                onPriceSelect={(price) =>
+                                  updateItem(it.key, {
+                                    unit_price: price,
+                                  })
+                                }
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-medium text-muted-foreground">
+                                  Cantidad *
+                                </label>
+                                <Input
+                                  type="number"
+                                  min={0.0001}
+                                  step="any"
+                                  className="h-8 text-xs"
+                                  value={it.quantity}
+                                  onChange={(e) =>
+                                    updateItem(it.key, {
+                                      quantity:
+                                        parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-medium text-muted-foreground">
+                                  Precio *
+                                </label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  className="h-8 text-xs"
+                                  value={it.unit_price}
+                                  onChange={(e) =>
+                                    updateItem(it.key, {
+                                      unit_price:
+                                        parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-medium text-muted-foreground">
+                                  Descuento
+                                </label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  className="h-8 text-xs"
+                                  value={it.discount_amount}
+                                  onChange={(e) =>
+                                    updateItem(it.key, {
+                                      discount_amount:
+                                        parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-medium text-muted-foreground">
+                                  IVA %
+                                </label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  className="h-8 text-xs"
+                                  value={it.tax_rate}
+                                  onChange={(e) =>
+                                    updateItem(it.key, {
+                                      tax_rate:
+                                        parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-2.5">
+                              <span className="text-[10px] text-muted-foreground">
+                                Subtotal
+                              </span>
+                              <span className="font-mono text-sm font-semibold">
+                                {fmt.format(lineSub)}
+                              </span>
+                            </div>
+                          </div>
                         )
                       })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                    </div>
+                  </>
+                )}
 
-              {/* Totals */}
-              <div className="flex justify-end">
-                <div className="w-full max-w-xs space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-mono">{fmt.format(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Impuesto</span>
-                    <span className="font-mono">{fmt.format(tax)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-1">
-                    <span className="font-medium">Total estimado</span>
-                    <span className="font-mono font-semibold text-emerald-400">
-                      {fmt.format(total)}
+                {/* Totals */}
+                <div className="flex flex-col items-stretch gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calculator className="h-3.5 w-3.5" />
+                    <span>
+                      {form.items.length}{" "}
+                      {form.items.length === 1 ? "partida" : "partidas"}
                     </span>
                   </div>
+
+                  <div className="w-full sm:w-auto sm:min-w-[280px]">
+                    <div className="rounded-xl border border-border bg-accent/20 p-4">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Subtotal
+                          </span>
+                          <span className="font-mono">
+                            {fmt.format(subtotal)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Impuesto
+                          </span>
+                          <span className="font-mono">{fmt.format(tax)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-border pt-2">
+                          <span className="font-medium">Total estimado</span>
+                          <span className="font-mono font-semibold text-emerald-400">
+                            {fmt.format(total)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </fieldset>
+              </CardContent>
+            </Card>
 
             {error && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
                 disabled={saving}
+                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button
+                type="submit"
+                disabled={saving}
+                className="w-full sm:w-auto"
+              >
+                {saving && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 <Save className="mr-1.5 h-3.5 w-3.5" />
                 {isEdit ? "Guardar cambios" : "Crear Nota de Remision"}
               </Button>
