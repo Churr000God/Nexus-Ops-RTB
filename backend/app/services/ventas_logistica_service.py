@@ -357,22 +357,40 @@ async def update_delivery_note(
                 {"qty": qty, "pid": str(pid)},
             )
 
-    # ── Stock teórico: reversión al cancelar una NR aprobada ────────────────
-    if data.status == "CANCELADA" and prev_status == "APROBADA":
-        for it in note.items:
-            if not it.product_id:
-                continue
-            await db.execute(
-                text("""
-                    UPDATE inventario
-                    SET outbound_theoretical = GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
-                        theoretical_qty      = COALESCE(inbound_theoretical, 0)
-                                             - GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
-                        updated_on           = NOW()
-                    WHERE product_id = CAST(:pid AS UUID)
-                """),
-                {"qty": it.quantity, "pid": str(it.product_id)},
+    if data.status == "CANCELADA":
+        # ── Cancelar el pedido asociado ─────────────────────────────────────
+        order_res = await db.execute(
+            select(Order).where(
+                Order.internal_notes == f"Generado desde {note.note_number}",
+                Order.status != "CANCELLED",
             )
+        )
+        linked_order = order_res.scalar_one_or_none()
+        if linked_order:
+            linked_order.status = "CANCELLED"
+            linked_order.cancelled_at = _now()
+            linked_order.updated_at = _now()
+            db.add(OrderMilestone(
+                order_id=linked_order.order_id,
+                milestone_type="CANCELLED",
+            ))
+
+        # ── Stock teórico: reversión si la NR estaba aprobada ───────────────
+        if prev_status == "APROBADA":
+            for it in note.items:
+                if not it.product_id:
+                    continue
+                await db.execute(
+                    text("""
+                        UPDATE inventario
+                        SET outbound_theoretical = GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
+                            theoretical_qty      = COALESCE(inbound_theoretical, 0)
+                                                 - GREATEST(COALESCE(outbound_theoretical, 0) - :qty, 0),
+                            updated_on           = NOW()
+                        WHERE product_id = CAST(:pid AS UUID)
+                    """),
+                    {"qty": it.quantity, "pid": str(it.product_id)},
+                )
 
     await db.commit()
     return await get_delivery_note(db, note_id)
