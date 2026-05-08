@@ -44,6 +44,7 @@ import { CatalogoPage } from "@/pages/proveedores/CatalogoPage"
 import { ProductosCatalogoPage } from "@/pages/catalogos/ProductosCatalogoPage"
 import { MarcasPage } from "@/pages/catalogos/MarcasPage"
 import { CategoriasPage } from "@/pages/catalogos/CategoriasPage"
+import { CostosPage } from "@/pages/catalogos/CostosPage"
 // Facturación
 import { EmitirCfdiPage } from "@/pages/facturacion/EmitirCfdiPage"
 import { ComplementosPagoPage } from "@/pages/facturacion/ComplementosPagoPage"
@@ -157,6 +158,7 @@ export function AppRoutes() {
           <Route path="catalogos/productos" element={<ProductosCatalogoPage />} />
           <Route path="catalogos/marcas" element={<MarcasPage />} />
           <Route path="catalogos/categorias" element={<CategoriasPage />} />
+          <Route path="catalogos/costos" element={<CostosPage />} />
 
           {/* ── Facturación ── */}
           <Route path="facturacion" element={<CfdiPage />} />

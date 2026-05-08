@@ -7,11 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, require_permission
 from app.models.user_model import User
 from app.schemas.productos_pricing_schema import (
+    AribaPriceCreate,
+    AribaPricePage,
+    AribaPriceRead,
+    AribaPriceUpdate,
     BOMCreate,
     BOMRead,
+    BrandCostCreate,
+    BrandCostPage,
+    BrandCostRead,
+    BrandCostUpdate,
     BrandCreate,
     BrandRead,
     BrandUpdate,
@@ -34,6 +42,7 @@ from app.schemas.productos_pricing_schema import (
     QuotePricingResult,
     SATProductKeyRead,
     SATUnitKeyRead,
+    SkuCostLookup,
 )
 from app.services.productos_service import ProductosService
 
@@ -88,6 +97,138 @@ async def list_productos(
         search=search,
         is_saleable=is_saleable,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ariba Price List CRUD
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/costos/ariba", response_model=AribaPricePage)
+async def list_ariba_prices(
+    search: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    solo_activos: bool = Query(default=False),
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(get_current_user),
+) -> AribaPricePage:
+    return await svc.list_ariba_prices(search=search, limit=limit, offset=offset, solo_activos=solo_activos)
+
+
+@router.post("/costos/ariba", response_model=AribaPriceRead, status_code=status.HTTP_201_CREATED)
+async def create_ariba_price(
+    data: AribaPriceCreate,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> AribaPriceRead:
+    try:
+        return await svc.create_ariba_price(data)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "duplicate" in msg or "unique" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El SKU '{data.sku}' ya existe en la lista Ariba.",
+            )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.patch("/costos/ariba/{entry_id}", response_model=AribaPriceRead)
+async def update_ariba_price(
+    entry_id: UUID,
+    data: AribaPriceUpdate,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> AribaPriceRead:
+    try:
+        return await svc.update_ariba_price(entry_id, data)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrada no encontrada")
+
+
+@router.delete("/costos/ariba/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ariba_price(
+    entry_id: UUID,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> Response:
+    try:
+        await svc.delete_ariba_price(entry_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrada no encontrada")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Brand Cost List CRUD
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/costos/refacciones", response_model=BrandCostPage)
+async def list_brand_costs(
+    search: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    solo_activos: bool = Query(default=False),
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(get_current_user),
+) -> BrandCostPage:
+    return await svc.list_brand_costs(search=search, limit=limit, offset=offset, solo_activos=solo_activos)
+
+
+@router.post("/costos/refacciones", response_model=BrandCostRead, status_code=status.HTTP_201_CREATED)
+async def create_brand_cost(
+    data: BrandCostCreate,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> BrandCostRead:
+    try:
+        return await svc.create_brand_cost(data)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "duplicate" in msg or "unique" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"El SKU '{data.sku}' ya existe en la lista de Refacciones.",
+            )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.patch("/costos/refacciones/{entry_id}", response_model=BrandCostRead)
+async def update_brand_cost(
+    entry_id: UUID,
+    data: BrandCostUpdate,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> BrandCostRead:
+    try:
+        return await svc.update_brand_cost(entry_id, data)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrada no encontrada")
+
+
+@router.delete("/costos/refacciones/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_brand_cost(
+    entry_id: UUID,
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(require_permission("cost_list.manage")),
+) -> Response:
+    try:
+        await svc.delete_brand_cost(entry_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entrada no encontrada")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/sku-costs", response_model=SkuCostLookup | None)
+async def get_sku_costs(
+    sku: str = Query(..., min_length=1),
+    svc: ProductosService = Depends(_svc),
+    _: User = Depends(get_current_user),
+) -> SkuCostLookup | None:
+    """Busca costos Ariba y Refacciones por SKU para usar en Notas de Remision."""
+    return await svc.lookup_sku_costs(sku)
 
 
 @router.get("/{product_id}", response_model=ProductDetailRead)

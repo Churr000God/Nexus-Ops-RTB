@@ -401,3 +401,75 @@ class ProductCostHistoryRead(BaseModel):
 class ProductListResponse(BaseModel):
     total: int
     items: list[ProductRead]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SKU cost lookup (Ariba + Refacciones)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class SkuCostLookup(BaseModel):
+    sku: str
+    product_id: UUID | None = None
+    product_name: str | None = None
+    ariba_price: Decimal | None = None
+    refacciones_cost: Decimal | None = None
+    unit_price: Decimal | None = None
+
+
+# ─── Ariba Price List ────────────────────────────────────────────────────────
+
+
+class AribaPriceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    sku: str
+    sale_price: Decimal
+    is_active: bool
+    created_at: datetime
+    product_name: str | None = None
+
+
+class AribaPriceCreate(BaseModel):
+    sku: str = Field(..., min_length=1, max_length=255)
+    sale_price: Decimal = Field(..., gt=0)
+
+
+class AribaPriceUpdate(BaseModel):
+    sale_price: Decimal | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+class AribaPricePage(BaseModel):
+    total: int
+    items: list[AribaPriceRead]
+
+
+# ─── Brand Cost List ─────────────────────────────────────────────────────────
+
+
+class BrandCostRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    sku: str
+    cost_without_iva: Decimal
+    is_active: bool
+    created_at: datetime
+    product_name: str | None = None
+
+
+class BrandCostCreate(BaseModel):
+    sku: str = Field(..., min_length=1, max_length=255)
+    cost_without_iva: Decimal = Field(..., gt=0)
+
+
+class BrandCostUpdate(BaseModel):
+    cost_without_iva: Decimal | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+class BrandCostPage(BaseModel):
+    total: int
+    items: list[BrandCostRead]

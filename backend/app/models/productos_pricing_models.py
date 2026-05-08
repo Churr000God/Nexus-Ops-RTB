@@ -344,3 +344,44 @@ class ProductCostHistory(Base):
         nullable=False,
         index=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Listas de costo especial (cargadas desde CSV)
+# ---------------------------------------------------------------------------
+
+
+class AribaPriceList(Base):
+    """Precio de venta pactado con cliente (convenio Ariba), cargado desde CSV."""
+
+    __tablename__ = "ariba_price_list"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    sku: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
+    sale_price: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
+class BrandCostList(Base):
+    """Costo pactado con la marca para refacciones, cargado desde CSV."""
+
+    __tablename__ = "brand_cost_list"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    sku: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
+    cost_without_iva: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )

@@ -806,3 +806,215 @@ class ProductosService:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    # ── SKU cost lookup ───────────────────────────────────────────────────────
+
+    async def lookup_sku_costs(self, sku: str) -> "SkuCostLookup | None":
+        from app.models.productos_pricing_models import AribaPriceList, BrandCostList
+        from app.schemas.productos_pricing_schema import SkuCostLookup
+
+        sku_clean = sku.strip().upper()
+
+        prod_row = await self.db.scalar(
+            select(Product).where(func.upper(Product.sku) == sku_clean)
+        )
+        ariba_row = await self.db.scalar(
+            select(AribaPriceList).where(func.upper(AribaPriceList.sku) == sku_clean)
+        )
+        brand_row = await self.db.scalar(
+            select(BrandCostList).where(func.upper(BrandCostList.sku) == sku_clean)
+        )
+
+        if not prod_row and not ariba_row and not brand_row:
+            return None
+
+        return SkuCostLookup(
+            sku=sku,
+            product_id=prod_row.id if prod_row else None,
+            product_name=prod_row.name if prod_row else None,
+            ariba_price=(
+                Decimal(str(prod_row.purchase_cost_ariba))
+                if prod_row and prod_row.purchase_cost_ariba
+                else (Decimal(str(ariba_row.sale_price)) if ariba_row else None)
+            ),
+            refacciones_cost=(
+                Decimal(str(prod_row.purchase_cost_parts))
+                if prod_row and prod_row.purchase_cost_parts
+                else (Decimal(str(brand_row.cost_without_iva)) if brand_row else None)
+            ),
+            unit_price=(
+                Decimal(str(prod_row.unit_price))
+                if prod_row and prod_row.unit_price
+                else None
+            ),
+        )
+
+    # ── Ariba Price List ──────────────────────────────────────────────────────
+
+    async def list_ariba_prices(
+        self,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        solo_activos: bool = False,
+    ) -> "AribaPricePage":
+        from app.models.productos_pricing_models import AribaPriceList
+        from app.schemas.productos_pricing_schema import AribaPricePage, AribaPriceRead
+
+        q = select(AribaPriceList, Product.name.label("product_name")).outerjoin(
+            Product, func.upper(Product.sku) == func.upper(AribaPriceList.sku)
+        )
+        if search:
+            q = q.where(AribaPriceList.sku.ilike(f"%{search}%"))
+        if solo_activos:
+            q = q.where(AribaPriceList.is_active == True)  # noqa: E712
+
+        total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
+        rows = await self.db.execute(q.order_by(AribaPriceList.sku).limit(limit).offset(offset))
+
+        items = []
+        for row in rows:
+            item = AribaPriceRead.model_validate(row[0])
+            item.product_name = row[1]
+            items.append(item)
+        return AribaPricePage(total=total or 0, items=items)
+
+    async def create_ariba_price(self, data: "AribaPriceCreate") -> "AribaPriceRead":
+        from app.models.productos_pricing_models import AribaPriceList
+        from app.schemas.productos_pricing_schema import AribaPriceRead
+
+        entry = AribaPriceList(sku=data.sku.strip(), sale_price=float(data.sale_price))
+        self.db.add(entry)
+        await self.db.flush()
+        await self.db.execute(
+            update(Product)
+            .where(func.upper(Product.sku) == func.upper(entry.sku))
+            .values(purchase_cost_ariba=float(data.sale_price))
+        )
+        await self.db.commit()
+        await self.db.refresh(entry)
+        result = AribaPriceRead.model_validate(entry)
+        prod = await self.db.scalar(
+            select(Product.name).where(func.upper(Product.sku) == func.upper(entry.sku))
+        )
+        result.product_name = prod
+        return result
+
+    async def update_ariba_price(self, entry_id: UUID, data: "AribaPriceUpdate") -> "AribaPriceRead":
+        from app.models.productos_pricing_models import AribaPriceList
+        from app.schemas.productos_pricing_schema import AribaPriceRead
+
+        entry = await self.db.get(AribaPriceList, entry_id)
+        if not entry:
+            raise ValueError("not_found")
+        if data.sale_price is not None:
+            entry.sale_price = float(data.sale_price)
+            await self.db.execute(
+                update(Product)
+                .where(func.upper(Product.sku) == func.upper(entry.sku))
+                .values(purchase_cost_ariba=float(data.sale_price))
+            )
+        if data.is_active is not None:
+            entry.is_active = data.is_active
+        await self.db.commit()
+        await self.db.refresh(entry)
+        result = AribaPriceRead.model_validate(entry)
+        prod = await self.db.scalar(
+            select(Product.name).where(func.upper(Product.sku) == func.upper(entry.sku))
+        )
+        result.product_name = prod
+        return result
+
+    async def delete_ariba_price(self, entry_id: UUID) -> None:
+        from app.models.productos_pricing_models import AribaPriceList
+
+        entry = await self.db.get(AribaPriceList, entry_id)
+        if not entry:
+            raise ValueError("not_found")
+        await self.db.delete(entry)
+        await self.db.commit()
+
+    # ── Brand Cost List ───────────────────────────────────────────────────────
+
+    async def list_brand_costs(
+        self,
+        search: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        solo_activos: bool = False,
+    ) -> "BrandCostPage":
+        from app.models.productos_pricing_models import BrandCostList
+        from app.schemas.productos_pricing_schema import BrandCostPage, BrandCostRead
+
+        q = select(BrandCostList, Product.name.label("product_name")).outerjoin(
+            Product, func.upper(Product.sku) == func.upper(BrandCostList.sku)
+        )
+        if search:
+            q = q.where(BrandCostList.sku.ilike(f"%{search}%"))
+        if solo_activos:
+            q = q.where(BrandCostList.is_active == True)  # noqa: E712
+
+        total = await self.db.scalar(select(func.count()).select_from(q.subquery()))
+        rows = await self.db.execute(q.order_by(BrandCostList.sku).limit(limit).offset(offset))
+
+        items = []
+        for row in rows:
+            item = BrandCostRead.model_validate(row[0])
+            item.product_name = row[1]
+            items.append(item)
+        return BrandCostPage(total=total or 0, items=items)
+
+    async def create_brand_cost(self, data: "BrandCostCreate") -> "BrandCostRead":
+        from app.models.productos_pricing_models import BrandCostList
+        from app.schemas.productos_pricing_schema import BrandCostRead
+
+        entry = BrandCostList(sku=data.sku.strip(), cost_without_iva=float(data.cost_without_iva))
+        self.db.add(entry)
+        await self.db.flush()
+        await self.db.execute(
+            update(Product)
+            .where(func.upper(Product.sku) == func.upper(entry.sku))
+            .values(purchase_cost_parts=float(data.cost_without_iva))
+        )
+        await self.db.commit()
+        await self.db.refresh(entry)
+        result = BrandCostRead.model_validate(entry)
+        prod = await self.db.scalar(
+            select(Product.name).where(func.upper(Product.sku) == func.upper(entry.sku))
+        )
+        result.product_name = prod
+        return result
+
+    async def update_brand_cost(self, entry_id: UUID, data: "BrandCostUpdate") -> "BrandCostRead":
+        from app.models.productos_pricing_models import BrandCostList
+        from app.schemas.productos_pricing_schema import BrandCostRead
+
+        entry = await self.db.get(BrandCostList, entry_id)
+        if not entry:
+            raise ValueError("not_found")
+        if data.cost_without_iva is not None:
+            entry.cost_without_iva = float(data.cost_without_iva)
+            await self.db.execute(
+                update(Product)
+                .where(func.upper(Product.sku) == func.upper(entry.sku))
+                .values(purchase_cost_parts=float(data.cost_without_iva))
+            )
+        if data.is_active is not None:
+            entry.is_active = data.is_active
+        await self.db.commit()
+        await self.db.refresh(entry)
+        result = BrandCostRead.model_validate(entry)
+        prod = await self.db.scalar(
+            select(Product.name).where(func.upper(Product.sku) == func.upper(entry.sku))
+        )
+        result.product_name = prod
+        return result
+
+    async def delete_brand_cost(self, entry_id: UUID) -> None:
+        from app.models.productos_pricing_models import BrandCostList
+
+        entry = await self.db.get(BrandCostList, entry_id)
+        if not entry:
+            raise ValueError("not_found")
+        await self.db.delete(entry)
+        await self.db.commit()

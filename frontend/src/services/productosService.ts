@@ -1,5 +1,14 @@
 import { requestJson } from "@/lib/http"
+import { cacheInvalidatePrefix, CACHE_KEYS } from "@/lib/queryCache"
 import type {
+  AribaPriceCreate,
+  AribaPricePage,
+  AribaPriceRead,
+  AribaPriceUpdate,
+  BrandCostCreate,
+  BrandCostPage,
+  BrandCostRead,
+  BrandCostUpdate,
   BrandCreate,
   BrandRead,
   BrandUpdate,
@@ -10,6 +19,7 @@ import type {
   ProductListResponse,
   ProductRead,
   ProductUpdate,
+  SkuCostLookup,
 } from "@/types/productos"
 
 export interface ProductListParams {
@@ -43,16 +53,22 @@ export const productosService = {
     return requestJson<ProductRead>(`/api/productos/${id}`, { token, signal })
   },
 
-  createProduct(token: string | null, data: ProductCreate) {
-    return requestJson<ProductRead>("/api/productos", { method: "POST", body: data, token })
+  async createProduct(token: string | null, data: ProductCreate) {
+    const result = await requestJson<ProductRead>("/api/productos", { method: "POST", body: data, token })
+    cacheInvalidatePrefix(CACHE_KEYS.PRODUCTOS)
+    return result
   },
 
-  updateProduct(token: string | null, id: string, data: ProductUpdate) {
-    return requestJson<ProductRead>(`/api/productos/${id}`, { method: "PATCH", body: data, token })
+  async updateProduct(token: string | null, id: string, data: ProductUpdate) {
+    const result = await requestJson<ProductRead>(`/api/productos/${id}`, { method: "PATCH", body: data, token })
+    cacheInvalidatePrefix(CACHE_KEYS.PRODUCTOS)
+    return result
   },
 
-  deleteProduct(token: string | null, id: string) {
-    return requestJson<void>(`/api/productos/${id}`, { method: "DELETE", token })
+  async deleteProduct(token: string | null, id: string) {
+    const result = await requestJson<void>(`/api/productos/${id}`, { method: "DELETE", token })
+    cacheInvalidatePrefix(CACHE_KEYS.PRODUCTOS)
+    return result
   },
 
   listCategories(token: string | null, signal?: AbortSignal) {
@@ -85,5 +101,70 @@ export const productosService = {
 
   updateBrand(token: string | null, id: string, data: BrandUpdate) {
     return requestJson<BrandRead>(`/api/marcas/${id}`, { method: "PATCH", body: data, token })
+  },
+
+  lookupSkuCosts(token: string | null, sku: string, signal?: AbortSignal) {
+    return requestJson<SkuCostLookup | null>(
+      `/api/productos/sku-costs?sku=${encodeURIComponent(sku)}`,
+      { token, signal },
+    )
+  },
+
+  listAribaPrices(
+    token: string | null,
+    params: { search?: string; limit?: number; offset?: number; solo_activos?: boolean } = {},
+    signal?: AbortSignal,
+  ) {
+    const qs = new URLSearchParams()
+    if (params.search) qs.set("search", params.search)
+    if (params.limit != null) qs.set("limit", String(params.limit))
+    if (params.offset != null) qs.set("offset", String(params.offset))
+    if (params.solo_activos != null) qs.set("solo_activos", String(params.solo_activos))
+    const q = qs.toString()
+    return requestJson<AribaPricePage>(
+      `/api/productos/costos/ariba${q ? `?${q}` : ""}`,
+      { token, signal },
+    )
+  },
+
+  createAribaPrice(token: string | null, data: AribaPriceCreate) {
+    return requestJson<AribaPriceRead>("/api/productos/costos/ariba", { method: "POST", body: data, token })
+  },
+
+  updateAribaPrice(token: string | null, id: string, data: AribaPriceUpdate) {
+    return requestJson<AribaPriceRead>(`/api/productos/costos/ariba/${id}`, { method: "PATCH", body: data, token })
+  },
+
+  deleteAribaPrice(token: string | null, id: string) {
+    return requestJson<void>(`/api/productos/costos/ariba/${id}`, { method: "DELETE", token })
+  },
+
+  listBrandCosts(
+    token: string | null,
+    params: { search?: string; limit?: number; offset?: number; solo_activos?: boolean } = {},
+    signal?: AbortSignal,
+  ) {
+    const qs = new URLSearchParams()
+    if (params.search) qs.set("search", params.search)
+    if (params.limit != null) qs.set("limit", String(params.limit))
+    if (params.offset != null) qs.set("offset", String(params.offset))
+    if (params.solo_activos != null) qs.set("solo_activos", String(params.solo_activos))
+    const q = qs.toString()
+    return requestJson<BrandCostPage>(
+      `/api/productos/costos/refacciones${q ? `?${q}` : ""}`,
+      { token, signal },
+    )
+  },
+
+  createBrandCost(token: string | null, data: BrandCostCreate) {
+    return requestJson<BrandCostRead>("/api/productos/costos/refacciones", { method: "POST", body: data, token })
+  },
+
+  updateBrandCost(token: string | null, id: string, data: BrandCostUpdate) {
+    return requestJson<BrandCostRead>(`/api/productos/costos/refacciones/${id}`, { method: "PATCH", body: data, token })
+  },
+
+  deleteBrandCost(token: string | null, id: string) {
+    return requestJson<void>(`/api/productos/costos/refacciones/${id}`, { method: "DELETE", token })
   },
 }

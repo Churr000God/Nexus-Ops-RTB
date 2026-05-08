@@ -8,6 +8,7 @@ import {
   ClipboardList,
   CreditCard,
   Database,
+  DollarSign,
   FileCheck,
   FilePlus,
   FileSpreadsheet,
@@ -141,6 +142,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <NavItem to="/catalogos/productos" label="Productos" icon={Box} onNavigate={onNavigate} />
         <NavItem to="/catalogos/marcas" label="Marcas" icon={Tag} onNavigate={onNavigate} />
         <NavItem to="/catalogos/categorias" label="Categorías" icon={Layers} onNavigate={onNavigate} />
+        <NavItem to="/catalogos/costos" label="Costos" icon={DollarSign} onNavigate={onNavigate} />
 
         {/* Facturación */}
         <SectionLabel>Facturación</SectionLabel>

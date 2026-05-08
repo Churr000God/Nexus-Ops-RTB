@@ -40,6 +40,8 @@ from app.models.ops_models import (  # noqa: F401
 from app.models.productos_pricing_models import (  # noqa: F401
     BOM,
     BOMItem,
+    AribaPriceList,
+    BrandCostList,
     CustomerContractPrice,
     ProductAttribute,
     ProductAttributeOption,
@@ -84,10 +86,12 @@ from app.models.user_model import (  # noqa: F401
 
 __all__ = [
     "AuditLog",
+    "AribaPriceList",
     "Base",
     "BOM",
     "BOMItem",
     "Brand",
+    "BrandCostList",
     "CancelledQuote",
     "Category",
     "CsvFile",

@@ -141,3 +141,60 @@ export type BrandUpdate = {
   markup_percent?: number | null
   is_active?: boolean | null
 }
+
+export interface SkuCostLookup {
+  sku: string
+  product_id: string | null
+  product_name: string | null
+  ariba_price: number | null
+  refacciones_cost: number | null
+  unit_price: number | null
+}
+
+export interface AribaPriceRead {
+  id: string
+  sku: string
+  sale_price: number
+  is_active: boolean
+  created_at: string
+  product_name: string | null
+}
+
+export type AribaPriceCreate = {
+  sku: string
+  sale_price: number
+}
+
+export type AribaPriceUpdate = {
+  sale_price?: number
+  is_active?: boolean
+}
+
+export interface AribaPricePage {
+  total: number
+  items: AribaPriceRead[]
+}
+
+export interface BrandCostRead {
+  id: string
+  sku: string
+  cost_without_iva: number
+  is_active: boolean
+  created_at: string
+  product_name: string | null
+}
+
+export type BrandCostCreate = {
+  sku: string
+  cost_without_iva: number
+}
+
+export type BrandCostUpdate = {
+  cost_without_iva?: number
+  is_active?: boolean
+}
+
+export interface BrandCostPage {
+  total: number
+  items: BrandCostRead[]
+}
