@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.models.clientes_proveedores_models import CustomerMaster
-from app.models.ops_models import InventoryMovement
+from app.models.clientes_proveedores_models import CustomerAddress, CustomerMaster
+from app.models.ops_models import InventoryMovement, Product
 from app.models.ventas_logistica_models import (
     CFDI,
     CFDIItem,
@@ -41,6 +41,7 @@ from app.schemas.ventas_logistica_schema import (
     CFDICancelRequest,
     CFDICreate,
     DeliveryNoteCreate,
+    DeliveryNoteResponse,
     DeliveryNoteUpdate,
     OrderItemPackUpdate,
     OrderUpdate,
@@ -154,7 +155,7 @@ async def list_delivery_notes(
     status: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[DeliveryNote]:
+) -> list[DeliveryNoteResponse]:
     q = select(DeliveryNote).options(selectinload(DeliveryNote.items))
     if customer_id:
         q = q.where(DeliveryNote.customer_id == customer_id)
@@ -162,7 +163,26 @@ async def list_delivery_notes(
         q = q.where(DeliveryNote.status == status)
     q = q.order_by(DeliveryNote.issue_date.desc()).limit(limit).offset(offset)
     result = await db.execute(q)
-    return list(result.scalars())
+    notes = list(result.scalars())
+
+    # Batch-load customer codes and names (single query for all unique IDs)
+    customer_ids = list({n.customer_id for n in notes})
+    customer_lookup: dict[int, tuple[str, str]] = {}
+    if customer_ids:
+        c_result = await db.execute(
+            select(CustomerMaster.customer_id, CustomerMaster.code, CustomerMaster.business_name)
+            .where(CustomerMaster.customer_id.in_(customer_ids))
+        )
+        customer_lookup = {row[0]: (row[1], row[2]) for row in c_result.all()}
+
+    enriched = []
+    for note in notes:
+        base = DeliveryNoteResponse.model_validate(note)
+        code, name = customer_lookup.get(note.customer_id, (None, None))
+        base.customer_code = code
+        base.customer_name = name
+        enriched.append(base)
+    return enriched
 
 
 async def get_delivery_note(db: AsyncSession, note_id: int) -> DeliveryNote | None:
@@ -174,10 +194,20 @@ async def get_delivery_note(db: AsyncSession, note_id: int) -> DeliveryNote | No
     return result.scalar_one_or_none()
 
 
+def _orm_to_dict(obj) -> dict | None:
+    if obj is None:
+        return None
+    return {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+
+
 async def get_delivery_note_for_pdf(
     db: AsyncSession, note_id: int
-) -> tuple[DeliveryNote, CustomerMaster] | None:
-    """Load a delivery note + its customer (with tax_data and contacts) for PDF generation."""
+) -> dict | None:
+    """Load a delivery note and all related data needed for PDF generation.
+
+    Returns a dict with keys: note, items, customer, tax_data,
+    primary_contact, shipping_address.
+    """
     note_res = await db.execute(
         select(DeliveryNote)
         .options(selectinload(DeliveryNote.items))
@@ -199,7 +229,52 @@ async def get_delivery_note_for_pdf(
     if not customer:
         return None
 
-    return note, customer
+    # Load product catalogue data for items that have a product_id
+    product_ids = [it.product_id for it in note.items if it.product_id is not None]
+    products_by_id: dict = {}
+    if product_ids:
+        prod_res = await db.execute(
+            select(Product).where(Product.id.in_(product_ids))
+        )
+        for p in prod_res.scalars():
+            products_by_id[p.id] = p
+
+    # Load shipping address if set
+    shipping_address = None
+    if note.shipping_address_id is not None:
+        addr_res = await db.execute(
+            select(CustomerAddress).where(
+                CustomerAddress.address_id == note.shipping_address_id
+            )
+        )
+        shipping_address = addr_res.scalar_one_or_none()
+
+    # Resolve default tax_data and primary contact
+    tax_list = customer.tax_data or []
+    tax_data = next((t for t in tax_list if t.is_default), tax_list[0] if tax_list else None)
+
+    contact_list = customer.contacts or []
+    primary_contact = next(
+        (c for c in contact_list if c.is_primary), contact_list[0] if contact_list else None
+    )
+
+    # Build items list with optional product sub-dict
+    sorted_items = sorted(note.items, key=lambda x: (x.sort_order, x.item_id))
+    items_data = []
+    for it in sorted_items:
+        item_dict = _orm_to_dict(it)
+        prod = products_by_id.get(it.product_id) if it.product_id else None
+        item_dict["product"] = _orm_to_dict(prod)
+        items_data.append(item_dict)
+
+    return {
+        "note": _orm_to_dict(note),
+        "items": items_data,
+        "customer": _orm_to_dict(customer),
+        "tax_data": _orm_to_dict(tax_data),
+        "primary_contact": _orm_to_dict(primary_contact),
+        "shipping_address": _orm_to_dict(shipping_address),
+    }
 
 
 async def create_delivery_note(
@@ -366,7 +441,6 @@ async def update_delivery_note(
             ))
 
         # ── Stock teórico: salida al confirmar la NR ────────────────────────
-        now = _now()
         for item_data in order_items_src:
             pid = item_data.get("product_id")
             if not pid:
@@ -557,37 +631,9 @@ async def approve_quote(
         changed_by=user_id,
         notes=data.notes,
     ))
-    await _deduct_theoretical_inventory(db, quote_id)
     await db.commit()
     await db.refresh(quote)
     return quote
-
-
-async def _deduct_theoretical_inventory(db: AsyncSession, quote_id: int) -> None:
-    """Resta del inventario teórico la cantidad de cada partida aprobada en la cotización.
-
-    Actualiza outbound_theoretical y recalcula theoretical_qty para cada fila
-    de inventario que tenga product_id coincidente con un ítem de la cotización.
-    Solo afecta filas existentes en la tabla inventario; no crea nuevas filas.
-    """
-    await db.execute(
-        text("""
-            UPDATE inventario inv
-            SET
-                outbound_theoretical = COALESCE(inv.outbound_theoretical, 0) + agg.total_qty,
-                theoretical_qty      = COALESCE(inv.inbound_theoretical,  0)
-                                       - (COALESCE(inv.outbound_theoretical, 0) + agg.total_qty)
-            FROM (
-                SELECT product_id, SUM(CAST(quantity AS NUMERIC)) AS total_qty
-                FROM quote_items
-                WHERE quote_id    = CAST(:quote_id AS BIGINT)
-                  AND product_id IS NOT NULL
-                GROUP BY product_id
-            ) agg
-            WHERE inv.product_id = agg.product_id
-        """),
-        {"quote_id": quote_id},
-    )
 
 
 async def reject_quote(

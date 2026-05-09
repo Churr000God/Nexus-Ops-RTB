@@ -115,6 +115,8 @@ class DeliveryNoteResponse(BaseModel):
     delivery_note_id: int
     note_number: str
     customer_id: int
+    customer_code: str | None = None
+    customer_name: str | None = None
     shipping_address_id: int | None
     sales_rep_id: UUID | None
     issue_date: date

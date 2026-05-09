@@ -289,8 +289,16 @@ export default function NotasRemisionPage() {
     {
       key: "customer_id",
       header: "Cliente",
-      className: "text-xs",
-      cell: (r) => `#${r.customer_id}`,
+      cell: (r) => (
+        <div className="flex flex-col gap-0.5">
+          {r.customer_code && (
+            <span className="font-mono text-[10px] text-muted-foreground">{r.customer_code}</span>
+          )}
+          <span className="text-xs font-medium">
+            {r.customer_name ?? `#${r.customer_id}`}
+          </span>
+        </div>
+      ),
     },
     {
       key: "issue_date",
@@ -572,7 +580,12 @@ function DetailPanel({
               </StatusBadge>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>Cliente #{note.customer_id}</span>
+              <span>
+                {note.customer_code && (
+                  <span className="font-mono">{note.customer_code} · </span>
+                )}
+                {note.customer_name ?? `#${note.customer_id}`}
+              </span>
               <span>·</span>
               <span>Emisión: {note.issue_date}</span>
               {note.delivery_date && (
@@ -1068,7 +1081,7 @@ function DeliveryNoteFormModal({
       if (existing) {
         setCustomerSelected({
           customer_id: existing.customer_id,
-          business_name: `Cliente #${existing.customer_id}`,
+          business_name: existing.customer_name ?? `Cliente #${existing.customer_id}`,
         } as CustomerRead)
         // Cargar detalle del cliente en edición
         clientesProveedoresService
@@ -1302,9 +1315,14 @@ function DeliveryNoteFormModal({
                     {isEdit ? (
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2.5">
                         <User className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-sm text-foreground">
-                          Cliente #{existing?.customer_id}
-                        </span>
+                        <div className="flex flex-col">
+                          {existing?.customer_code && (
+                            <span className="font-mono text-[10px] text-muted-foreground">{existing.customer_code}</span>
+                          )}
+                          <span className="text-sm text-foreground">
+                            {existing?.customer_name ?? `Cliente #${existing?.customer_id}`}
+                          </span>
+                        </div>
                       </div>
                     ) : customerSelected ? (
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2.5">

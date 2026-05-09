@@ -67,6 +67,8 @@ export interface DeliveryNote {
   delivery_note_id: number
   note_number: string
   customer_id: number
+  customer_code: string | null
+  customer_name: string | null
   shipping_address_id: number | null
   sales_rep_id: string | null
   issue_date: string
