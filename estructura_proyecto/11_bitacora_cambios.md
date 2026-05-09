@@ -1,5 +1,44 @@
 # Bitácora de Cambios (sesiones)
 
+## 2026-05-08 — Rediseño de PDF/Email de Notas de Remisión con Jinja2
+
+### Resumen
+Reescritura completa del servicio de generación de PDF para notas de remisión. Se reemplazó el template HTML con f-strings por un template Jinja2 con el diseño oficial de RTB (gradiente navy/teal, tabla de productos con imagen, chips de estado, sección de firma). El servicio ahora recibe un `dict` enriquecido en lugar de objetos ORM directos, lo que desacopla la capa de datos de la capa de renderizado.
+
+### Backend
+
+**`backend/app/services/delivery_note_pdf_service.py`** (reescritura total):
+- Template Jinja2 completo con branding RTB: header con gradiente y logo, status chips con colores por estado (`APROBADA`/`EDICION`/`CANCELADA`), grilla de datos del cliente (nombre comercial, código, RFC, razón social, contacto, email, dirección de entrega), tabla de productos con columna de imagen, cuadro de totales, notas/condiciones de pago, sección de firma (RTB + cliente), barra de cierre.
+- `render_nota_remision(data: dict) -> str` — renderiza template con helpers `fmt_date`, `fmt_money`, `val`, `build_address`.
+- `generate_delivery_note_pdf(data: dict) -> bytes` — async, corre weasyprint en `run_in_executor`.
+- Helpers puros: `fmt_date(value)` — maneja `date` object e ISO string; `fmt_money(value)` — formato `$1,234.56`; `val(v, fb)` — fallback a `"—"` para None/vacío; `build_address(addr)` — ensambla dirección desde campos del dict.
+
+**`backend/app/services/ventas_logistica_service.py`** — `get_delivery_note_for_pdf`:
+- Firma nueva: `async def get_delivery_note_for_pdf(db, note_id) -> dict | None`.
+- Helper `_orm_to_dict(obj)` — serializa ORM object a plain dict filtrando atributos internos SQLAlchemy.
+- Carga en bulk los `Product` del catálogo para todos los `product_id` de los ítems de la NR (una sola query).
+- Cada ítem incluye sub-dict `product` con `image_url`, `description`, `sku`, etc.
+- Carga `CustomerAddress` si la NR tiene `shipping_address_id`.
+- Retorna dict con claves: `note`, `items`, `customer`, `tax_data`, `primary_contact`, `shipping_address`.
+
+**`backend/app/routers/ventas_logistica.py`:**
+- `GET /{id}/pdf` y `POST /{id}/send-email` actualizados para consumir el nuevo contrato dict-based.
+- Extrae `note_number` y `customer.business_name` directamente del dict retornado por el service.
+
+**`backend/requirements.txt`:** `Jinja2>=3.1.0` añadido explícitamente.
+
+**`backend/app/middleware/cors.py`:** `expose_headers=["Content-Disposition"]` añadido para que el browser reciba el filename del PDF descargado.
+
+**`backend/app/static/logo.png`:** PNG real del logo RTB (500×500, 36 KB) añadido a assets estáticos e incrustado en el PDF como base64.
+
+### Fix incluido en el mismo commit
+- Eliminada `_deduct_theoretical_inventory` de `approve_quote` — la deducción ya existía correctamente en `update_delivery_note → APROBADA`. Invocarla desde `approve_quote` causaba doble deducción.
+
+### Arquitectura — por qué cambió
+El diseño anterior mezclaba responsabilidades: el router construía la respuesta con objetos ORM, el PDF service tenía que conocer los tipos ORM. El nuevo diseño es: service ensambla todo en un dict, PDF service renderiza el dict, router solo pasa los datos. Jinja2 permite template HTML real con herencia, filtros y condicionales sin concatenar strings.
+
+---
+
 ## 2026-05-08 — Vista de mapa interactivo en Clientes y Proveedores
 
 ### Resumen
