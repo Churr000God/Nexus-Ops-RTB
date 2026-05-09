@@ -162,12 +162,11 @@ async def update_delivery_note(note_id: int, data: DeliveryNoteUpdate, db: DbDep
     summary="Descargar PDF de una Nota de Remisión",
 )
 async def download_delivery_note_pdf(note_id: int, db: DbDep, _: UserDep):
-    result = await svc.get_delivery_note_for_pdf(db, note_id)
-    if not result:
+    data = await svc.get_delivery_note_for_pdf(db, note_id)
+    if not data:
         raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
-    note, customer = result
-    pdf_bytes = await generate_delivery_note_pdf(note, customer)
-    filename = f"{note.note_number}.pdf"
+    pdf_bytes = await generate_delivery_note_pdf(data)
+    filename = f"{data['note']['note_number']}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -187,16 +186,15 @@ async def send_delivery_note_email_endpoint(
     db: DbDep,
     _: UserDep,
 ):
-    result = await svc.get_delivery_note_for_pdf(db, note_id)
-    if not result:
+    note_data = await svc.get_delivery_note_for_pdf(db, note_id)
+    if not note_data:
         raise HTTPException(status_code=404, detail="Nota de remisión no encontrada")
-    note, customer = result
-    pdf_bytes = await generate_delivery_note_pdf(note, customer)
+    pdf_bytes = await generate_delivery_note_pdf(note_data)
     try:
         await send_delivery_note_email(
             to_email=data.to_email,
-            note_number=note.note_number,
-            customer_name=customer.business_name,
+            note_number=note_data["note"]["note_number"],
+            customer_name=note_data["customer"]["business_name"],
             pdf_bytes=pdf_bytes,
         )
     except EmailError as exc:
